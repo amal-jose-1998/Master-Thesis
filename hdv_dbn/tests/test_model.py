@@ -4,9 +4,10 @@ Unit tests for hdv_dbn.model.HDVDBN class.
 Tests cover:
 - Model initialization
 - CPD creation and validity
-- Structure validation
-- Heuristic functions (_maneuver_prior_given, _maneuver_transition_column)
+- Structure validation with separated longitudinal and lateral maneuvers
+- Heuristic functions for both longitudinal and lateral maneuvers
 - Probability normalization
+- Intent-driven and style-driven modulation
 """
 
 import unittest
@@ -31,19 +32,22 @@ class TestHDVDBNInitialization(unittest.TestCase):
         """Test that state lists are correctly assigned from config."""
         self.assertEqual(self.model.style_states, DBN_STATES.driving_style_states)
         self.assertEqual(self.model.intent_states, DBN_STATES.intent_states)
-        self.assertEqual(self.model.maneuver_states, DBN_STATES.maneuver_states)
+        self.assertEqual(self.model.long_maneuver_states, DBN_STATES.long_maneuver_states)
+        self.assertEqual(self.model.lat_maneuver_states, DBN_STATES.lat_maneuver_states)
 
     def test_state_cardinalities(self):
         """Test that cardinality counts match state list lengths."""
         self.assertEqual(self.model.num_style, len(self.model.style_states))
         self.assertEqual(self.model.num_intent, len(self.model.intent_states))
-        self.assertEqual(self.model.num_maneuver, len(self.model.maneuver_states))
+        self.assertEqual(self.model.num_long, len(self.model.long_maneuver_states))
+        self.assertEqual(self.model.num_lat, len(self.model.lat_maneuver_states))
 
     def test_expected_cardinalities(self):
         """Test expected state counts."""
         self.assertEqual(self.model.num_style, 3)  # cautious, normal, aggressive
-        self.assertEqual(self.model.num_intent, 5)  # keep_lane, lc_left, lc_right, speed_up, slow_down
-        self.assertEqual(self.model.num_maneuver, 8)  # 8 maneuver types
+        self.assertEqual(self.model.num_intent, 5)  # keep_lane, lane_change_left, lane_change_right, speed_up, slow_down
+        self.assertEqual(self.model.num_long, 4)  # maintain_speed, accelerate, decelerate, hard_brake
+        self.assertEqual(self.model.num_lat, 5)  # keep_lane, prepare_lc_left, prepare_lc_right, perform_lc_left, perform_lc_right
 
 
 class TestDBNStructure(unittest.TestCase):
@@ -61,8 +65,8 @@ class TestDBNStructure(unittest.TestCase):
     def test_expected_nodes(self):
         """Test that all expected nodes exist."""
         expected_nodes = [
-            ('Style', 0), ('Intent', 0), ('Maneuver', 0),
-            ('Style', 1), ('Intent', 1), ('Maneuver', 1),
+            ('Style', 0), ('Intent', 0), ('LongManeuver', 0), ('LatManeuver', 0),
+            ('Style', 1), ('Intent', 1), ('LongManeuver', 1), ('LatManeuver', 1),
         ]
         for node in expected_nodes:
             self.assertIn(node, self.model.model.nodes())
@@ -70,12 +74,16 @@ class TestDBNStructure(unittest.TestCase):
     def test_intra_slice_edges(self):
         """Test intra-slice edges (within time slice)."""
         edges_0 = [
-            (('Style', 0), ('Maneuver', 0)),
-            (('Intent', 0), ('Maneuver', 0)),
+            (('Style', 0), ('LongManeuver', 0)),
+            (('Style', 0), ('LatManeuver', 0)),
+            (('Intent', 0), ('LongManeuver', 0)),
+            (('Intent', 0), ('LatManeuver', 0)),
         ]
         edges_1 = [
-            (('Style', 1), ('Maneuver', 1)),
-            (('Intent', 1), ('Maneuver', 1)),
+            (('Style', 1), ('LongManeuver', 1)),
+            (('Style', 1), ('LatManeuver', 1)),
+            (('Intent', 1), ('LongManeuver', 1)),
+            (('Intent', 1), ('LatManeuver', 1)),
         ]
         for edge in edges_0 + edges_1:
             self.assertIn(edge, self.model.model.edges())
@@ -85,15 +93,16 @@ class TestDBNStructure(unittest.TestCase):
         temporal_edges = [
             (('Style', 0), ('Style', 1)),
             (('Intent', 0), ('Intent', 1)),
-            (('Maneuver', 0), ('Maneuver', 1)),
+            (('LongManeuver', 0), ('LongManeuver', 1)),
+            (('LatManeuver', 0), ('LatManeuver', 1)),
         ]
         for edge in temporal_edges:
             self.assertIn(edge, self.model.model.edges())
 
     def test_edge_count(self):
         """Test total edge count."""
-        # 2 intra-slice edges at t=0 + 2 at t=1 + 3 inter-slice = 7
-        self.assertEqual(len(self.model.model.edges()), 7)
+        # 4 intra-slice edges at t=0 + 4 at t=1 + 4 inter-slice = 12
+        self.assertEqual(len(self.model.model.edges()), 12)
 
     def test_no_cycles(self):
         """Test that the model is acyclic."""
@@ -125,7 +134,7 @@ class TestCPDCreation(unittest.TestCase):
         cpd_dict = {cpd.variable: cpd for cpd in cpds_list}
         variables = set(cpd_dict.keys())
         # Should have CPDs for at least some of our main variables
-        expected_vars = {('Style', 0), ('Intent', 0), ('Maneuver', 0)}
+        expected_vars = {('Style', 0), ('Intent', 0), ('LongManeuver', 0), ('LatManeuver', 0)}
         # At least some should be present
         self.assertGreater(len(variables & expected_vars), 0)
 
@@ -170,112 +179,220 @@ class TestCPDCreation(unittest.TestCase):
                           msg=f"CPD {cpd.variable} has negative values")
 
 
-class TestManeuverHeuristics(unittest.TestCase):
-    """Test maneuver heuristic functions."""
+class TestLongManeuverHeuristics(unittest.TestCase):
+    """Test longitudinal maneuver heuristic functions."""
 
     def setUp(self):
         self.model = HDVDBN()
 
-    def test_maneuver_prior_returns_list(self):
-        """Test that _maneuver_prior_given returns a list."""
-        result = self.model._maneuver_prior_given('cautious', 'keep_lane')
+    def test_long_maneuver_prior_returns_list(self):
+        """Test that _long_maneuver_prior_given returns a list."""
+        result = self.model._long_maneuver_prior_given('cautious', 'keep_lane')
         self.assertIsInstance(result, list)
 
-    def test_maneuver_prior_correct_length(self):
+    def test_long_maneuver_prior_correct_length(self):
         """Test that returned list has correct length."""
-        result = self.model._maneuver_prior_given('normal', 'speed_up')
-        self.assertEqual(len(result), self.model.num_maneuver)
+        result = self.model._long_maneuver_prior_given('normal', 'speed_up')
+        self.assertEqual(len(result), self.model.num_long)
 
-    def test_maneuver_prior_sums_to_one(self):
+    def test_long_maneuver_prior_sums_to_one(self):
         """Test that probabilities sum to 1.0."""
         tolerance = 1e-9
         for style in self.model.style_states:
             for intent in self.model.intent_states:
-                probs = self.model._maneuver_prior_given(style, intent)
+                probs = self.model._long_maneuver_prior_given(style, intent)
                 self.assertAlmostEqual(sum(probs), 1.0, delta=tolerance,
-                                     msg=f"Prior for style={style}, intent={intent} doesn't sum to 1")
+                                     msg=f"Long prior for style={style}, intent={intent} doesn't sum to 1")
 
-    def test_maneuver_prior_all_positive(self):
+    def test_long_maneuver_prior_all_positive(self):
         """Test that all probabilities are non-negative."""
         for style in self.model.style_states:
             for intent in self.model.intent_states:
-                probs = self.model._maneuver_prior_given(style, intent)
+                probs = self.model._long_maneuver_prior_given(style, intent)
                 self.assertTrue(all(p >= 0 for p in probs),
                               msg=f"Negative probs for style={style}, intent={intent}")
 
-    def test_maneuver_prior_keep_lane_preference(self):
-        """Test that keep_lane intent increases maintain_speed probability."""
-        keep_lane_probs = self.model._maneuver_prior_given('normal', 'keep_lane')
-        other_intent_probs = self.model._maneuver_prior_given('normal', 'speed_up')
-        
-        maintain_idx = list(self.model.maneuver_states).index('maintain_speed')
-        self.assertGreater(keep_lane_probs[maintain_idx], other_intent_probs[maintain_idx],
-                         msg="Keep_lane should boost maintain_speed probability")
-
-    def test_maneuver_prior_speed_up_preference(self):
+    def test_long_maneuver_speed_up_preference(self):
         """Test that speed_up intent increases accelerate probability."""
-        speed_up_probs = self.model._maneuver_prior_given('normal', 'speed_up')
-        other_intent_probs = self.model._maneuver_prior_given('normal', 'keep_lane')
+        speed_up_probs = self.model._long_maneuver_prior_given('normal', 'speed_up')
+        keep_lane_probs = self.model._long_maneuver_prior_given('normal', 'keep_lane')
         
-        accel_idx = list(self.model.maneuver_states).index('accelerate')
-        self.assertGreater(speed_up_probs[accel_idx], other_intent_probs[accel_idx],
+        accel_idx = list(self.model.long_maneuver_states).index('accelerate')
+        self.assertGreater(speed_up_probs[accel_idx], keep_lane_probs[accel_idx],
                          msg="Speed_up should boost accelerate probability")
 
-    def test_maneuver_prior_aggressive_style_effect(self):
-        """Test that aggressive style boosts acceleration maneuvers."""
-        aggressive_probs = self.model._maneuver_prior_given('aggressive', 'speed_up')
-        normal_probs = self.model._maneuver_prior_given('normal', 'speed_up')
+    def test_long_maneuver_slow_down_preference(self):
+        """Test that slow_down intent increases decelerate probability."""
+        slow_down_probs = self.model._long_maneuver_prior_given('normal', 'slow_down')
+        keep_lane_probs = self.model._long_maneuver_prior_given('normal', 'keep_lane')
         
-        accel_idx = list(self.model.maneuver_states).index('accelerate')
+        decel_idx = list(self.model.long_maneuver_states).index('decelerate')
+        self.assertGreater(slow_down_probs[decel_idx], keep_lane_probs[decel_idx],
+                         msg="Slow_down should boost decelerate probability")
+
+    def test_long_maneuver_aggressive_style_effect(self):
+        """Test that aggressive style boosts acceleration."""
+        aggressive_probs = self.model._long_maneuver_prior_given('aggressive', 'speed_up')
+        normal_probs = self.model._long_maneuver_prior_given('normal', 'speed_up')
+        
+        accel_idx = list(self.model.long_maneuver_states).index('accelerate')
         self.assertGreater(aggressive_probs[accel_idx], normal_probs[accel_idx],
-                         msg="Aggressive style should boost accelerate probability more")
+                         msg="Aggressive style should boost accelerate more")
 
-    def test_maneuver_prior_cautious_style_effect(self):
+    def test_long_maneuver_cautious_style_effect(self):
         """Test that cautious style boosts conservative maneuvers."""
-        cautious_probs = self.model._maneuver_prior_given('cautious', 'slow_down')
-        normal_probs = self.model._maneuver_prior_given('normal', 'slow_down')
+        cautious_probs = self.model._long_maneuver_prior_given('cautious', 'slow_down')
+        normal_probs = self.model._long_maneuver_prior_given('normal', 'slow_down')
         
-        decel_idx = list(self.model.maneuver_states).index('decelerate')
+        decel_idx = list(self.model.long_maneuver_states).index('decelerate')
         self.assertGreater(cautious_probs[decel_idx], normal_probs[decel_idx],
-                         msg="Cautious style should boost decelerate probability more")
+                         msg="Cautious style should boost decelerate more")
 
-    def test_maneuver_transition_returns_list(self):
-        """Test that _maneuver_transition_column returns a list."""
-        result = self.model._maneuver_transition_column('normal', 'keep_lane', 'maintain_speed')
+    def test_long_maneuver_transition_returns_list(self):
+        """Test that _long_maneuver_transition_column returns a list."""
+        result = self.model._long_maneuver_transition_column('normal', 'keep_lane', 'maintain_speed')
         self.assertIsInstance(result, list)
 
-    def test_maneuver_transition_correct_length(self):
+    def test_long_maneuver_transition_correct_length(self):
         """Test that transition column has correct length."""
-        result = self.model._maneuver_transition_column('aggressive', 'speed_up', 'accelerate')
-        self.assertEqual(len(result), self.model.num_maneuver)
+        result = self.model._long_maneuver_transition_column('aggressive', 'speed_up', 'accelerate')
+        self.assertEqual(len(result), self.model.num_long)
 
-    def test_maneuver_transition_sums_to_one(self):
+    def test_long_maneuver_transition_sums_to_one(self):
         """Test that transition probabilities sum to 1.0."""
         tolerance = 1e-9
         for style in self.model.style_states:
             for intent in self.model.intent_states:
-                for prev_m in self.model.maneuver_states:
-                    probs = self.model._maneuver_transition_column(style, intent, prev_m)
+                for prev_m in self.model.long_maneuver_states:
+                    probs = self.model._long_maneuver_transition_column(style, intent, prev_m)
                     self.assertAlmostEqual(sum(probs), 1.0, delta=tolerance,
-                                         msg=f"Transition for {prev_m}->{style},{intent} doesn't sum to 1")
+                                         msg=f"Long transition for {prev_m}->{style},{intent} doesn't sum to 1")
 
-    def test_maneuver_transition_all_positive(self):
+    def test_long_maneuver_transition_all_positive(self):
         """Test that all transition probabilities are non-negative."""
         for style in self.model.style_states:
             for intent in self.model.intent_states:
-                for prev_m in self.model.maneuver_states:
-                    probs = self.model._maneuver_transition_column(style, intent, prev_m)
+                for prev_m in self.model.long_maneuver_states:
+                    probs = self.model._long_maneuver_transition_column(style, intent, prev_m)
                     self.assertTrue(all(p >= 0 for p in probs),
                                   msg=f"Negative transition probs for {prev_m}")
 
-    def test_maneuver_transition_persistence(self):
+    def test_long_maneuver_transition_persistence(self):
         """Test that previous maneuver has higher probability in transition."""
-        probs = self.model._maneuver_transition_column('normal', 'keep_lane', 'maintain_speed')
-        maintain_idx = list(self.model.maneuver_states).index('maintain_speed')
+        probs = self.model._long_maneuver_transition_column('normal', 'keep_lane', 'maintain_speed')
+        maintain_idx = list(self.model.long_maneuver_states).index('maintain_speed')
         
         # maintain_speed should have highest probability when coming from maintain_speed
         max_prob = max(probs)
         self.assertEqual(probs[maintain_idx], max_prob,
+                        msg="Previous maneuver should have highest transition probability")
+
+
+class TestLatManeuverHeuristics(unittest.TestCase):
+    """Test lateral maneuver heuristic functions."""
+
+    def setUp(self):
+        self.model = HDVDBN()
+
+    def test_lat_maneuver_prior_returns_list(self):
+        """Test that _lat_maneuver_prior_given returns a list."""
+        result = self.model._lat_maneuver_prior_given('cautious', 'keep_lane')
+        self.assertIsInstance(result, list)
+
+    def test_lat_maneuver_prior_correct_length(self):
+        """Test that returned list has correct length."""
+        result = self.model._lat_maneuver_prior_given('normal', 'lane_change_left')
+        self.assertEqual(len(result), self.model.num_lat)
+
+    def test_lat_maneuver_prior_sums_to_one(self):
+        """Test that probabilities sum to 1.0."""
+        tolerance = 1e-9
+        for style in self.model.style_states:
+            for intent in self.model.intent_states:
+                probs = self.model._lat_maneuver_prior_given(style, intent)
+                self.assertAlmostEqual(sum(probs), 1.0, delta=tolerance,
+                                     msg=f"Lat prior for style={style}, intent={intent} doesn't sum to 1")
+
+    def test_lat_maneuver_prior_all_positive(self):
+        """Test that all probabilities are non-negative."""
+        for style in self.model.style_states:
+            for intent in self.model.intent_states:
+                probs = self.model._lat_maneuver_prior_given(style, intent)
+                self.assertTrue(all(p >= 0 for p in probs),
+                              msg=f"Negative probs for style={style}, intent={intent}")
+
+    def test_lat_maneuver_keep_lane_preference(self):
+        """Test that keep_lane intent increases keep_lane probability."""
+        keep_lane_probs = self.model._lat_maneuver_prior_given('normal', 'keep_lane')
+        lc_left_probs = self.model._lat_maneuver_prior_given('normal', 'lane_change_left')
+        
+        keep_idx = list(self.model.lat_maneuver_states).index('keep_lane')
+        self.assertGreater(keep_lane_probs[keep_idx], lc_left_probs[keep_idx],
+                         msg="Keep_lane intent should boost keep_lane probability")
+
+    def test_lat_maneuver_lc_left_preference(self):
+        """Test that lane_change_left intent increases prepare/perform_lc_left."""
+        lc_probs = self.model._lat_maneuver_prior_given('normal', 'lane_change_left')
+        keep_probs = self.model._lat_maneuver_prior_given('normal', 'keep_lane')
+        
+        prep_idx = list(self.model.lat_maneuver_states).index('prepare_lc_left')
+        self.assertGreater(lc_probs[prep_idx], keep_probs[prep_idx],
+                         msg="Lane_change_left should boost prepare_lc_left")
+
+    def test_lat_maneuver_aggressive_style_effect(self):
+        """Test that aggressive style boosts lane-change maneuvers."""
+        aggressive_probs = self.model._lat_maneuver_prior_given('aggressive', 'lane_change_left')
+        normal_probs = self.model._lat_maneuver_prior_given('normal', 'lane_change_left')
+        
+        prep_idx = list(self.model.lat_maneuver_states).index('prepare_lc_left')
+        self.assertGreater(aggressive_probs[prep_idx], normal_probs[prep_idx],
+                         msg="Aggressive style should boost LC maneuvers more")
+
+    def test_lat_maneuver_cautious_style_effect(self):
+        """Test that cautious style boosts keep_lane."""
+        cautious_probs = self.model._lat_maneuver_prior_given('cautious', 'lane_change_left')
+        normal_probs = self.model._lat_maneuver_prior_given('normal', 'lane_change_left')
+        
+        keep_idx = list(self.model.lat_maneuver_states).index('keep_lane')
+        self.assertGreater(cautious_probs[keep_idx], normal_probs[keep_idx],
+                         msg="Cautious style should boost keep_lane more")
+
+    def test_lat_maneuver_transition_returns_list(self):
+        """Test that _lat_maneuver_transition_column returns a list."""
+        result = self.model._lat_maneuver_transition_column('normal', 'keep_lane', 'keep_lane')
+        self.assertIsInstance(result, list)
+
+    def test_lat_maneuver_transition_correct_length(self):
+        """Test that transition column has correct length."""
+        result = self.model._lat_maneuver_transition_column('aggressive', 'lane_change_left', 'prepare_lc_left')
+        self.assertEqual(len(result), self.model.num_lat)
+
+    def test_lat_maneuver_transition_sums_to_one(self):
+        """Test that transition probabilities sum to 1.0."""
+        tolerance = 1e-9
+        for style in self.model.style_states:
+            for intent in self.model.intent_states:
+                for prev_m in self.model.lat_maneuver_states:
+                    probs = self.model._lat_maneuver_transition_column(style, intent, prev_m)
+                    self.assertAlmostEqual(sum(probs), 1.0, delta=tolerance,
+                                         msg=f"Lat transition for {prev_m}->{style},{intent} doesn't sum to 1")
+
+    def test_lat_maneuver_transition_all_positive(self):
+        """Test that all transition probabilities are non-negative."""
+        for style in self.model.style_states:
+            for intent in self.model.intent_states:
+                for prev_m in self.model.lat_maneuver_states:
+                    probs = self.model._lat_maneuver_transition_column(style, intent, prev_m)
+                    self.assertTrue(all(p >= 0 for p in probs),
+                                  msg=f"Negative transition probs for {prev_m}")
+
+    def test_lat_maneuver_transition_persistence(self):
+        """Test that previous lateral maneuver has higher probability in transition."""
+        probs = self.model._lat_maneuver_transition_column('normal', 'keep_lane', 'keep_lane')
+        keep_idx = list(self.model.lat_maneuver_states).index('keep_lane')
+        
+        max_prob = max(probs)
+        self.assertEqual(probs[keep_idx], max_prob,
                         msg="Previous maneuver should have highest transition probability")
 
 
@@ -324,10 +441,19 @@ class TestModelIntegration(unittest.TestCase):
         """Test that heuristics work for all style/intent combinations."""
         model = HDVDBN()
         
+        # Test longitudinal maneuvers
         for style in model.style_states:
             for intent in model.intent_states:
-                probs = model._maneuver_prior_given(style, intent)
-                self.assertEqual(len(probs), model.num_maneuver)
+                probs = model._long_maneuver_prior_given(style, intent)
+                self.assertEqual(len(probs), model.num_long)
+                self.assertAlmostEqual(sum(probs), 1.0, delta=1e-9)
+                self.assertTrue(all(p >= 0 for p in probs))
+        
+        # Test lateral maneuvers
+        for style in model.style_states:
+            for intent in model.intent_states:
+                probs = model._lat_maneuver_prior_given(style, intent)
+                self.assertEqual(len(probs), model.num_lat)
                 self.assertAlmostEqual(sum(probs), 1.0, delta=1e-9)
                 self.assertTrue(all(p >= 0 for p in probs))
 

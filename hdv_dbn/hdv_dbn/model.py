@@ -12,25 +12,31 @@ class HDVDBN:
     Nodes per time slice:
         Style_t - discrete driver style
         Intent_t - discrete intent
-        Maneuver_t - discrete maneuver
+        LongManeuver_t - discrete longitudinal maneuver
+        LatManeuver_t  - discrete lateral / lane-change maneuver
         
     Structure:
-        Style_t  --> Style_{t+1}
-        Intent_t --> Intent_{t+1}
-        Maneuver_t --> Maneuver_{t+1}
+        Temporal:
+            Style_t        --> Style_{t+1}
+            Intent_t       --> Intent_{t+1}
+            LongManeuver_t --> LongManeuver_{t+1}
+            LatManeuver_t  --> LatManeuver_{t+1}
 
-        Style_t, Intent_t --> Maneuver_t
-        Style_{t+1}, Intent_{t+1} --> Maneuver_{t+1}
+        Intra-slice (per slice):
+            Style_t, Intent_t  --> LongManeuver_t
+            Style_t, Intent_t  --> LatManeuver_t
     """
 
     def __init__(self):
         self.style_states = DBN_STATES.driving_style_states
         self.intent_states = DBN_STATES.intent_states
-        self.maneuver_states = DBN_STATES.maneuver_states
+        self.long_maneuver_states = DBN_STATES.long_maneuver_states
+        self.lat_maneuver_states = DBN_STATES.lat_maneuver_states
 
         self.num_style = len(self.style_states)
         self.num_intent = len(self.intent_states)
-        self.num_maneuver = len(self.maneuver_states)
+        self.num_long = len(self.long_maneuver_states)
+        self.num_lat = len(self.lat_maneuver_states)
 
         self.model = DynamicBayesianNetwork()
         self._build_structure()
@@ -43,18 +49,23 @@ class HDVDBN:
         """Define the nodes and edges of the 2-slice DBN."""
         # Add nodes for time slices 0 and 1
         self.model.add_nodes_from([
-            ('Style', 0), ('Intent', 0), ('Maneuver', 0),
-            ('Style', 1), ('Intent', 1), ('Maneuver', 1),
+            ('Style', 0), ('Intent', 0), ("LongManeuver", 0), ("LatManeuver", 0),
+            ('Style', 1), ('Intent', 1), ("LongManeuver", 1), ("LatManeuver", 1)
         ])
         # Intra-slice edges
-        self.model.add_edge(('Style', 0), ('Maneuver', 0))
-        self.model.add_edge(('Intent', 0), ('Maneuver', 0))
-        self.model.add_edge(('Style', 1), ('Maneuver', 1))
-        self.model.add_edge(('Intent', 1), ('Maneuver', 1))
+        self.model.add_edge(("Style", 0), ("LongManeuver", 0))
+        self.model.add_edge(("Style", 0), ("LatManeuver", 0))
+        self.model.add_edge(("Intent", 0), ("LongManeuver", 0))
+        self.model.add_edge(("Intent", 0), ("LatManeuver", 0))
+        self.model.add_edge(("Style", 1), ("LongManeuver", 1))
+        self.model.add_edge(("Style", 1), ("LatManeuver", 1))
+        self.model.add_edge(("Intent", 1), ("LongManeuver", 1))
+        self.model.add_edge(("Intent", 1), ("LatManeuver", 1))
         # Inter-slice edges
         self.model.add_edge(('Style', 0), ('Style', 1))
         self.model.add_edge(('Intent', 0), ('Intent', 1))
-        self.model.add_edge(('Maneuver', 0), ('Maneuver', 1))
+        self.model.add_edge(("LongManeuver", 0), ("LongManeuver", 1))
+        self.model.add_edge(("LatManeuver", 0), ("LatManeuver", 1))
 
     # ------------------------------------------------------------------
     # Slice-0 priors
@@ -83,29 +94,52 @@ class HDVDBN:
             state_names={('Intent', 0): self.intent_states}
         )
     
-    def _cpd_prior_maneuver(self):
-        """ 
-        P(Maneuver_0 | Style_0, Intent_0)
-
-        Heuristic: intent determines the maneuvers that align with it, style modulates aggressiveness / caution.
+    def _cpd_prior_long_maneuver(self):
+        """
+        P(LongManeuver_0 | Style_0, Intent_0)
+        Heuristic: intent (speed_up / slow_down) drives longitudinal behavior, style modulates aggressiveness / braking preference.
         """
         cols = []
         for style in self.style_states:
             for intent in self.intent_states:
-                col = self._maneuver_prior_given(style, intent)
+                col = self._long_maneuver_prior_given(style, intent)
                 cols.append(col)
-        values = np.array(cols).T # rows=maneuver, cols=(style,intent)prior
+        values = np.array(cols).T  # rows=long maneuver, cols=(style,intent)
         return TabularCPD(
-            variable=('Maneuver', 0),   
-            variable_card=self.num_maneuver,
+            variable=("LongManeuver", 0),
+            variable_card=self.num_long,
             values=values,
-            evidence=[('Style', 0), ('Intent', 0)],
+            evidence=[("Style", 0), ("Intent", 0)],
             evidence_card=[self.num_style, self.num_intent],
             state_names={
-                ('Maneuver', 0): self.maneuver_states,
-                ('Style', 0): self.style_states,
-                ('Intent', 0): self.intent_states
-            }
+                ("LongManeuver", 0): self.long_maneuver_states,
+                ("Style", 0): self.style_states,
+                ("Intent", 0): self.intent_states,
+            },
+        )
+
+    def _cpd_prior_lat_maneuver(self):
+        """
+        P(LatManeuver_0 | Style_0, Intent_0)
+        Heuristic: lane-change intents drive lateral phases, style biases how eager the driver is to prepare/perform LC vs keep_lane.
+        """
+        cols = []
+        for style in self.style_states:
+            for intent in self.intent_states:
+                col = self._lat_maneuver_prior_given(style, intent)
+                cols.append(col)
+        values = np.array(cols).T  # rows=lat maneuver, cols=(style,intent)
+        return TabularCPD(
+            variable=("LatManeuver", 0),
+            variable_card=self.num_lat,
+            values=values,
+            evidence=[("Style", 0), ("Intent", 0)],
+            evidence_card=[self.num_style, self.num_intent],
+            state_names={
+                ("LatManeuver", 0): self.lat_maneuver_states,
+                ("Style", 0): self.style_states,
+                ("Intent", 0): self.intent_states,
+            },
         )
 
     # ------------------------------------------------------------------
@@ -148,51 +182,148 @@ class HDVDBN:
                 ('Intent', 0): self.intent_states
             }
         )
-
-    def _cpd_maneuver_1(self):
-        """ 
-        P(Maneuver_1 | Style_1, Intent_1, Maneuver_0)
-
-        Heuristic: 
-        - inertia: M_1 tends to equal M_0
-        - influence of intent on maneuver
-        - modulation by style (aggressive vs cautious)
+    
+    def _cpd_long_maneuver_1(self):
+        """
+        P(LongManeuver_1 | Style_1, Intent_1, LongManeuver_0)
+        Heuristic:
+        - inertia: strong tendency to keep same longitudinal maneuver
+        - intent "speed_up" / "slow_down" pushes toward accelerate / decelerate
+        - style: aggressive → more acceleration; cautious → more braking/maintain
         """
         cols = []
         for style in self.style_states:
             for intent in self.intent_states:
-                for prev_m in self.maneuver_states:
-                    col = self._maneuver_transition_column(style=style, intent=intent, prev_maneuver=prev_m)
+                for prev_m in self.long_maneuver_states:
+                    col = self._long_maneuver_transition_column(style=style, intent=intent, prev_maneuver=prev_m)
                     cols.append(col)
-        
-        values = np.array(cols).T # rows=maneuver, cols=(style,intent,prev_maneuver)
+
+        values = np.array(cols).T  # rows=long maneuver, cols=(style,intent,prev)
         return TabularCPD(
-            variable=('Maneuver', 1),
-            variable_card=self.num_maneuver,
+            variable=("LongManeuver", 1),
+            variable_card=self.num_long,
             values=values,
-            evidence=[('Maneuver', 0), ('Style', 1), ('Intent', 1)],
-            evidence_card=[self.num_maneuver, self.num_style, self.num_intent],
+            evidence=[("LongManeuver", 0), ("Style", 1), ("Intent", 1)],
+            evidence_card=[self.num_long, self.num_style, self.num_intent],
             state_names={
-                ('Maneuver', 1): self.maneuver_states,
-                ('Maneuver', 0): self.maneuver_states,
-                ('Style', 1): self.style_states,
-                ('Intent', 1): self.intent_states
+                ("LongManeuver", 1): self.long_maneuver_states,
+                ("LongManeuver", 0): self.long_maneuver_states,
+                ("Style", 1): self.style_states,
+                ("Intent", 1): self.intent_states
             }
         )
 
-    # ------------------------------------------------------------------
-    # Helper heuristics for maneuver CPDs
-    # ------------------------------------------------------------------
-    def _maneuver_prior_given(self, style, intent):
+    def _cpd_lat_maneuver_1(self):
         """
-        Column for P(Maneuver_0 | Style_0=style, Intent_0=intent).
+        P(LatManeuver_1 | Style_1, Intent_1, LatManeuver_0)
+        Heuristic:
+        - inertia: keep same lateral phase for a while
+        - lane-change intents push toward prepare/perform LC
+        - style: aggressive → more prepare/perform; cautious → more keep_lane
         """
-        scores = {m: 1.0 for m in self.maneuver_states}
+        cols = []
+        for style in self.style_states:
+            for intent in self.intent_states:
+                for prev_m in self.lat_maneuver_states:
+                    col = self._lat_maneuver_transition_column(style=style, intent=intent, prev_maneuver=prev_m)
+                    cols.append(col)
+
+        values = np.array(cols).T  # rows=lat maneuver, cols=(style,intent,prev)
+        return TabularCPD(
+            variable=("LatManeuver", 1),
+            variable_card=self.num_lat,
+            values=values,
+            evidence=[("LatManeuver", 0), ("Style", 1), ("Intent", 1)],
+            evidence_card=[self.num_lat, self.num_style, self.num_intent],
+            state_names={
+                ("LatManeuver", 1): self.lat_maneuver_states,
+                ("LatManeuver", 0): self.lat_maneuver_states,
+                ("Style", 1): self.style_states,
+                ("Intent", 1): self.intent_states,
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # Helper heuristics — longitudinal
+    # ------------------------------------------------------------------
+    def _long_maneuver_prior_given(self, style, intent):
+        """
+        Column for P(LongManeuver_0 | Style_0=style, Intent_0=intent).
+        """
+        scores = {m: 1.0 for m in self.long_maneuver_states}
 
         # Intent-driven preferences
-        if intent == "keep_lane":
+        if intent == "speed_up" and "accelerate" in scores:
+            scores["accelerate"] += 2.0
+        elif intent == "slow_down":
+            if "decelerate" in scores:
+                scores["decelerate"] += 1.5
+            if "hard_brake" in scores:
+                scores["hard_brake"] += 0.5
+        elif intent in ["lane_change_left", "lane_change_right"]:
+            # When intent is lane_change don't strongly push longitudinal behavior. the driver's focus is lateral (changing lanes), not speeding up or slowing down. 
             if "maintain_speed" in scores:
-                scores["maintain_speed"] += 2.0
+                scores["maintain_speed"] += 0.5
+
+        # Style modulation
+        if style == "aggressive":
+            # more accel; less maintain / soft decel
+            for m in self.long_maneuver_states:
+                if m == "accelerate":
+                    scores[m] *= 1.4
+        elif style == "cautious":
+            for m in self.long_maneuver_states:
+                if m in ["maintain_speed", "decelerate", "hard_brake"]:
+                    scores[m] *= 1.4
+        elif style == "normal":
+            pass  # no change
+        # Normalize to get probabilities
+        total = sum(scores.values())
+        return [scores[m] / total for m in self.long_maneuver_states]
+
+    def _long_maneuver_transition_column(self, style, intent, prev_maneuver):
+        """
+        Column for P(LongManeuver_1 | Style_1=style, Intent_1=intent, LongManeuver_0=prev_maneuver).
+        """
+        persist = 0.6 # probability to persist in same maneuver
+        base_other = (1.0 - persist) / (self.num_long - 1) # distribute among others
+
+        scores = {m: base_other for m in self.long_maneuver_states}
+        scores[prev_maneuver] = persist
+
+        # Intent pushes
+        if intent == "speed_up" and "accelerate" in scores:
+            scores["accelerate"] += 0.2
+        elif intent == "slow_down":
+            if "decelerate" in scores:
+                scores["decelerate"] += 0.15
+            if "hard_brake" in scores:
+                scores["hard_brake"] += 0.15
+
+        # Style modulation
+        if style == "aggressive":
+            if "accelerate" in scores:
+                scores["accelerate"] *= 1.3
+        elif style == "cautious":
+            for m in self.long_maneuver_states:
+                if m in ["maintain_speed", "decelerate", "hard_brake"]:
+                    scores[m] *= 1.3
+
+        total = sum(scores.values())
+        return [scores[m] / total for m in self.long_maneuver_states]
+    
+    # ------------------------------------------------------------------
+    # Helper heuristics — lateral
+    # ------------------------------------------------------------------
+    def _lat_maneuver_prior_given(self, style, intent):
+        """
+        Column for P(LatManeuver_0 | Style_0=style, Intent_0=intent).
+        """
+        scores = {m: 1.0 for m in self.lat_maneuver_states}
+
+        if intent == "keep_lane":
+            if "keep_lane" in scores:
+                scores["keep_lane"] += 2.0
         elif intent == "lane_change_left":
             if "prepare_lc_left" in scores:
                 scores["prepare_lc_left"] += 2.0
@@ -203,43 +334,34 @@ class HDVDBN:
                 scores["prepare_lc_right"] += 2.0
             if "perform_lc_right" in scores:
                 scores["perform_lc_right"] += 1.0
-        elif intent == "speed_up":
-            if "accelerate" in scores:
-                scores["accelerate"] += 2.0
-        elif intent == "slow_down":
-            if "decelerate" in scores:
-                scores["decelerate"] += 1.5
-            if "hard_brake" in scores:
-                scores["hard_brake"] += 0.5
+        # For speed_up / slow_down, we do not strongly bias lateral phase.
 
         # Style modulation
         if style == "aggressive":
-            for m in self.maneuver_states:
-                if any(k in m for k in ["accelerate", "prepare_lc_left", "prepare_lc_right", "perform_lc_left", "perform_lc_right"]):
+            for m in self.lat_maneuver_states:
+                if any(k in m for k in ["prepare_lc_left", "prepare_lc_right", "perform_lc_left", "perform_lc_right"]):
                     scores[m] *= 1.4
         elif style == "cautious":
-            for m in self.maneuver_states:
-                if m in ["maintain_speed", "decelerate", "hard_brake"]:
-                    scores[m] *= 1.4
-        elif style == "normal":
-            pass  # no change
-        
-        # Normalize to get probabilities
-        total = sum(scores.values())
-        return [scores[m] / total for m in self.maneuver_states]
-    
-    def _maneuver_transition_column(self, style, intent, prev_maneuver):
-        """Column for P(Maneuver_1 | Style_1=style, Intent_1=intent, Maneuver_0=prev_maneuver)."""
-        persist = 0.6 # probability to persist in same maneuver
-        base_other = (1.0 - persist) / (self.num_maneuver - 1) # distribute among others
+            if "keep_lane" in scores:
+                scores["keep_lane"] *= 1.4
 
-        scores = {m: base_other for m in self.maneuver_states}
+        total = sum(scores.values())
+        return [scores[m] / total for m in self.lat_maneuver_states]
+
+    def _lat_maneuver_transition_column(self, style, intent, prev_maneuver):
+        """
+        Column for P(LatManeuver_1 | Style_1=style, Intent_1=intent, LatManeuver_0=prev_maneuver).
+        """
+        persist = 0.7  # lateral phases are somewhat longer
+        base_other = (1.0 - persist) / (self.num_lat - 1)
+
+        scores = {m: base_other for m in self.lat_maneuver_states}
         scores[prev_maneuver] = persist
 
         # Intent pushes
         if intent == "keep_lane":
-            if "maintain_speed" in scores:
-                scores["maintain_speed"] += 0.15
+            if "keep_lane" in scores:
+                scores["keep_lane"] += 0.15
         elif intent == "lane_change_left":
             if "prepare_lc_left" in scores:
                 scores["prepare_lc_left"] += 0.15
@@ -250,28 +372,19 @@ class HDVDBN:
                 scores["prepare_lc_right"] += 0.15
             if "perform_lc_right" in scores:
                 scores["perform_lc_right"] += 0.10
-        elif intent == "speed_up":
-            if "accelerate" in scores:
-                scores["accelerate"] += 0.20
-        elif intent == "slow_down":
-            if "decelerate" in scores:
-                scores["decelerate"] += 0.15
-            if "hard_brake" in scores:
-                scores["hard_brake"] += 0.15
 
         # Style modulation
         if style == "aggressive":
-            for m in self.maneuver_states:
-                if any(k in m for k in ["accelerate", "prepare_lc_left", "prepare_lc_right", "perform_lc_left", "perform_lc_right"]):
+            for m in self.lat_maneuver_states:
+                if any(k in m for k in ["prepare_lc_left", "prepare_lc_right", "perform_lc_left", "perform_lc_right"]):
                     scores[m] *= 1.3
         elif style == "cautious":
-            for m in self.maneuver_states:
-                if m in ["maintain_speed", "decelerate", "hard_brake"]:
-                    scores[m] *= 1.3
+            if "keep_lane" in scores:
+                scores["keep_lane"] *= 1.3
 
         total = sum(scores.values())
-        return [scores[m] / total for m in self.maneuver_states]
-        
+        return [scores[m] / total for m in self.lat_maneuver_states]
+   
     # ------------------------------------------------------------------
     # CPD assembly
     # ------------------------------------------------------------------
@@ -279,15 +392,17 @@ class HDVDBN:
         """Initialize CPDs. These will be learned/updated during training."""
         prior_style     = self._cpd_prior_style()
         prior_intent    = self._cpd_prior_intent()
-        prior_maneuver  = self._cpd_prior_maneuver()
+        prior_long = self._cpd_prior_long_maneuver()
+        prior_lat = self._cpd_prior_lat_maneuver()
         cpd_style_1     = self._cpd_style_1()
         cpd_intent_1    = self._cpd_intent_1()
-        cpd_maneuver_1  = self._cpd_maneuver_1()
+        cpd_long_1 = self._cpd_long_maneuver_1()
+        cpd_lat_1 = self._cpd_lat_maneuver_1()
 
         # Add CPDs to model
         self.model.add_cpds(
-            prior_style, prior_intent, prior_maneuver,
-            cpd_style_1, cpd_intent_1, cpd_maneuver_1
+            prior_style, prior_intent, prior_long, prior_lat,
+            cpd_style_1, cpd_intent_1, cpd_long_1, cpd_lat_1
         )
 
         self.model.initialize_initial_state() # initialize the 0th slice
