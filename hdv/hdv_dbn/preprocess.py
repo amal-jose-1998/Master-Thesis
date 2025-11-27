@@ -14,7 +14,6 @@ Output:
         - maneuver_long : longitudinal maneuver label
         - maneuver_lat  : lateral / lane-change maneuver label
 """
-from typing import Tuple
 import numpy as np
 import pandas as pd
 

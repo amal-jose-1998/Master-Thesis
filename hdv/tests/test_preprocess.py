@@ -12,12 +12,12 @@ Tests cover:
 import unittest
 import numpy as np
 import pandas as pd
-from hdv_dbn.hdv_dbn.preprocess import (
+from hdv.hdv_dbn.preprocess import (
     _lane_center,
     classify_long_lat_maneuvers_for_vehicle,
     add_maneuver_labels,
 )
-from hdv_dbn.hdv_dbn.config import OBS_CONFIG, DBN_STATES
+from hdv.hdv_dbn.config import OBS_CONFIG, DBN_STATES
 
 
 class TestLaneCenter(unittest.TestCase):

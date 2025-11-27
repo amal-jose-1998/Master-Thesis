@@ -192,13 +192,13 @@ class HDVDBN:
         - style: aggressive → more acceleration; cautious → more braking/maintain
         """
         cols = []
-        for style in self.style_states:
-            for intent in self.intent_states:
-                for prev_m in self.long_maneuver_states:
+        for prev_m in self.long_maneuver_states:        # LongManeuver_0  (evidence[0])
+            for style in self.style_states:             # Style_1         (evidence[1])
+                for intent in self.intent_states:       # Intent_1        (evidence[2])
                     col = self._long_maneuver_transition_column(style=style, intent=intent, prev_maneuver=prev_m)
                     cols.append(col)
 
-        values = np.array(cols).T  # rows=long maneuver, cols=(style,intent,prev)
+        values = np.array(cols).T  # rows=long maneuver, cols=(prev,style,intent)
         return TabularCPD(
             variable=("LongManeuver", 1),
             variable_card=self.num_long,
@@ -222,13 +222,13 @@ class HDVDBN:
         - style: aggressive → more prepare/perform; cautious → more keep_lane
         """
         cols = []
-        for style in self.style_states:
-            for intent in self.intent_states:
-                for prev_m in self.lat_maneuver_states:
+        for prev_m in self.lat_maneuver_states:         # LatManeuver_0   (evidence[0])
+            for style in self.style_states:             # Style_1         (evidence[1])
+                for intent in self.intent_states:       # Intent_1        (evidence[2])
                     col = self._lat_maneuver_transition_column(style=style, intent=intent, prev_maneuver=prev_m)
                     cols.append(col)
 
-        values = np.array(cols).T  # rows=lat maneuver, cols=(style,intent,prev)
+        values = np.array(cols).T  # rows=lat maneuver, cols=(prev,style,intent)
         return TabularCPD(
             variable=("LatManeuver", 1),
             variable_card=self.num_lat,

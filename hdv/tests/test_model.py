@@ -12,8 +12,8 @@ Tests cover:
 
 import unittest
 import numpy as np
-from hdv_dbn.hdv_dbn.model import HDVDBN
-from hdv_dbn.hdv_dbn.config import DBN_STATES
+from hdv.hdv_dbn.model import HDVDBN
+from hdv.hdv_dbn.config import DBN_STATES
 
 
 class TestHDVDBNInitialization(unittest.TestCase):

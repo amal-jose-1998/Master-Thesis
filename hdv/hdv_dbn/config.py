@@ -12,7 +12,7 @@ class DBNStates:
 # Define the DBN states
 DBN_STATES = DBNStates(
     driving_style_states=("cautious", "normal", "aggressive"),
-    intent_states=("keep_lane", "lane_change_left", "lane_change_right", "speed_up", "slow_down"), # Single, "dominant" intent dimension (tactical goal)
+    intent_states=("keep_lane", "lane_change_left", "lane_change_right", "speed_up", "slow_down"), # Single, "dominant" intent 
     long_maneuver_states=("maintain_speed", "accelerate", "decelerate", "hard_brake"), # Longitudinal maneuver: what is actually done along the lane
     lat_maneuver_states=("keep_lane", "prepare_lc_left", "prepare_lc_right", "perform_lc_left", "perform_lc_right") # Lateral maneuver: what is actually done across lanes 
 )
@@ -22,11 +22,11 @@ class ObsConfig:
     """Dataclass to hold the observation configuration for the DBN model."""
     lane_ids: List[int]
     # Longitudinal thresholds (m/s²)
-    accel_threshold: float                      # above → accelerate
-    hard_brake_threshold: float                 # below → hard brake
+    accel_threshold: float                      # above -> accelerate
+    hard_brake_threshold: float                 # below -> hard brake
     # Lateral thresholds
-    lateral_vel_threshold: float                # |vy| above → lateral movement for prepare
-    prepare_lc_offset: float                    # |y - lane_center| above → preparing LC
+    lateral_vel_threshold: float                # |vy| above -> lateral movement for prepare
+    prepare_lc_offset: float                    # |y - lane_center| above -> preparing LC
     # Lane-change episode parameters
     lc_prep_frames: int                         # frames before LC index to consider for prepare_lc_* 
     lane_width: float                           # approximate lane width [m]
