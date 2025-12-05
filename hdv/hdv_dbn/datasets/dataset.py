@@ -25,4 +25,3 @@ class TrajectorySequence:
     frames: np.ndarray            # frame numbers (time indices) for this vehicle’s trajectory, sorted in order.
     features: np.ndarray          # size=(T, F); actual numerical data used by the DBN; T = number of time steps (frames), F = number of features per frame
     feature_names: List[str]      # names of the columns inside features
-    labels: Dict[str, np.ndarray] # maneuver annotation
