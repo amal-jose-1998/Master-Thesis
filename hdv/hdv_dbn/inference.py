@@ -4,11 +4,7 @@ from typing import Tuple
 from .trainer import forward_backward  
 from .emissions import GaussianEmissionModel
 
-def viterbi(
-    pi_z: np.ndarray,
-    A_zz: np.ndarray,
-    logB: np.ndarray,
-) -> Tuple[np.ndarray, float]:
+def viterbi(pi_z, A_zz, logB):
     """
     Viterbi algorithm for the most likely latent state sequence.
 
@@ -54,12 +50,7 @@ def viterbi(
     return z_star, log_p_star
 
 
-def infer_posterior(
-    obs: np.ndarray,
-    pi_z: np.ndarray,
-    A_zz: np.ndarray,
-    emissions: GaussianEmissionModel,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+def infer_posterior(obs, pi_z, A_zz, emissions):
     """
     Compute posterior distributions over Style and Action for a single sequence.
 
@@ -100,12 +91,7 @@ def infer_posterior(
     return gamma, gamma_style, gamma_action, loglik
 
 
-def infer_viterbi_paths(
-    obs: np.ndarray,
-    pi_z: np.ndarray,
-    A_zz: np.ndarray,
-    emissions: GaussianEmissionModel,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+def infer_viterbi_paths(obs, pi_z, A_zz, emissions):
     """
     Convenience wrapper: run Viterbi and decode (style, action) indices.
 
