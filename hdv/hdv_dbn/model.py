@@ -10,7 +10,7 @@ class HDVDBN:
     Dynamic Bayesian Network for HDV behavior with:
     
     Latent variables:
-        Style_t  - driver style (constant over a trajectory)
+        Style_t  - driver style (assumed approximately constant over a trajectory)
         Action_t - discrete action mode at time t
 
     Nodes per time slice:
@@ -25,10 +25,12 @@ class HDVDBN:
             Action_t --> Action_{t+1}
 
     Notes:
-        - Observations O_t (x, y, vx, vy, ax, ay) are NOT in this graph; they will enter through an external emission model during training/inference.
+        - Continuous Observations O_t (x, y, vx, vy, ax, ay) are NOT in this graph. They are handled by an external emission 
+          model that is trained along with this DBN.
     """
 
     def __init__(self):
+        """ Initialize the HDVDBN structure and neutral CPDs."""
         # State names from config.py
         self.style_states = DBN_STATES.driving_style      
         self.action_states = DBN_STATES.action            
@@ -65,7 +67,17 @@ class HDVDBN:
     # Slice-0 priors
     # ------------------------------------------------------------------
     def _cpd_prior_style(self):
-        """P(Style_0): uniform over driving styles."""
+        """
+        Construct the prior CPD
+        P(Style_0): uniform over driving styles.
+
+        Returns
+        TabularCPD: 
+            A pgmpy :class:`TabularCPD` object whose:
+            - ``variable`` is ``('Style', 0)``
+            - shape is ``(num_style, 1)``, where each row corresponds to a style and the single column encodes the prior 
+              probability.
+        """
         probs = np.full((self.num_style, 1), 1.0 / self.num_style)  # rows=style, cols=prior
         return TabularCPD(
             variable=('Style', 0),
@@ -76,9 +88,17 @@ class HDVDBN:
 
     def _cpd_prior_action(self):
         """
+        Construct the prior CPD
         P(Action_0 | Style_0)
-
-        For every style, the prior over actions is uniform.
+        For every style, the prior over actions is initialized to be uniform.
+        
+        Returns
+        TabularCPD
+            A pgmpy :class:`TabularCPD` object whose:
+            - ``variable`` is ``('Action', 0)``
+            - ``evidence`` is ``[('Style', 0)]``
+            - ``values`` has shape ``(num_action, num_style)``, where each column corresponds to a style state and each row 
+              corresponds to an action state.
         """
         # values shape: (num_action, num_style)
         col = np.full(self.num_action, 1.0 / self.num_action)
@@ -101,9 +121,17 @@ class HDVDBN:
     # ------------------------------------------------------------------
     def _cpd_style_1(self):
         """
+        Construct the temporal CPD
         P(Style_1 | Style_0)
-
         Encode style as effectively constant.
+
+        Returns
+        TabularCPD
+            A pgmpy :class:`TabularCPD` object whose:
+            - ``variable`` is ``('Style', 1)``
+            - ``evidence`` is ``[('Style', 0)]``
+            - ``values`` is a ``(num_style, num_style)`` identity matrix, where columns index the previous style and rows index 
+              the next style.
         """
         mat = np.eye(self.num_style)
 
@@ -121,9 +149,22 @@ class HDVDBN:
 
     def _cpd_action_1(self, stay=0.7):
         """
+        Construct the temporal CPD
         P(Action_1 | Action_0, Style_1)
             - strong inertia to stay in the same action
             - otherwise uniform over other actions
+
+        Parameters
+        stay : float, optional
+            Probability of remaining in the same action from one time step to the next. Must be in the interval ``[0, 1]``. Default is ``0.7``.
+
+        Returns
+        TabularCPD
+            A pgmpy :class:`TabularCPD` object whose:
+            - ``variable`` is ``('Action', 1)``
+            - ``evidence`` is ``[('Action', 0), ('Style', 1)]``
+            - ``values`` has shape ``(num_action, num_action * num_style)``, where each block of ``num_action`` columns corresponds to a particular 
+                combination of previous action and style.
         """
         off = (1.0 - stay) / max(self.num_action - 1, 1)
 
@@ -154,7 +195,7 @@ class HDVDBN:
     # CPD assembly
     # ------------------------------------------------------------------
     def _init_cpds(self):
-        """Initialize CPDs. These are neutral priors to be refined during learning."""
+        """Create and attach all CPDs to the underlying DBN."""
         prior_style = self._cpd_prior_style()
         prior_action = self._cpd_prior_action()
         cpd_style_1 = self._cpd_style_1()

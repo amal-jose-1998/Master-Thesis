@@ -1,21 +1,32 @@
 import numpy as np
-from typing import Tuple
 
 from .trainer import forward_backward  
-from .emissions import GaussianEmissionModel
 
 def viterbi(pi_z, A_zz, logB):
     """
-    Viterbi algorithm for the most likely latent state sequence.
+    Run the Viterbi algorithm to find the most likely latent state sequence
+    for a single observation trajectory in the joint HMM over Z_t = (Style_t, Action_t).
 
-    Args:
-        pi_z:  initial distribution over latent states z, shape (N,)
-        A_zz:  transition probabilities between latent states, shape (N, N)
-        logB:  log emission probabilities, shape (T, N)
+    Parameters
+    pi_z : np.ndarray
+        Initial distribution over joint latent states Z_0.
+        Shape: (N,), where N = number of joint states (S * A).
+    A_zz : np.ndarray
+        State transition probability matrix between joint states. Each row should sum to 1.
+        Shape: (N, N), where A_zz[i, j] = P(Z_{t+1} = j | Z_t = i).
+    logB : np.ndarray
+        Log emission likelihoods for this trajectory.
+        Shape: (T, N), where logB[t, z] = log p(o_t | Z_t = z),
+        T = sequence length.
 
-    Returns:
-        z_star:  np.ndarray of shape (T,) with the MAP state index at each time.
-        log_p_star: log p(z*, obs) for the best path.
+    Returns
+    z_star : np.ndarray
+        Most probable (MAP) joint state sequence according to the model.
+        Shape: (T,), where z_star[t] ∈ {0, ..., N-1} is the joint
+        style–action index at time t.
+    log_p_star : float
+        Log probability of the best path together with the observations,
+        i.e. log p(z_star, o_{0:T-1}).
     """
     T, N = logB.shape
 
@@ -52,19 +63,43 @@ def viterbi(pi_z, A_zz, logB):
 
 def infer_posterior(obs, pi_z, A_zz, emissions):
     """
-    Compute posterior distributions over Style and Action for a single sequence.
+    Compute posterior distributions over Style_t and Action_t for a single observation sequence using the current HMM/DBN parameters.
+    This function:
+      1. Builds the log emission matrix logB[t, z] = log p(o_t | Z_t = z) using the GaussianEmissionModel.
+      2. Runs the forward–backward algorithm to obtain joint posteriors over Z_t = (style, action).
+      3. Marginalises the joint posteriors to get separate posteriors over style and action at each time step.
 
-    Args:
-        obs:       (T, obs_dim) observation sequence
-        pi_z:      (N,) initial joint distribution over states
-        A_zz:      (N, N) transition matrix
-        emissions: trained GaussianEmissionModel
+    Parameters
+    obs : np.ndarray
+        Observation sequence for one vehicle/trajectory.
+        Shape: (T, obs_dim), where:
+            T       = number of time steps,
+            obs_dim = number of continuous features per step.
+    pi_z : np.ndarray
+        Initial distribution over joint latent states Z_0.
+        Shape: (N,), where N = S * A (S styles, A actions).
+    A_zz : np.ndarray
+        Transition probability matrix over joint states.
+        Shape: (N, N), where A_zz[i, j] = P(Z_{t+1} = j | Z_t = i).
+    emissions : GaussianEmissionModel
+        Trained continuous emission model. Must expose:
+            - num_style : int
+            - num_action: int
+            - log_likelihood(obs_t, style_idx, action_idx) -> float
 
-    Returns:
-        gamma:        (T, N)   joint posteriors P(Z_t | obs)
-        gamma_style:  (T, S)   P(Style_t | obs)
-        gamma_action: (T, A)   P(Action_t | obs)
-        loglik:       float    log p(obs)
+    Returns
+    gamma : np.ndarray
+        Joint posterior over latent states.
+        Shape: (T, N), where gamma[t, z] = P(Z_t = z | obs).
+    gamma_style : np.ndarray
+        Marginal posterior over driver style at each time step.
+        Shape: (T, S), where gamma_style[t, s] = P(Style_t = s | obs).
+    gamma_action : np.ndarray
+        Marginal posterior over action at each time step.
+        Shape: (T, A), where gamma_action[t, a] = P(Action_t = a | obs).
+    loglik : float
+        Log-likelihood of the entire observation sequence under the model:
+        log p(obs).
     """
     S = emissions.num_style
     A = emissions.num_action
@@ -93,19 +128,41 @@ def infer_posterior(obs, pi_z, A_zz, emissions):
 
 def infer_viterbi_paths(obs, pi_z, A_zz, emissions):
     """
-    Convenience wrapper: run Viterbi and decode (style, action) indices.
+    Run Viterbi decoding for a single observation sequence and decode the most likely style and action indices at each time step.
 
-    Args:
-        obs:       (T, obs_dim)
-        pi_z:      (N,)
-        A_zz:      (N, N)
-        emissions: trained GaussianEmissionModel
+    This is a wrapper that:
+      1. Builds log emissions logB[t, z] = log p(o_t | Z_t = z),
+      2. Runs the Viterbi algorithm in the joint state space,
+      3. Maps joint indices z_t back to (style_t, action_t).
 
-    Returns:
-        z_star:        (T,)       MAP joint state indices
-        style_star:    (T,)       MAP style indices
-        action_star:   (T,)       MAP action indices
-        log_p_star:    float      log p(z*, obs)
+    Parameters
+    obs : np.ndarray
+        Observation sequence for one vehicle/trajectory.
+        Shape: (T, obs_dim), where:
+            T       = number of time steps,
+            obs_dim = number of continuous features per step.
+    pi_z : np.ndarray
+        Initial distribution over joint latent states Z_0.
+        Shape: (N,), where N = S * A.
+    A_zz : np.ndarray
+        Transition probability matrix over joint states.
+        Shape: (N, N), where A_zz[i, j] = P(Z_{t+1} = j | Z_t = i).
+    emissions : GaussianEmissionModel
+        Trained continuous emission model used to compute
+        log p(o_t | style, action).
+
+    Returns
+    z_star : np.ndarray
+        Most likely joint state sequence.
+        Shape: (T,), where each entry is a joint index in {0, ..., N-1}.
+    style_star : np.ndarray
+        Most likely style index at each time step, derived from z_star.
+        Shape: (T,), values in {0, ..., S-1}.
+    action_star : np.ndarray
+        Most likely action index at each time step, derived from z_star.
+        Shape: (T,), values in {0, ..., A-1}.
+    log_p_star : float
+        Log probability of the best joint path and observations: log p(z_star, obs).
     """
     S = emissions.num_style
     A = emissions.num_action
