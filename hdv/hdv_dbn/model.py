@@ -2,7 +2,7 @@ import numpy as np
 from pgmpy.models import DynamicBayesianNetwork
 from pgmpy.factors.discrete import TabularCPD
 
-from .config import DBN_STATES
+from config import DBN_STATES
 
 
 class HDVDBN:

@@ -1,6 +1,6 @@
 import numpy as np
 
-from .trainer import forward_backward  
+from trainer import forward_backward  
 
 def viterbi(pi_z, A_zz, logB):
     """

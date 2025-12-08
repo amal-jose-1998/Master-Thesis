@@ -1,8 +1,8 @@
 import numpy as np
 from typing import List
 
-from .model import HDVDBN
-from .emissions import GaussianEmissionModel
+from model import HDVDBN
+from emissions import GaussianEmissionModel
 
 
 def build_joint_transition_matrix(hdv_dbn):
@@ -28,8 +28,8 @@ def build_joint_transition_matrix(hdv_dbn):
         shape (S*A, S*A), where each row is a valid probability distribution:
         A_zz[z, z'] = P(Z_{t+1} = z' | Z_t = z).
     """
-    S = hdv_dbn.num_style
-    A = hdv_dbn.num_action
+    S = int(hdv_dbn.num_style)
+    A = int(hdv_dbn.num_action)
     num_states = S * A
 
     # Extract CPDs
@@ -39,9 +39,9 @@ def build_joint_transition_matrix(hdv_dbn):
     cpd_action1 = hdv_dbn.model.get_cpds(('Action', 1))
 
     # initial joint pi(z) = P(Style_0, Action_0) = P(Style_0) P(Action_0 | Style_0)
-    P_style0 = cpd_style0.values.reshape(S)              # (S,)
+    P_style0 = np.asarray(cpd_style0.values, dtype=float).reshape(S)      # (S,)
     # cpd_action0.values has shape (A, S): P(Action_0=a | Style_0=s)
-    P_action0_given_style0 = cpd_action0.values          # (A, S)
+    P_action0_given_style0 = np.asarray(cpd_action0.values, dtype=float)  # (A, S)
 
     pi_z = np.zeros(num_states)
     for s in range(S):
@@ -53,10 +53,10 @@ def build_joint_transition_matrix(hdv_dbn):
     # From CPDs:
     #   P(Style_{t+1} | Style_t)
     #   P(Action_{t+1} | Action_t, Style_{t+1})
-    P_style1_given_style0 = cpd_style1.values            # (S, S): rows=new, cols=old
+    P_style1_given_style0 = np.asarray(cpd_style1.values, dtype=float).reshape(S, S) # (S, S): rows=new, cols=old
     # cpd_action1.values has shape (A, A*S)
     # columns indexed by (Action_0, Style_1)
-    P_action1_given_action0_style1 = cpd_action1.values  # (A, A*S)
+    P_action1_given_action0_style1 = np.asarray(cpd_action1.values, dtype=float).reshape(A, A * S) # (A, A*S)
 
     A_zz = np.zeros((num_states, num_states))
     for s in range(S):
@@ -74,7 +74,11 @@ def build_joint_transition_matrix(hdv_dbn):
 
     # normalize rows (each row must sum to 1.)  
     # A[z,z′]=P(Z_t+1​=z′∣Z_t​=z)
-    A_zz = A_zz / A_zz.sum(axis=1, keepdims=True)
+    row_sums = A_zz.sum(axis=1, keepdims=True)
+    # Avoid division by zero: if a row is all zeros, keep it uniform instead of NaN
+    zero_rows = (row_sums == 0)
+    row_sums[zero_rows] = 1.0
+    A_zz = A_zz / row_sums
 
     return pi_z, A_zz
 
@@ -91,25 +95,20 @@ def forward_backward(pi_z, A_zz, logB):
         shape (N,), where N = number of joint states.
     A_zz : np.ndarray
         Transition probability matrix between joint states,
-        shape (N, N), where
-        A_zz[z, z'] = P(Z_{t+1} = z' | Z_t = z).
+        shape (N, N), where A_zz[z, z'] = P(Z_{t+1} = z' | Z_t = z).
     logB : np.ndarray
         Log emission likelihoods,
-        shape (T, N), where
-        logB[t, z] = log p(o_t | Z_t = z).
+        shape (T, N), where logB[t, z] = log p(o_t | Z_t = z).
 
     Returns
     gamma : np.ndarray
         Posterior marginal probabilities over states,
-        shape (T, N), where
-        gamma[t, z] = P(Z_t = z | o_{0:T-1}).
+        shape (T, N), where gamma[t, z] = P(Z_t = z | o_{0:T-1}).
     xi : np.ndarray
         Posterior transition probabilities,
-        shape (T-1, N, N), where
-        xi[t, z, z'] = P(Z_t = z, Z_{t+1} = z' | o_{0:T-1}).
+        shape (T-1, N, N), where xi[t, z, z'] = P(Z_t = z, Z_{t+1} = z' | o_{0:T-1}).
     loglik : float
-        Log-likelihood of the entire observation sequence:
-        log p(o_{0:T-1}).
+        Log-likelihood of the entire observation sequence: log p(o_{0:T-1}).
     """
     # N = number of latent joint states z = (Style, Action).
     # T = number of time steps in the observation sequence (trajectory).
@@ -210,7 +209,7 @@ class HDVTrainer:
 
         self.pi_z, self.A_zz = build_joint_transition_matrix(self.hdv_dbn)
 
-    def em_train(self, obs_seqs, num_iters=100, tol=1e-3):
+    def em_train(self, train_obs_seqs, val_obs_seqs=None, num_iters=100, tol=1e-3):
         """
         Train the joint DBN–Gaussian emission model using the EM algorithm.
         This method alternates between:
@@ -221,27 +220,39 @@ class HDVTrainer:
                 * update Gaussian emission means and covariances.
 
         Parameters
-        obs_seqs : list of np.ndarray
-            List of observation sequences, one per vehicle.
+        train_obs_seqs : list of np.ndarray
+            List of observation sequences, one per vehicle, for training.
             Each element has shape (T_n, obs_dim), where:
                 - T_n is the number of time steps for vehicle n,
                 - obs_dim is the dimensionality of the observation vector
+        val_obs_seqs : list of np.ndarray or None, optional
+            Optional list of observation sequences used for validation. If provided, a validation log-likelihood is computed at each
+            EM iteration and used for early stopping.
         num_iters : int, optional
             Maximum number of EM iterations. Default is 100.
         tol : float, optional
-            Convergence threshold on the improvement in total log-likelihood
-            between successive EM iterations. Default is 1e-3.
+            Convergence threshold on the improvement in total log-likelihood between successive EM iterations. Default is 1e-3.
+        
+        Returns
+        history : dict
+            Dictionary with keys:
+                - "train_loglik": list of total train log-likelihood per iter
+                - "val_loglik": list of total val log-likelihood per iter (empty if no val data is provided)
         """
+        history = {"train_loglik": [], "val_loglik": []}
+        # If validation data is available, we use its log-likelihood for early stopping; otherwise we fall back to training LL.
         # log-likelihood from previous iteration. Initialise as -inf because at iteration 0 we don’t have a meaningful previous value. 
         # It ensures the first improvement is always positive.
-        prev_loglik = -np.inf  
+        prev_criterion = -np.inf
         for it in range(num_iters):
             gamma_all: List[np.ndarray] = [] # will hold one gamma matrix per trajectory.
             xi_all: List[np.ndarray] = [] # will hold one xi tensor per trajectory.
-            total_loglik = 0.0 # accumulates the sum of log-likelihoods over all trajectories
+            total_train_loglik = 0.0 # accumulates the sum of log-likelihoods over all trajectories
 
-            # E-step
-            for obs in obs_seqs:
+            # ----------------------
+            # E-step on training data
+            # ----------------------
+            for obs in train_obs_seqs:
                 T_n = obs.shape[0] # number of time steps for this trajectory.
                 # Compute emission log-likelihoods logB[t,z] = log p(o_t | z)
                 logB = np.zeros((T_n, self.num_states)) # matrix of emission log-likelihoods for this trajectory.
@@ -254,9 +265,11 @@ class HDVTrainer:
                 gamma, xi, loglik = forward_backward(self.pi_z, self.A_zz, logB)
                 gamma_all.append(gamma)
                 xi_all.append(xi)
-                total_loglik += loglik
+                total_train_loglik += loglik
 
+            # ----------------------
             # M-step: update pi_z, A_zz
+            # ----------------------
             # Initial state distribution
             pi_new = np.zeros_like(self.pi_z)
             for gamma in gamma_all:
@@ -273,20 +286,102 @@ class HDVTrainer:
             self.A_zz = A_new
 
             # Gaussian means/covariances per latent state
-            self.emissions.update_from_posteriors(obs_seqs=obs_seqs, gamma_seqs=gamma_all)
+            self.emissions.update_from_posteriors(obs_seqs=train_obs_seqs, gamma_seqs=gamma_all)
 
-            # Convergence check
-            improvement = total_loglik - prev_loglik
-            print(
-                f"[EM] Iteration {it+1}/{num_iters}, "
-                f"total log-likelihood: {total_loglik:.3f}, "
-                f"improvement: {improvement:.6f}"
-            )
+            # ----------------------
+            # Compute validation log-likelihood (if available)
+            # ----------------------
+            total_val_loglik = 0.0
+            if val_obs_seqs is not None:
+                for obs in val_obs_seqs:
+                    T_n = obs.shape[0]
+                    logB = np.zeros((T_n, self.num_states))
+                    for t in range(T_n):
+                        for z in range(self.num_states):
+                            s = z // self.A
+                            a = z % self.A
+                            logB[t, z] = self.emissions.log_likelihood(
+                                obs[t], style_idx=s, action_idx=a
+                            )
+                    # For validation we only need the log-likelihood
+                    _, _, loglik_val = forward_backward(self.pi_z, self.A_zz, logB)
+                    total_val_loglik += loglik_val
+            
+            # ----------------------
+            # Bookkeeping and early stopping
+            # ----------------------
+            history["train_loglik"].append(total_train_loglik)
+            if val_obs_seqs is not None:
+                history["val_loglik"].append(total_val_loglik)
+                criterion = total_val_loglik
+                msg = (
+                    f"[EM] Iteration {it+1}/{num_iters}  "
+                    f"train LL = {total_train_loglik:.3f}  "
+                    f"val LL = {total_val_loglik:.3f}  "
+                    f"improvement = {criterion - prev_criterion:.6f}"
+                )
+            else:
+                criterion = total_train_loglik
+                msg = (
+                    f"[EM] Iteration {it+1}/{num_iters}  "
+                    f"train LL = {total_train_loglik:.3f}  "
+                    f"improvement = {criterion - prev_criterion:.6f}"
+                )
+            print(msg)
+
             # Skip check on the very first iteration (prev_loglik = -inf)
-            if it > 0 and improvement < tol:
-                print(f"[EM] Converged at iteration {it+1} (Δloglik={improvement:.6f} < tol={tol}).")
+            if it > 0 and (criterion - prev_criterion) < tol:
+                print(
+                    f"[EM] Early stop at iter {it+1}: "
+                    f"improvement {criterion - prev_criterion:.6f} < tol={tol}."
+                )
                 break
 
-            prev_loglik = total_loglik
+            prev_criterion = criterion
 
-            
+        return history
+
+
+    def save(self, path):
+        """
+        Save the learned joint transition parameters and Gaussian emissions to a .npz file.
+
+        Parameters
+        path : str or Path
+            Target file path (e.g. 'models/dbn_highd.npz').
+        """
+        path = str(path)
+        means, covs = self.emissions.to_arrays()
+        np.savez_compressed(path, pi_z=self.pi_z, A_zz=self.A_zz, means=means, covs=covs)
+        print(f"[HDVTrainer] Saved model parameters to {path}")
+
+    @classmethod
+    def load(cls, path):
+        """
+        Load a trained HDVTrainer instance from a .npz file.
+
+        Parameters
+        path : str or Path
+            Path to the saved .npz file.
+
+        Returns
+        HDVTrainer
+            A trainer instance with pi_z, A_zz and emission parameters restored.
+        """
+        path = str(path)
+        data = np.load(path)
+        pi_z = data["pi_z"]
+        A_zz = data["A_zz"]
+        means = data["means"]
+        covs = data["covs"]
+
+        obs_dim = means.shape[-1]
+        trainer = cls(obs_dim=obs_dim)
+
+        # Override initial values with loaded ones
+        trainer.pi_z = pi_z
+        trainer.A_zz = A_zz
+        trainer.emissions.from_arrays(means, covs)
+
+        print(f"[HDVTrainer] Loaded model parameters from {path}")
+        return trainer    

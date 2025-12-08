@@ -1,7 +1,7 @@
 import numpy as np
 from dataclasses import dataclass
 
-from .config import DBN_STATES
+from config import DBN_STATES
 
 
 @dataclass
@@ -160,3 +160,44 @@ class GaussianEmissionModel:
                 # add small regularization to ensure it’s positive definite and invertible
                 cov += 1e-6 * np.eye(obs_dim)
                 self.params[s, a] = GaussianEmissionParams(mean=mean, cov=cov)
+
+    def to_arrays(self):
+        """
+        Export all Gaussian parameters as dense NumPy arrays.
+
+        Returns
+        means : np.ndarray
+            Array of shape (num_style, num_action, obs_dim) with the mean vector
+            for each (style, action) pair.
+        covs : np.ndarray
+            Array of shape (num_style, num_action, obs_dim, obs_dim) with the
+            covariance matrices for each (style, action) pair.
+        """
+        means = np.zeros((self.num_style, self.num_action, self.obs_dim))
+        covs = np.zeros((self.num_style, self.num_action, self.obs_dim, self.obs_dim))
+        for s in range(self.num_style):
+            for a in range(self.num_action):
+                p = self.params[s, a]
+                means[s, a] = p.mean
+                covs[s, a] = p.cov
+        return means, covs
+
+    def from_arrays(self, means, covs):
+        """
+        Load Gaussian parameters from dense arrays.
+
+        Parameters
+        means : np.ndarray
+            Shape (num_style, num_action, obs_dim).
+        covs : np.ndarray
+            Shape (num_style, num_action, obs_dim, obs_dim).
+        """
+        assert means.shape == (self.num_style, self.num_action, self.obs_dim)
+        assert covs.shape == (self.num_style, self.num_action, self.obs_dim, self.obs_dim)
+
+        for s in range(self.num_style):
+            for a in range(self.num_action):
+                self.params[s, a] = GaussianEmissionParams(
+                    mean=means[s, a],
+                    cov=covs[s, a],
+                )
