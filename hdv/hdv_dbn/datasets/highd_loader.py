@@ -24,15 +24,20 @@ HIGHD_COL_MAP = {
 
 def load_highd_folder(root):
     """
-    Load all *_tracks.csv files in the highD folder.
+    Load all *_tracks.csv files in the highD folder and merge them into one DataFrame.
 
     Parameters
-    root :
-        Path to the folder containing files such as '01_tracks.csv',m'02_tracks.csv', ...
+    root : str or Path
+        Directory containing files such as `01_tracks.csv`, `02_tracks.csv`, ...
 
     Returns
-    df :
-        Concatenated DataFrame with unified column names: vehicle_id, frame, x, y, vx, vy, ax, ay, lane_id, recording_id
+    DataFrame
+        A single table with unified column names:
+        `vehicle_id, frame, x, y, vx, vy, ax, ay, lane_id, recording_id`.
+
+    Notes
+    - Only columns in ``HIGHD_COL_MAP`` are retained.
+    - ``recording_id`` is inferred from the filename prefix.
     """
     root = Path(root)
     csv_paths = sorted(root.glob("*_tracks.csv"))
@@ -61,21 +66,25 @@ def load_highd_folder(root):
 
 def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame"):
     """
-    Convert a flat highD-style trajectory table into TrajectorySequence objects.
+    Group a flat highD table into per-vehicle TrajectorySequence objects.
 
     Parameters
-    df :
-        DataFrame with at least columns `id_col`, `frame_col`, and feature_cols.
-    feature_cols :
-        Names of the columns to use as observation features.
-    id_col :
-        Column name used as trajectory id (vehicle id).
-    frame_col :
-        Column name with time/frame index.
+    df : DataFrame
+        Input table containing at least ``id_col``, ``frame_col``, and the feature columns.
+    feature_cols : list of str
+        Names of the observation features to extract.
+    id_col : str, default="vehicle_id"
+        Column used to identify individual trajectories.
+    frame_col : str, default="frame"
+        Column containing the time index.
 
     Returns
-    sequences :
-        List of TrajectorySequence, one per vehicle.
+    list of TrajectorySequence
+        One sequence per unique vehicle ID. Each sequence contains:
+        - sorted frame indices,
+        - a T×F observation array,
+        - the feature name list,
+        - the associated recording ID if present.
     """
     sequences: List[TrajectorySequence] = []
 
@@ -94,8 +103,21 @@ def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame"):
 
 def train_val_test_split(sequences, train_frac=0.7, val_frac=0.15, seed=123):
     """
-    Randomly split a list of sequences into train / validation / test sets.
-    Fractions are with respect to the total number of sequences.
+    Randomly partition a list of sequences into train/validation/test sets.
+
+    Parameters
+    sequences : list
+        Collection of TrajectorySequence objects.
+    train_frac : float, default=0.7
+        Percentage of sequences assigned to the training set.
+    val_frac : float, default=0.15
+        Percentage assigned to validation.
+    seed : int, default=123
+        RNG seed for reproducible shuffling.
+
+    Returns
+    (list, list, list)
+        The (train, val, test) splits.
     """
     if not 0.0 < train_frac < 1.0:
         raise ValueError("train_frac must be between 0 and 1.")
