@@ -1,7 +1,12 @@
 import numpy as np
 from dataclasses import dataclass
+from tqdm.auto import tqdm
 
-from config import DBN_STATES
+from .config import DBN_STATES
+
+# Numerical stability constants
+EPSILON = 1e-6
+MAX_JITTER_ATTEMPTS = 4
 
 
 @dataclass
@@ -76,28 +81,53 @@ class GaussianEmissionModel:
         Returns
         float
             Log-probability density of the observation under the selected Gaussian emission model.
+            If numerical issues occur, the covariance is regularised with diagonal jitter; in extreme cases a large negative value is returned.
 
-        Raises
-        ValueError
-            If the covariance matrix is not positive definite.
+        
         """
         p = self.params[style_idx, action_idx] # Gaussian parameters for that state.
         x = obs - p.mean # deviation from mean
-
-        sign, logdet = np.linalg.slogdet(p.cov)  # Computes log-determinant of covariance
-        if sign <= 0:
-            raise ValueError("Covariance matrix not positive definite.")
-
-        #TODO check whether both logics are same or not
-        #inv_cov = np.linalg.inv(p.cov)
-        #quad = float(x.T @ inv_cov @ x) # Mahalanobis distance squared. 
-        sol = np.linalg.solve(p.cov, x) # for better numerical stability
-        quad = np.dot(x, sol)
         d = self.obs_dim
 
-        return -0.5 * (d * np.log(2 * np.pi) + logdet + quad) # log-density of a multivariate Gaussian 
+        base_cov = p.cov
+        cov = base_cov
+        success = False
 
-    def update_from_posteriors(self, obs_seqs, gamma_seqs):
+        for attempt in range(MAX_JITTER_ATTEMPTS):
+            try:
+                sign, logdet = np.linalg.slogdet(cov)
+                if sign <= 0:
+                    raise np.linalg.LinAlgError("Covariance matrix not positive definite.")
+                sol = np.linalg.solve(cov, x)
+                success = True
+                # If we had to add jitter (attempt > 0), store the stabilised cov
+                if attempt > 0:
+                    p.cov = cov
+                break
+            except np.linalg.LinAlgError:
+                # Increase diagonal jitter: 1e-6, 1e-5, 1e-4, 1e-3
+                jitter = 10.0 ** (-6 + attempt)
+                cov = base_cov + jitter * np.eye(d)
+        if not success:
+            # Extreme fallback: use identity covariance
+            cov = np.eye(d)
+            p.cov = cov
+            sign, logdet = 1.0, 0.0  # det(I) = 1 => logdet = 0
+            sol = x  # solving I * sol = x gives sol = x
+
+        quad = np.dot(x, sol)
+        log_likelihood = -0.5 * (d * np.log(2 * np.pi) + logdet + quad)
+        
+        if np.isnan(log_likelihood):
+            print(
+                "[GaussianEmissionModel] WARNING: NaN log-likelihood encountered, "
+                "falling back to large negative value."
+            )
+            log_likelihood = -1e10
+        
+        return log_likelihood 
+
+    def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress, verbose):
         """
         Update Gaussian emission parameters using posterior state probabilities.
         This method performs the M-step for the emission model, given posterior responsibilities over the joint latent state
@@ -114,6 +144,12 @@ class GaussianEmissionModel:
             List of posterior responsibility arrays. Each element has shape
             ``(T_n, num_style * num_action)``, where each column corresponds
             to a joint (style, action) state.
+        verbose : int
+            0 = no prints,
+            1 = per-iteration summary,
+            2 = detailed (more debug prints).
+        use_progress : bool
+            If True, show progress bars for the emission M-step.
 
         """
         obs_dim = self.obs_dim
@@ -122,44 +158,110 @@ class GaussianEmissionModel:
         # init accumulators
         # Accumulates total responsibility mass for each (style, action) pair:
         # weights[s, a] = sum over all vehicles n and time steps t of γ_{n,t}(style=s, action=a)
-        weights = np.zeros((self.num_style, self.num_action)) 
+        #weights = np.zeros((self.num_style, self.num_action)) 
         # Accumulates responsibility-weighted sum of observations for each (style, action) pair:
         # sum_x[s, a] = sum over n,t of γ_{n,t}(s,a) * o_{n,t}
         # Used later to compute the Gaussian mean μ_{s,a}
-        sum_x = np.zeros((self.num_style, self.num_action, obs_dim))
+        #sum_x = np.zeros((self.num_style, self.num_action, obs_dim))
         # Accumulates responsibility-weighted second moments for each (style, action) pair:
         # sum_xxT[s, a] = sum over n,t of γ_{n,t}(s,a) * o_{n,t} o_{n,t}^T
         # Used later to compute the Gaussian covariance Σ_{s,a}        
-        sum_xxT = np.zeros((self.num_style, self.num_action, obs_dim, obs_dim))
+        #sum_xxT = np.zeros((self.num_style, self.num_action, obs_dim, obs_dim))
 
-        for obs, gamma in zip(obs_seqs, gamma_seqs): # loop iterates over vehicles (index n)
+        # Flatten (style, action) -> z index
+        weights_flat = np.zeros(num_states)
+        sum_x_flat = np.zeros((num_states, obs_dim))
+        sum_xxT_flat = np.zeros((num_states, obs_dim, obs_dim))
+
+        if use_progress:
+            iterator = tqdm(
+                zip(obs_seqs, gamma_seqs),
+                total=len(obs_seqs),
+                desc="M-step emissions (accumulate)",
+                leave=False,
+            )
+        else:
+            iterator = zip(obs_seqs, gamma_seqs)
+
+        num_traj = 0
+        for obs, gamma in iterator: 
+            num_traj += 1
             T_n = obs.shape[0] # number of time steps in trajectory n, or, the no of observations in that trajectory
             assert gamma.shape == (T_n, num_states)
 
-            for z in range(num_states): # loop iterates over latent states
-                s = z // self.num_action
-                a = z % self.num_action
-                gamma_z = gamma[:, z][:, None] # (T_n, 1)
-                weights[s, a] += gamma_z.sum() # sum over time for this particular trajectory 'n' and state z
-                sum_x[s, a] += (gamma_z * obs).sum(axis=0) # Broadcast multiplication gives shape (T_n, obs_dim). Sums over time t
-                
-                for t in range(T_n):
-                    sum_xxT[s, a] += gamma[t, z] * np.outer(obs[t], obs[t]) # sum over t of gamma_t(z) * (o_t o_t^T)
+            #for z in range(num_states): # loop iterates over latent states
+            #    s = z // self.num_action
+            #    a = z % self.num_action
+            #    gamma_z = gamma[:, z][:, None] # (T_n, 1)
+            #    weights[s, a] += gamma_z.sum() # sum over time for this particular trajectory 'n' and state z
+            #    sum_x[s, a] += (gamma_z * obs).sum(axis=0) # Broadcast multiplication gives shape (T_n, obs_dim). Sums over time t
+            #    
+            #    for t in range(T_n):
+            #        sum_xxT[s, a] += gamma[t, z] * np.outer(obs[t], obs[t]) # sum over t of gamma_t(z) * (o_t o_t^T)
+            #----------------------------------------------------
+            # Vectorised version
+            #----------------------------------------------------
+            # weights[z] = sum_t gamma[t, z]
+            weights_flat += gamma.sum(axis=0)
+            # sum_x[z, :] = sum_t gamma[t, z] * o_t
+            # gamma.T: (num_states, T_n), obs: (T_n, obs_dim)
+            sum_x_flat += gamma.T @ obs
+            # For second moments:
+            # outer_t[t, i, j] = obs[t, i] * obs[t, j]
+            outer_t = np.einsum("ti,tj->tij", obs, obs)        # (T_n, D, D)
+            # sum_xxT_flat[z, :, :] = sum_t gamma[t, z] * outer_t[t, :, :]
+            sum_xxT_flat += np.einsum("tz,tij->zij", gamma, outer_t)
+        # Reshape flat accumulators to (style, action, ...)
+        weights = weights_flat.reshape(self.num_style, self.num_action)
+        sum_x = sum_x_flat.reshape(self.num_style, self.num_action, obs_dim)
+        sum_xxT = sum_xxT_flat.reshape(self.num_style, self.num_action, obs_dim, obs_dim)
 
         # update parameters
-        eps = 1e-6 # Small threshold to avoid division by 0
-        # Loop over all style indices s and action indices a.
+        total_states = self.num_style * self.num_action
+        if use_progress:
+            bar = tqdm(
+                total=total_states,
+                desc="M-step emissions (update)",
+                leave=False,
+            )
+        else:
+            bar = None
         for s in range(self.num_style):
             for a in range(self.num_action):
-                w = weights[s, a] # total responsibility mass for state (s,a)
-                if w < eps:
+                w = weights[s, a]
+                if w < EPSILON:
                     # no data for this (s,a), keep old params
+                    if bar is not None:
+                        bar.update(1)
                     continue
                 mean = sum_x[s, a] / w
                 cov = sum_xxT[s, a] / w - np.outer(mean, mean)
-                # add small regularization to ensure it’s positive definite and invertible
-                cov += 1e-6 * np.eye(obs_dim)
+                cov += EPSILON * np.eye(obs_dim)
                 self.params[s, a] = GaussianEmissionParams(mean=mean, cov=cov)
+                if bar is not None:
+                    bar.update(1)
+
+        if bar is not None:
+            bar.close()
+
+        if verbose >= 1:
+            total_weight = float(weights.sum())
+            print(
+                f"[GaussianEmissionModel] Emission update done. "
+                f"Total responsibility mass = {total_weight:.3e}"
+            )
+        if verbose >= 2:
+            print("  Example means for first few states:")
+            shown = 0
+            for s in range(self.num_style):
+                for a in range(self.num_action):
+                    mean = self.params[s, a].mean
+                    print(f"    (s={s}, a={a}) mean[:3] = {mean[:3]}")
+                    shown += 1
+                    if shown >= 3:
+                        break
+                if shown >= 3:
+                    break
 
     def to_arrays(self):
         """

@@ -2,7 +2,7 @@ import numpy as np
 from pgmpy.models import DynamicBayesianNetwork
 from pgmpy.factors.discrete import TabularCPD
 
-from config import DBN_STATES
+from .config import DBN_STATES
 
 
 class HDVDBN:
@@ -23,6 +23,7 @@ class HDVDBN:
         Inter-slice:
             Style_t  --> Style_{t+1}  
             Action_t --> Action_{t+1}
+            Style_t  --> Action_{t+1}
 
     Notes:
         - Continuous Observations O_t (x, y, vx, vy, ax, ay) are NOT in this graph. They are handled by an external emission 
@@ -62,6 +63,8 @@ class HDVDBN:
         self.model.add_edge(('Style', 0), ('Style', 1))
         # Actions follow a first-order Markov chain
         self.model.add_edge(('Action', 0), ('Action', 1))
+        # Temporal influence of previous style on next action
+        self.model.add_edge(('Style', 0), ('Action', 1))
 
     # ------------------------------------------------------------------
     # Slice-0 priors
@@ -147,46 +150,72 @@ class HDVDBN:
             },
         )
 
-    def _cpd_action_1(self, stay=0.7):
+    def _cpd_action_1(self, stay=0.7, style_change_scale=0.5):
         """
         Construct the temporal CPD
-        P(Action_1 | Action_0, Style_1)
-            - strong inertia to stay in the same action
-            - otherwise uniform over other actions
+        P(Action_1 | Action_0, Style_0, Style_1)
+            - strong inertia to stay in the same action, otherwise uniform over other actions
+            - additionally modulated by whether the style changed between t and t+1:
+              if Style_1 != Style_0, the stay probability is reduced by style_change_scale.
+
 
         Parameters
         stay : float, optional
-            Probability of remaining in the same action from one time step to the next. Must be in the interval ``[0, 1]``. Default is ``0.7``.
+            Probability of remaining in the same action from one time step to the next, when the style does not change. 
+            Must be in the interval ``[0, 1]``. Default is ``0.7``.
+        style_change_scale : float, optional
+            Multiplicative factor applied to `stay_same_action` when Style_1 != Style_0.
+            For example, 0.5 halves the stay probability when the style changes. Must be in (0, 1]. Default is 0.5.
 
         Returns
         TabularCPD
             A pgmpy :class:`TabularCPD` object whose:
             - ``variable`` is ``('Action', 1)``
-            - ``evidence`` is ``[('Action', 0), ('Style', 1)]``
-            - ``values`` has shape ``(num_action, num_action * num_style)``, where each block of ``num_action`` columns corresponds to a particular 
-                combination of previous action and style.
+            - ``evidence`` is ``[('Action', 0), ('Style', 0), ('Style', 1)]``
+            - ``values`` has shape ``(num_action, num_action * num_style * num_style)``, where each column corresponds to a particular combination of
+              (Action_0, Style_0, Style_1) in that evidence order.
         """
-        off = (1.0 - stay) / max(self.num_action - 1, 1)
+        A = self.num_action
+        S = self.num_style
+
+        # Clamp to a safe range
+        stay_same_action = float(np.clip(stay, 1e-6, 1.0 - 1e-6))
+        style_change_scale = float(np.clip(style_change_scale, 1e-6, 1.0))
+
+        #off = (1.0 - stay) / max(self.num_action - 1, 1)
 
         cols = []
-        # evidence order: [ ('Action', 0), ('Style', 1) ]
-        for prev_action_idx in range(self.num_action):
-            for _style_idx in range(self.num_style):
-                col = np.full(self.num_action, off)
-                col[prev_action_idx] = stay
-                cols.append(col)
+        # Evidence order: [('Action', 0), ('Style', 0), ('Style', 1)]
+        for a_prev in range(A):
+            for s_prev in range(S):
+                for s_curr in range(S):
+                    # If style stays the same, use the baseline stay prob; otherwise reduce it.
+                    if s_curr == s_prev:
+                        stay = stay_same_action
+                    else:
+                        stay = stay_same_action * style_change_scale
+                    if A > 1:
+                        off = (1.0 - stay) / (A - 1)
+                        col = np.full(A, off, dtype=float)
+                        col[a_prev] = stay
+                    else:
+                        # only one action, must have prob=1.
+                        col = np.array([1.0], dtype=float)
 
-        values = np.array(cols).T  # rows=new action, cols=(prev_action, style)
+                    cols.append(col)
+
+        values = np.array(cols).T  # rows=new action, cols=(prev_action, prev_style, curr_style)
 
         return TabularCPD(
             variable=('Action', 1),
             variable_card=self.num_action,
             values=values,
-            evidence=[('Action', 0), ('Style', 1)],
-            evidence_card=[self.num_action, self.num_style],
+            evidence=[('Action', 0), ('Style', 0), ('Style', 1)],
+            evidence_card=[A, S, S],
             state_names={
                 ('Action', 1): list(self.action_states),
                 ('Action', 0): list(self.action_states),
+                ('Style', 0): list(self.style_states),
                 ('Style', 1): list(self.style_states),
             },
         )

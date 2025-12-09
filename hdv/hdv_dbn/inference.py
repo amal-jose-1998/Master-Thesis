@@ -1,6 +1,6 @@
 import numpy as np
 
-from trainer import forward_backward  
+from .trainer import forward_backward  
 
 def viterbi(pi_z, A_zz, logB):
     """
@@ -113,7 +113,7 @@ def infer_posterior(obs, pi_z, A_zz, emissions):
             a = z % A
             logB[t, z] = emissions.log_likelihood(obs[t], style_idx=s, action_idx=a)
 
-    gamma, xi, loglik = forward_backward(pi_z, A_zz, logB)
+    gamma, xi_sum, loglik = forward_backward(pi_z, A_zz, logB)
 
     gamma_style = np.zeros((T, S))
     gamma_action = np.zeros((T, A))

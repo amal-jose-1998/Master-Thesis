@@ -3,6 +3,8 @@ from .highd_loader import (
     load_highd_folder,
     df_to_sequences,
     train_val_test_split,
+    compute_feature_scaler,
+    scale_sequences
 )
 
 __all__ = [
@@ -10,4 +12,6 @@ __all__ = [
     "load_highd_folder",
     "df_to_sequences",
     "train_val_test_split",
+    "compute_feature_scaler",
+    "scale_sequences"
 ]

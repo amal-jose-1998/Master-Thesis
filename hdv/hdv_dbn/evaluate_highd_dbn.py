@@ -1,11 +1,12 @@
 """Evaluation entry point for the HDV DBN on the highD test set."""
-
 from pathlib import Path
 
-from datasets import load_highd_folder, df_to_sequences, train_val_test_split
-from trainer import HDVTrainer
-from inference import infer_posterior, infer_viterbi_paths
+from .datasets import load_highd_folder, df_to_sequences, train_val_test_split
+from .trainer import HDVTrainer
+from .inference import infer_posterior, infer_viterbi_paths
 
+def scale_obs(obs, mean, std):
+    return (obs - mean) / std
 
 def main():
     # ------------------------------------------------------------------
@@ -24,13 +25,10 @@ def main():
     # ------------------------------------------------------------------
     df = load_highd_folder(data_root)
 
-    feature_cols = ["x", "y", "vx", "vy", "ax", "ay", "lane_id"]
+    feature_cols = ["x", "y", "vx", "vy", "ax", "ay"]
     sequences = df_to_sequences(df, feature_cols)
 
-    # IMPORTANT: use the same split fractions and seed as in training
-    train_seqs, val_seqs, test_seqs = train_val_test_split(
-        sequences, train_frac=0.8, val_frac=0.1, seed=0
-    )
+    train_seqs, val_seqs, test_seqs = train_val_test_split(sequences, train_frac=0.7, val_frac=0.1, seed=123)
 
     print(
         f"[evaluate_highd_dbn] Split sizes -> "
@@ -39,8 +37,6 @@ def main():
         f"Test: {len(test_seqs)}"
     )
 
-    test_obs_seqs = [seq.obs for seq in test_seqs]
-
     # ------------------------------------------------------------------
     # 3) Load trained model
     # ------------------------------------------------------------------
@@ -48,6 +44,15 @@ def main():
     pi_z = trainer.pi_z
     A_zz = trainer.A_zz
     emissions = trainer.emissions
+    scaler_mean = trainer.scaler_mean
+    scaler_std = trainer.scaler_std
+    if scaler_mean is None or scaler_std is None:
+        raise RuntimeError(
+            f"Loaded model from '{model_path}' missing scaler_mean/std. "
+            f"Ensure the model was trained with feature scaling enabled."
+        )
+    
+    test_obs_seqs = [scale_obs(seq.obs, scaler_mean, scaler_std) for seq in test_seqs]
 
     # ------------------------------------------------------------------
     # 4) Evaluate log-likelihood on the test set
@@ -81,7 +86,7 @@ def main():
             emissions=emissions,
         )
         print(
-            f"  Traj {i:03d} | vehicle_id={seq.vehicle_id} | "
+            f"  Traj {i:03d} | rec={seq.recording_id} | vehicle_id={seq.vehicle_id} | "
             f"T={seq.T} | log p*(z, o)={log_p_star:.3f}"
         )
         # Here you could also store style_star/action_star somewhere

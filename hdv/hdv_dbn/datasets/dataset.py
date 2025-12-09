@@ -22,9 +22,6 @@ class TrajectorySequence:
     recording_id :
         For datasets like highD, which contain multiple recordings (01, 02,..),
         this can store from which recording this trajectory was taken.
-    mask :
-        Optional boolean array of shape (T,). True can mean "valid"; this
-        lets you mask out invalid steps without changing the length.
     """
 
     vehicle_id: object
@@ -33,7 +30,6 @@ class TrajectorySequence:
     obs_names: List[str]
 
     recording_id: Optional[object] = None
-    mask: Optional[np.ndarray] = None
 
     @property
     def T(self):
