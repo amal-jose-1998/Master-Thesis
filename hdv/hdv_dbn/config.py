@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Optional
 
 @dataclass(frozen=True)
 class DBNStates:
@@ -40,11 +40,14 @@ class TrainingConfig:
     """
     seed: int = 123
     em_num_iters: int = 100
-    em_tol: float = 1e-3
+    em_tol: float = 100
     verbose: int = 1
     use_progress: bool = True
     max_kmeans_samples: int = 100000
-    max_highd_recordings: int | None = 5
+    max_highd_recordings: int | None = None
+    use_wandb: bool = True
+    wandb_project: str = "hdv_dbn_highd"
+    wandb_run_name: Optional[str] = "Training with all track.csv files"
 
 
 TRAINING_CONFIG = TrainingConfig()

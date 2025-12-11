@@ -7,6 +7,11 @@ from .datasets import load_highd_folder, df_to_sequences, train_val_test_split, 
 from .trainer import HDVTrainer
 from .config import TRAINING_CONFIG
 
+if TRAINING_CONFIG.use_wandb:
+    import wandb
+else:
+    wandb = None
+
 def main():
     try:
         project_root = Path(__file__).resolve().parents[1]
@@ -52,10 +57,28 @@ def main():
     train_obs_seqs = [seq.obs for seq in train_seqs_scaled]
     val_obs_seqs = [seq.obs for seq in val_seqs_scaled] if len(val_seqs) > 0 else None
 
+    wandb_run = None
+    if TRAINING_CONFIG.use_wandb and wandb is not None:
+        wandb_run = wandb.init(
+            project=TRAINING_CONFIG.wandb_project,
+            name=TRAINING_CONFIG.wandb_run_name,
+            config={
+                "obs_dim": obs_dim,
+                "num_style": trainer.S,
+                "num_action": trainer.A,
+                "em_num_iters": TRAINING_CONFIG.em_num_iters,
+                "em_tol": TRAINING_CONFIG.em_tol,
+                "seed": TRAINING_CONFIG.seed,
+                "max_kmeans_samples": TRAINING_CONFIG.max_kmeans_samples,
+                "max_highd_recordings": TRAINING_CONFIG.max_highd_recordings,
+            },
+        )
+
     try:
         history = trainer.em_train(
                 train_obs_seqs=train_obs_seqs,
                 val_obs_seqs=val_obs_seqs,
+                wandb_run=wandb_run
             )
 
         model_path = model_dir / "dbn_highd.npz"
@@ -65,6 +88,10 @@ def main():
     except Exception as e:
         print(f"[train_highd_dbn] ERROR during training: {e}", file=sys.stderr)
         sys.exit(1)
+    
+    finally:
+        if wandb_run is not None:
+            wandb_run.finish()
 
 
 if __name__ == "__main__":

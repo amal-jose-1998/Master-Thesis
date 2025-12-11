@@ -122,11 +122,18 @@ class HDVDBN:
     # ------------------------------------------------------------------
     # Temporal CPDs (t -> t+1)
     # ------------------------------------------------------------------
-    def _cpd_style_1(self):
+    def _cpd_style_1(self, stay_style=0.8):
         """
         Construct the temporal CPD
         P(Style_1 | Style_0)
-        Encode style as effectively constant.
+            - Style is mostly persistent: with probability `stay_style`, the
+              next style equals the current one.
+            - With probability (1 - stay_style), it switches uniformly to one
+              of the other styles.
+
+        Parameters
+        stay_style : float, optional
+            Probability that Style_1 = Style_0. Must be in (0, 1).
 
         Returns
         TabularCPD
@@ -136,7 +143,15 @@ class HDVDBN:
             - ``values`` is a ``(num_style, num_style)`` identity matrix, where columns index the previous style and rows index 
               the next style.
         """
-        mat = np.eye(self.num_style)
+        S = self.num_style
+        stay_style = float(np.clip(stay_style, 1e-6, 1.0 - 1e-6))
+
+        if S == 1:
+            mat = np.array([[1.0]], dtype=float)
+        else:
+            off = (1.0 - stay_style) / (S - 1)
+            mat = np.full((S, S), off, dtype=float)
+            np.fill_diagonal(mat, stay_style)
 
         return TabularCPD(
             variable=('Style', 1),
@@ -150,19 +165,19 @@ class HDVDBN:
             },
         )
 
-    def _cpd_action_1(self, stay=0.7, style_change_scale=0.5):
+    def _cpd_action_1(self, stay=0.5, style_change_scale=0.5):
         """
         Construct the temporal CPD
         P(Action_1 | Action_0, Style_0, Style_1)
-            - strong inertia to stay in the same action, otherwise uniform over other actions
-            - additionally modulated by whether the style changed between t and t+1:
-              if Style_1 != Style_0, the stay probability is reduced by style_change_scale.
+            - if Style_1 == Style_0, the next-action distribution is uniform over all actions, independent of Action_0.
+            - if Style_1 != Style_0, the probability of staying in the same action is reduced by
+              `style_change_scale`, and the whole distribution is renormalised.
 
 
         Parameters
         stay : float, optional
             Probability of remaining in the same action from one time step to the next, when the style does not change. 
-            Must be in the interval ``[0, 1]``. Default is ``0.7``.
+            Must be in the interval ``[0, 1]``. Default is ``0.5``.
         style_change_scale : float, optional
             Multiplicative factor applied to `stay_same_action` when Style_1 != Style_0.
             For example, 0.5 halves the stay probability when the style changes. Must be in (0, 1]. Default is 0.5.
@@ -178,29 +193,20 @@ class HDVDBN:
         A = self.num_action
         S = self.num_style
 
-        # Clamp to a safe range
-        stay_same_action = float(np.clip(stay, 1e-6, 1.0 - 1e-6))
         style_change_scale = float(np.clip(style_change_scale, 1e-6, 1.0))
-
-        #off = (1.0 - stay) / max(self.num_action - 1, 1)
 
         cols = []
         # Evidence order: [('Action', 0), ('Style', 0), ('Style', 1)]
         for a_prev in range(A):
             for s_prev in range(S):
                 for s_curr in range(S):
+                    # Start from a uniform distribution
+                    col = np.full(A, 1.0 / A, dtype=float)
                     # If style stays the same, use the baseline stay prob; otherwise reduce it.
-                    if s_curr == s_prev:
-                        stay = stay_same_action
-                    else:
-                        stay = stay_same_action * style_change_scale
-                    if A > 1:
-                        off = (1.0 - stay) / (A - 1)
-                        col = np.full(A, off, dtype=float)
-                        col[a_prev] = stay
-                    else:
-                        # only one action, must have prob=1.
-                        col = np.array([1.0], dtype=float)
+                    if s_curr != s_prev:
+                        # When style changes: down-weight "stay" and renormalise
+                        col[a_prev] *= style_change_scale
+                        col /= col.sum()
 
                     cols.append(col)
 

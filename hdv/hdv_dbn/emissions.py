@@ -151,6 +151,9 @@ class GaussianEmissionModel:
         use_progress : bool
             If True, show progress bars for the emission M-step.
 
+        Returns
+        weights_flat : np.ndarray
+            1D array of length (num_style * num_action) with total responsibility mass per joint state z = (style, action).
         """
         obs_dim = self.obs_dim
         num_states = self.num_style * self.num_action # total number of joint states
@@ -211,6 +214,7 @@ class GaussianEmissionModel:
             outer_t = np.einsum("ti,tj->tij", obs, obs)        # (T_n, D, D)
             # sum_xxT_flat[z, :, :] = sum_t gamma[t, z] * outer_t[t, :, :]
             sum_xxT_flat += np.einsum("tz,tij->zij", gamma, outer_t)
+        
         # Reshape flat accumulators to (style, action, ...)
         weights = weights_flat.reshape(self.num_style, self.num_action)
         sum_x = sum_x_flat.reshape(self.num_style, self.num_action, obs_dim)
@@ -243,25 +247,35 @@ class GaussianEmissionModel:
 
         if bar is not None:
             bar.close()
-
+        total_weight = float(weights_flat.sum())
         if verbose >= 1:
-            total_weight = float(weights.sum())
             print(
-                f"[GaussianEmissionModel] Emission update done. "
+                f"  [GaussianEmissionModel] Emission update done. "
                 f"Total responsibility mass = {total_weight:.3e}"
             )
-        if verbose >= 2:
-            print("  Example means for first few states:")
+            frac = weights_flat / total_weight
+            print("     Responsibility mass per joint state:")
+            for z, (w, f) in enumerate(zip(weights_flat, frac)):
+                s = z // self.num_action
+                a = z % self.num_action
+                print(
+                    f"      z={z:02d} (s={s}, a={a}) "
+                    f"mass={w:.0f}  frac={f:.4f}"
+                )
+        if verbose >= 2 and total_weight > 0.0:
+            print("     Example means for first few states:")
             shown = 0
             for s in range(self.num_style):
                 for a in range(self.num_action):
                     mean = self.params[s, a].mean
-                    print(f"    (s={s}, a={a}) mean[:3] = {mean[:3]}")
+                    print(f"        (s={s}, a={a}) mean[:3] = {mean[:3]}")
                     shown += 1
                     if shown >= 3:
                         break
                 if shown >= 3:
                     break
+        
+        return weights_flat
 
     def to_arrays(self):
         """
