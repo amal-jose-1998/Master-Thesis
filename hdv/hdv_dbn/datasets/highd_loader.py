@@ -1,6 +1,13 @@
 """
-Utilities to load the highD dataset and convert it into TrajectorySequence objects for DBN training.
+HighD dataset utilities.
+
+This module:
+- loads one or more highD `*_tracks.csv` files into a single unified DataFrame
+- converts the table into per-vehicle `TrajectorySequence` objects
+- optionally computes and applies feature scaling
+- creates reproducible train/val/test splits (seeded via TRAINING_CONFIG)
 """
+
 from pathlib import Path
 from typing import List
 import numpy as np
@@ -23,6 +30,22 @@ HIGHD_COL_MAP = {
 }
 
 def compute_feature_scaler(sequences):
+    """
+    Compute per-feature mean and standard deviation from a set of sequences.
+    The scaler is typically computed on the training split only, then applied to
+    train/val/test using the same statistics.
+
+    Parameters
+    sequences : sequence of TrajectorySequence
+        Sequences whose `.obs` arrays will be stacked along time.
+
+    Returns
+    mean : np.ndarray
+        Feature-wise mean, shape (F,).
+    std : np.ndarray
+        Feature-wise standard deviation, shape (F,). Very small std values are
+        clamped to 1.0 to avoid division by near-zero during scaling.
+    """
     X = np.vstack([seq.obs for seq in sequences])  # (N_total, F)
     mean = X.mean(axis=0)
     std = X.std(axis=0)
@@ -30,6 +53,24 @@ def compute_feature_scaler(sequences):
     return mean, std
 
 def scale_sequences(sequences, mean, std):
+    """
+    Apply z-score feature scaling to a list of sequences.
+    Scaling is applied as:
+        obs_scaled = (obs - mean) / std
+
+    Parameters
+    sequences : sequence of TrajectorySequence
+        Input sequences to be scaled.
+    mean : np.ndarray
+        Feature-wise mean, shape (F,).
+    std : np.ndarray
+        Feature-wise std, shape (F,).
+
+    Returns
+    list[TrajectorySequence]
+        New sequence objects containing scaled observations. Metadata (vehicle_id,
+        frames, obs_names, recording_id) is preserved.
+    """
     out = []
     for seq in sequences:
         obs_scaled = (seq.obs - mean) / std
@@ -46,30 +87,25 @@ def scale_sequences(sequences, mean, std):
 
 def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings=None):
     """
-    Load all *_tracks.csv files in the highD folder and merge them into one DataFrame.
-    If a cached DataFrame file is available (Feather format), it will be loaded
-    instead of re-parsing all CSV files. Use `force_rebuild=True` to ignore the
-    cache and rebuild it.
+    Load highD `*_tracks.csv` files and merge them into one unified DataFrame.
+    If a cached Feather file exists and `max_recordings` is None, the cached
+    table is loaded (unless `force_rebuild=True`).
 
     Parameters
     root : str or Path
         Directory containing files such as `01_tracks.csv`, `02_tracks.csv`, ...
     cache_path : str or Path, optional
-        Path to a cached Feather file. If None, defaults to ``root / "highd_all.feather"``.
-    force_rebuild : bool, default=False
-        If True, ignore any existing cache and rebuild from CSVs.
-    max_recordings : int or None, optional
-        If given, only the first `max_recordings` *_tracks.csv files (after sorting)
-        are loaded. Useful for quick experiments on a subset of the dataset.
+        Path to a cached Feather file. If None, defaults to `root / "highd_all.feather"`.
+    force_rebuild : bool, default False
+        If True, ignore any existing cache and rebuild from CSV files.
+    max_recordings : int, optional
+        If provided, only the first `max_recordings` CSV files (after sorting)
+        are loaded. This is useful for debugging and quick experiments.
 
     Returns
-    DataFrame
-        A single table with unified column names:
+    pd.DataFrame
+        A single concatenated table with standardized column names:
         `vehicle_id, frame, x, y, vx, vy, ax, ay, lane_id, recording_id`.
-
-    Notes
-    - Only columns in ``HIGHD_COL_MAP`` are retained.
-    - ``recording_id`` is inferred from the filename prefix.
     """
     root = Path(root)
     if cache_path is None:
@@ -120,27 +156,29 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
 
 def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame"):
     """
-    Group a flat highD table into per-vehicle TrajectorySequence objects.
-    Each sequence corresponds to a single vehicle within a single recording,
-    i.e. a unique (recording_id, vehicle_id) pair.
+    Convert a flat per-frame table into per-vehicle trajectories.
+    A trajectory is defined by the unique pair (recording_id, vehicle_id).
+    Rows are sorted by time (`frame_col`) within each group.
 
     Parameters
-    df : DataFrame
-        Input table containing at least ``id_col``, ``frame_col``, and the feature columns.
-    feature_cols : list of str
-        Names of the observation features to extract.
-    id_col : str, default="vehicle_id"
-        Column used to identify individual trajectories.
-    frame_col : str, default="frame"
-        Column containing the time index.
+    df : pd.DataFrame
+        Input table containing at least:
+        - `recording_id`, `id_col`, `frame_col`
+        - all columns listed in `feature_cols`
+    feature_cols : list[str]
+        Feature columns to extract into the observation matrix `obs`.
+    id_col : str, default "vehicle_id"
+        Column identifying vehicles within a recording.
+    frame_col : str, default "frame"
+        Column representing the time index.
 
     Returns
-    list of TrajectorySequence
-        One sequence per unique (recording_id, vehicle_id) pair. Each sequence contains:
-        - sorted frame indices,
-        - a T×F observation array,
-        - the feature name list,
-        - the associated recording ID if present.
+    list[TrajectorySequence]
+        One sequence per (recording_id, vehicle_id). Each sequence contains:
+        - `frames`: shape (T,)
+        - `obs`: shape (T, F)
+        - `obs_names`: the provided `feature_cols`
+        - `recording_id`: the group recording identifier
     """
     sequences: List[TrajectorySequence] = []
 

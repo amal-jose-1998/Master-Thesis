@@ -9,19 +9,19 @@ class TrajectorySequence:
     One vehicle trajectory represented as a time series.
 
     Attributes
-    vehicle_id :
-        Identifier of the vehicle (e.g. highD 'id').
-    frames :
-        Array of shape (T,) with frame indices, sorted in time.
-    obs :
-        Array of shape (T, F) with observation features used by the DBN.
-    obs_names :
-        List of length F with feature names corresponding to columns of `obs`.
-
-    Optional attributes (for later use)
-    recording_id :
-        For datasets like highD, which contain multiple recordings (01, 02,..),
-        this can store from which recording this trajectory was taken.
+    vehicle_id : object
+        Identifier of the vehicle (e.g. highD `id` column).
+    frames : np.ndarray
+        Array of shape (T,) containing frame indices, sorted in increasing time order.
+    obs : np.ndarray
+        Observation matrix of shape (T, F), where:
+            T = number of time steps,
+            F = number of observation features.
+    obs_names : list[str]
+        Names of the observation features, length F, matching columns of `obs`.
+    recording_id : object, optional
+        Identifier of the recording (e.g. highD recording number). Useful when
+        datasets contain multiple independent recordings.
     """
 
     vehicle_id: object
@@ -33,10 +33,22 @@ class TrajectorySequence:
 
     @property
     def T(self):
-        """Number of time steps in the sequence."""
+        """
+        Length of the trajectory.
+
+        Returns
+        int
+            Number of time steps T in the sequence.
+        """
         return int(len(self.frames))
 
     @property
     def F(self):
-        """Number of observation features per time step."""
+        """
+        Observation dimensionality.
+
+        Returns
+        int
+            Number of observation features per time step.
+        """
         return int(self.obs.shape[1])
