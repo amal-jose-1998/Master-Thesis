@@ -1,4 +1,14 @@
-"""Training entry point for the HDV DBN on the highD dataset."""
+"""
+Entry point for training the HDV DBN / joint-HMM model on the highD dataset.
+
+Pipeline
+- Load highD CSVs from `data/highd/` (optionally using a cached feather file).
+- Build per-vehicle observation sequences from selected feature columns.
+- Split sequences into train/val/test.
+- Fit a feature scaler (mean/std) on the training split only, then scale all splits.
+- Train the model with EM (optionally evaluating validation log-likelihood each iteration).
+- Save the trained parameters and the scaler to `models/dbn_highd.npz`.
+"""
 
 from pathlib import Path
 import sys
@@ -13,6 +23,7 @@ else:
     wandb = None
 
 def main():
+    """Run the full training job."""
     try:
         project_root = Path(__file__).resolve().parents[1]
         data_root = project_root / "data" / "highd"
@@ -59,6 +70,7 @@ def main():
 
     wandb_run = None
     if TRAINING_CONFIG.use_wandb and wandb is not None:
+        # Initialise a Weights & Biases run for logging training diagnostics.
         wandb_run = wandb.init(
             project=TRAINING_CONFIG.wandb_project,
             name=TRAINING_CONFIG.wandb_run_name,
@@ -75,6 +87,7 @@ def main():
         )
 
     try:
+        # Run EM training.
         history = trainer.em_train(
                 train_obs_seqs=train_obs_seqs,
                 val_obs_seqs=val_obs_seqs,
@@ -83,7 +96,6 @@ def main():
 
         model_path = model_dir / "dbn_highd.npz"
         trainer.save(model_path)
-
         print(f"[train_highd_dbn] Training finished.")
     except Exception as e:
         print(f"[train_highd_dbn] ERROR during training: {e}", file=sys.stderr)

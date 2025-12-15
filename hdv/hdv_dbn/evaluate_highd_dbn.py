@@ -1,34 +1,66 @@
-"""Evaluation entry point for the HDV DBN on the highD test set."""
+"""
+Evaluation entry point for the HDV DBN on the highD test set.
+Loads:
+  - highD sequences (same feature columns as training)
+  - trained model from models/dbn_highd.npz (including scaler)
+Evaluates:
+  - total test log-likelihood
+  - average per-trajectory log-likelihood
+"""
 from pathlib import Path
+import sys
+import numpy as np
 
 from .datasets import load_highd_folder, df_to_sequences, train_val_test_split
 from .trainer import HDVTrainer
-from .inference import infer_posterior, infer_viterbi_paths
+from .config import TRAINING_CONFIG
+from .inference import infer_posterior
 
 def scale_obs(obs, mean, std):
-    return (obs - mean) / std
+    """Standardise observations feature-wise using training-set mean/std."""
+    return (obs - mean) / (std + 1e-12)
 
 def main():
     # ------------------------------------------------------------------
-    # 1) Paths
+    # Paths
     # ------------------------------------------------------------------
     project_root = Path(__file__).resolve().parents[1]
     data_root = project_root / "data" / "highd"
+    cache_path = project_root / "data" / "highd_all.feather"
+
     model_dir = project_root / "models"
     model_path = model_dir / "dbn_highd.npz"
 
     print(f"[evaluate_highd_dbn] Loading highD data from: {data_root}")
     print(f"[evaluate_highd_dbn] Loading model from: {model_path}")
 
+    if not model_path.exists():
+        print(f"[evaluate_highd_dbn] ERROR: model not found: {model_path}", file=sys.stderr)
+        sys.exit(1)
+
     # ------------------------------------------------------------------
-    # 2) Load data and build sequences (same as in training)
+    # Load data and build sequences (same as in training)
     # ------------------------------------------------------------------
-    df = load_highd_folder(data_root)
+    try:
+        df = load_highd_folder(
+            data_root,
+            cache_path=cache_path,
+            force_rebuild=False,
+            max_recordings=TRAINING_CONFIG.max_highd_recordings,
+        )
+    except Exception as e:
+        print(f"[evaluate_highd_dbn] ERROR loading highD: {e}", file=sys.stderr)
+        sys.exit(1)
 
     feature_cols = ["x", "y", "vx", "vy", "ax", "ay"]
     sequences = df_to_sequences(df, feature_cols)
 
-    train_seqs, val_seqs, test_seqs = train_val_test_split(sequences, train_frac=0.7, val_frac=0.1, seed=123)
+    train_seqs, val_seqs, test_seqs = train_val_test_split(
+        sequences,
+        train_frac=0.7,
+        val_frac=0.1,
+        seed=TRAINING_CONFIG.seed,
+    )
 
     print(
         f"[evaluate_highd_dbn] Split sizes -> "
@@ -38,7 +70,7 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # 3) Load trained model
+    # Load trained model
     # ------------------------------------------------------------------
     trainer = HDVTrainer.load(model_path)
     pi_z = trainer.pi_z
@@ -55,13 +87,13 @@ def main():
     test_obs_seqs = [scale_obs(seq.obs, scaler_mean, scaler_std) for seq in test_seqs]
 
     # ------------------------------------------------------------------
-    # 4) Evaluate log-likelihood on the test set
+    # Evaluate log-likelihood on the test set
     # ------------------------------------------------------------------
     total_test_loglik = 0.0
     per_traj_loglik = []
 
     for i, obs in enumerate(test_obs_seqs):
-        gamma, gamma_style, gamma_action, loglik = infer_posterior(
+        _, _, _, loglik = infer_posterior(
             obs=obs,
             pi_z=pi_z,
             A_zz=A_zz,
@@ -70,27 +102,21 @@ def main():
         total_test_loglik += loglik
         per_traj_loglik.append(loglik)
 
-    avg_loglik = total_test_loglik / len(test_obs_seqs)
+        if TRAINING_CONFIG.verbose >= 2:
+            print(f"[evaluate_highd_dbn] traj {i:05d}: loglik={loglik:.3f}, T={obs.shape[0]}")
+
+    avg_loglik = total_test_loglik / max(len(test_obs_seqs), 1)
+
     print(f"[evaluate_highd_dbn] Total test log-likelihood: {total_test_loglik:.3f}")
     print(f"[evaluate_highd_dbn] Average per-trajectory log-likelihood: {avg_loglik:.3f}")
 
-    # ------------------------------------------------------------------
-    # 5) Optional: Viterbi decoding on the test set
-    # ------------------------------------------------------------------
-    print("[evaluate_highd_dbn] Running Viterbi decoding on test trajectories...")
-    for i, (seq, obs) in enumerate(zip(test_seqs, test_obs_seqs)):
-        z_star, style_star, action_star, log_p_star = infer_viterbi_paths(
-            obs=obs,
-            pi_z=pi_z,
-            A_zz=A_zz,
-            emissions=emissions,
-        )
+    if len(per_traj_loglik) > 0:
+        p = np.percentile(per_traj_loglik, [0, 5, 25, 50, 75, 95, 100])
         print(
-            f"  Traj {i:03d} | rec={seq.recording_id} | vehicle_id={seq.vehicle_id} | "
-            f"T={seq.T} | log p*(z, o)={log_p_star:.3f}"
+            "[evaluate_highd_dbn] Per-trajectory loglik percentiles "
+            f"(min,5,25,50,75,95,max): {p[0]:.1f}, {p[1]:.1f}, {p[2]:.1f}, "
+            f"{p[3]:.1f}, {p[4]:.1f}, {p[5]:.1f}, {p[6]:.1f}"
         )
-        # Here you could also store style_star/action_star somewhere
-        # for plotting or further analysis.
 
     print("[evaluate_highd_dbn] Evaluation finished.")
 
