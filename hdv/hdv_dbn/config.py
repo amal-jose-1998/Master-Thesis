@@ -57,7 +57,9 @@ class TrainingConfig:
     """
     seed: int = 123
     em_num_iters: int = 100
-    em_tol: float = 100
+    early_stop_patience: int = 3
+    early_stop_min_delta_per_obs: float = 1e-4
+    early_stop_delta_A_thresh: float = 1e-5
     verbose: int = 1
     use_progress: bool = True
 

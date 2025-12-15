@@ -79,7 +79,6 @@ def main():
                 "num_style": trainer.S,
                 "num_action": trainer.A,
                 "em_num_iters": TRAINING_CONFIG.em_num_iters,
-                "em_tol": TRAINING_CONFIG.em_tol,
                 "seed": TRAINING_CONFIG.seed,
                 "max_kmeans_samples": TRAINING_CONFIG.max_kmeans_samples,
                 "max_highd_recordings": TRAINING_CONFIG.max_highd_recordings,

@@ -7,8 +7,8 @@ Key performance changes compared to the original NumPy version:
 2) Run forward–backward in Torch using logsumexp (GPU-friendly).
 
 Design choice:
-- Transition structure (pi_z, A_zz) is built once from pgmpy CPDs on CPU, then
-  moved to GPU for repeated inference during EM.
+- Transition structure (pi_z, A_zz) is initialised once from pgmpy CPDs on CPU, then
+  updated by EM and stored on GPU for repeated inference.
 """
 
 import numpy as np
@@ -249,9 +249,22 @@ class HDVTrainer:
               - "val_loglik":   list of total val log-likelihood per iteration (empty if no val)
         """
         num_iters = TRAINING_CONFIG.em_num_iters
-        tol = TRAINING_CONFIG.em_tol
         verbose = TRAINING_CONFIG.verbose
         use_progress = TRAINING_CONFIG.use_progress
+        patience = getattr(TRAINING_CONFIG, "early_stop_patience", 3)
+        min_delta = getattr(TRAINING_CONFIG, "early_stop_min_delta_per_obs", 1e-4)
+        delta_A_thresh = getattr(TRAINING_CONFIG, "early_stop_delta_A_thresh", 1e-5)
+        bad_epochs = 0
+
+        # Precompute number of observations (total timesteps)
+        train_num_obs = int(sum(seq.shape[0] for seq in train_obs_seqs))
+        if verbose:
+            print(f"Train sequences: {len(train_obs_seqs)}  |  Train total timesteps: {train_num_obs}")
+        val_num_obs = None
+        if val_obs_seqs is not None:
+            val_num_obs = int(sum(seq.shape[0] for seq in val_obs_seqs))
+            if verbose:
+                print(f"Validation sequences: {len(val_obs_seqs)}  |  Val total timesteps: {val_num_obs}")
 
         history = {"train_loglik": [], "val_loglik": []}
 
@@ -259,7 +272,7 @@ class HDVTrainer:
         self._init_emissions_kmeans(train_obs_seqs)
         self.emissions.to_device(device=self.device, dtype=self.dtype)
         
-        prev_criterion = -np.inf # log-likelihood from previous iteration. Initialise as -inf because at iteration 0 we don’t have a meaningful previous value. 
+        prev_criterion = None 
 
         if verbose:
             print("\n==================== EM TRAINING START ====================\n")
@@ -288,6 +301,7 @@ class HDVTrainer:
                 verbose=verbose,
                 it=it,
             )
+            train_ll_per_obs = train_ll / max(train_num_obs, 1)
 
             # ----------------------
             # M-step: update pi_z, A_zz
@@ -315,11 +329,12 @@ class HDVTrainer:
             # ----------------------
             # Compute validation log-likelihood (if available)
             # ----------------------
+            criterion_for_stop = None
             if val_obs_seqs is None:
                 val_ll = 0.0
-                criterion = train_ll
+                criterion_for_stop = train_ll_per_obs
                 if verbose:
-                    print("No validation set provided; using train LL as criterion.")
+                    print("No validation set provided; using train per-obs LL as criterion.")
             else:
                 if verbose:
                     print("Validation E-step:")
@@ -330,25 +345,63 @@ class HDVTrainer:
                 )
                 if verbose:
                     print(f"  Total val loglik: {val_ll:.3f}")
-                criterion = val_ll
-
+                # Scale-invariant criterion: average loglik per timestep
+                criterion_for_stop = val_ll / max(val_num_obs, 1)
+            
             # ----------------------
             # Bookkeeping and Early stopping
             # ----------------------
-            improvement = criterion - prev_criterion
             history["train_loglik"].append(train_ll)
             if val_obs_seqs is not None:
                 history["val_loglik"].append(val_ll)
+            
+            if not np.isfinite(criterion_for_stop):
+                if verbose:
+                    print("WARNING: Non-finite stopping criterion; skipping early stopping check this iteration.")
+                self._log_wandb_iteration(
+                    wandb_run=wandb_run,
+                    it=it,
+                    iter_start=iter_start,
+                    total_train_loglik=train_ll,
+                    total_val_loglik=val_ll,
+                    improvement=np.nan,
+                    criterion_for_stop=criterion_for_stop,
+                    val_num_obs=val_num_obs,
+                    train_num_obs=train_num_obs,
+                    delta_pi=delta_pi,
+                    delta_A=delta_A,
+                    state_weights_flat=state_w,
+                    total_responsibility_mass=total_mass,
+                    state_weights_frac=state_frac,
+                    val_obs_seqs=val_obs_seqs,
+                    A_prev=A_prev,
+                    A_new=A_new,
+                )
+                continue
+
+            if prev_criterion is None:
+                improvement = np.nan
+            else:
+                improvement = criterion_for_stop - prev_criterion
 
             if verbose:
-                print(f"  Criterion: {criterion:.3f}")
-                print(f"  Improvement: {improvement:.6f}")
+                if val_obs_seqs is not None:
+                    print(f"  Criterion (val per-obs): {criterion_for_stop:.6f}")
+                else:
+                    print(f"  Criterion (train per-obs): {criterion_for_stop:.6f}")
+                print(f"  Improvement: {improvement:.6e}")
 
-            if it > 0 and improvement < tol:
-                if verbose:
-                    print("\n*** Early stopping triggered ***")
-                break
-            prev_criterion = criterion
+            if prev_criterion is not None:
+                if improvement < min_delta:
+                    bad_epochs += 1
+                else:
+                    bad_epochs = 0
+
+                if bad_epochs >= patience and delta_A < delta_A_thresh:
+                    if verbose:
+                        print("\n*** Early stopping triggered (plateau + stable transitions) ***")
+                    break
+            prev_criterion = criterion_for_stop
             
             # ----------------------
             # WandB logging
@@ -358,8 +411,11 @@ class HDVTrainer:
                 it=it,
                 iter_start=iter_start,
                 total_train_loglik=train_ll,                           
-                total_val_loglik=val_ll,                               
+                total_val_loglik=val_ll,
                 improvement=improvement,
+                criterion_for_stop=criterion_for_stop,
+                val_num_obs=val_num_obs,
+                train_num_obs=train_num_obs,
                 delta_pi=delta_pi,
                 delta_A=delta_A,
                 state_weights_flat=state_w,                            
@@ -491,7 +547,7 @@ class HDVTrainer:
         gamma_all : list[torch.Tensor]
             Posterior marginals per sequence, each shape (T_n, N).
         xi_all : list[torch.Tensor]
-            Expected transition counts per sequence, each shape (N, N), typically on CPU.
+            Expected transition counts per sequence, each shape (N, N).
         verbose : int
             Verbosity level.
 
@@ -551,7 +607,7 @@ class HDVTrainer:
         state_weights_flat : np.ndarray
             Total responsibility mass per joint state, shape (N,).
         total_mass : float
-            Sum over all state weights (should equal total number of time steps across sequences).
+            Sum over all state weights. Equals the total number of timesteps across all sequences that contributed posteriors (i.e., sequences not skipped).
         state_frac : np.ndarray
             Normalized responsibility mass per state, shape (N,).
         """
@@ -563,8 +619,8 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     # WandB logging helper
     # ------------------------------------------------------------------
-    def _log_wandb_iteration(self, wandb_run, it, iter_start, total_train_loglik, total_val_loglik, improvement, delta_pi,
-                             delta_A, state_weights_flat, total_responsibility_mass, state_weights_frac, val_obs_seqs, A_prev, A_new):
+    def _log_wandb_iteration(self, wandb_run, it, iter_start, total_train_loglik, total_val_loglik, improvement, criterion_for_stop, val_num_obs, train_num_obs, 
+                             delta_pi, delta_A, state_weights_flat, total_responsibility_mass, state_weights_frac, val_obs_seqs, A_prev, A_new):
         """
         Log per-iteration metrics to Weights & Biases.
 
@@ -580,7 +636,14 @@ class HDVTrainer:
         total_val_loglik : float
             Total validation log-likelihood (np.nan if no validation).
         improvement : float
-            Criterion improvement vs previous iteration.
+            Improvement in early-stop criterion (average log-likelihood per timestep) vs previous iteration.
+        criterion_for_stop : float
+            Early-stopping criterion value used in this EM iteration. Defined as the average log-likelihood per timestep, computed on the
+            validation set if available, otherwise on the training set.
+        val_num_obs : int | None
+            Total number of timesteps in the validation dataset. 
+        train_num_obs : int
+            Total number of timesteps in the training dataset. 
         delta_pi, delta_A : float
             Transition parameter deltas.
         state_weights_flat : np.ndarray
@@ -601,7 +664,7 @@ class HDVTrainer:
 
         iter_time = time.perf_counter() - iter_start
 
-         # convert tensors to numpy for logging + plotting
+        # convert tensors to numpy for logging + plotting
         pi_np = self.pi_z.detach().cpu().numpy()
         A_np = self.A_zz.detach().cpu().numpy()  
 
@@ -639,13 +702,18 @@ class HDVTrainer:
             "pi/max": pi_max,
             "pi/min": pi_min
         }
+        metrics["early_stop/criterion"] = criterion_for_stop
+        metrics["early_stop/source"] = "val" if val_obs_seqs is not None else "train"
+        metrics["early_stop/improvement_per_obs"] = float(improvement) if np.isfinite(improvement) else np.nan
+        # Here "observation" refers to a single timestep in a trajectory.
+
+        metrics["train/loglik_per_obs"] = total_train_loglik / max(train_num_obs, 1)
 
         if val_obs_seqs is not None:
             metrics["val/loglik"] = total_val_loglik # Sum of log-likelihood on the validation set
-            metrics["val/improvement"] = improvement # val_loglik_now - val_loglik_prev
+            metrics["val/loglik_per_obs"] = (total_val_loglik / max(val_num_obs, 1))
         else:
             metrics["val/loglik"] = np.nan
-            metrics["train/improvement"] = improvement
 
         try:
 
