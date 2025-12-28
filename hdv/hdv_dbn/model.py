@@ -19,11 +19,11 @@ class HDVDBN:
     Structure (2-slice template):
         Intra-slice:
             Style_t  --> Action_t
+            style_t+1 --> Action_t+1
 
         Inter-slice:
             Style_t  --> Style_{t+1}  
             Action_t --> Action_{t+1}
-            Style_t  --> Action_{t+1}
 
     Notes:
         - Continuous Observations O_t (x, y, vx, vy, ax, ay) are NOT in this graph. They are handled by an external emission 
@@ -106,12 +106,8 @@ class HDVDBN:
         self.model.add_edge(('Style', 1), ('Action', 1))
 
         # Inter-slice edges
-        # Style is modeled as constant via self-transition
         self.model.add_edge(('Style', 0), ('Style', 1))
-        # Actions follow a first-order Markov chain
         self.model.add_edge(('Action', 0), ('Action', 1))
-        # Temporal influence of previous style on next action
-        self.model.add_edge(('Style', 0), ('Action', 1))
 
     # ------------------------------------------------------------------
     # Slice-0 priors
@@ -234,7 +230,7 @@ class HDVDBN:
 
     def _cpd_action_1(self, init="random", alpha=1.0, seed=None):
         """
-        Build P(Action_1 | Action_0, Style_0, Style_1).
+        Build P(Action_1 | Action_0, Style_1).
 
         Parameters
         init : {"uniform","random"}
@@ -246,12 +242,12 @@ class HDVDBN:
 
         Returns
         TabularCPD
-            CPD for ('Action', 1) with evidence [('Action', 0), ('Style', 0), ('Style', 1)].
-            Values shape: (num_action, num_action * num_style * num_style).
+            CPD for ('Action', 1) with evidence [('Action', 0), ('Style', 1)].
+            Values shape: (num_action, num_action * num_style).
         """
         A = self.num_action
         S = self.num_style
-        n_cols = A * S * S
+        n_cols = A * S 
 
         if init == "random":
             values = self._dirichlet_cols(A, n_cols, alpha=alpha, seed=seed)
@@ -263,12 +259,11 @@ class HDVDBN:
             variable=('Action', 1),
             variable_card=A,
             values=values,
-            evidence=[('Action', 0), ('Style', 0), ('Style', 1)],
-            evidence_card=[A, S, S],
+            evidence=[('Action', 0), ('Style', 1)],
+            evidence_card=[A, S],
             state_names={
                 ('Action', 1): list(self.action_states),
                 ('Action', 0): list(self.action_states),
-                ('Style', 0): list(self.style_states),
                 ('Style', 1): list(self.style_states),
             },
         )

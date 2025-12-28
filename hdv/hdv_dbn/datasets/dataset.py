@@ -22,6 +22,9 @@ class TrajectorySequence:
     recording_id : object, optional
         Identifier of the recording (e.g. highD recording number). Useful when
         datasets contain multiple independent recordings.
+    meta : dict, optional
+        Static metadata attached to the sequence (vehicle class, direction, sizes,
+        recording properties, etc.).
     """
 
     vehicle_id: object
@@ -30,6 +33,7 @@ class TrajectorySequence:
     obs_names: List[str]
 
     recording_id: Optional[object] = None
+    meta: Optional[dict] = None 
 
     @property
     def T(self):

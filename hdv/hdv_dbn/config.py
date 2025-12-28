@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Literal
 
 @dataclass(frozen=True)
 class DBNStates:
@@ -10,8 +10,8 @@ class DBNStates:
 
 # Define the DBN states
 DBN_STATES = DBNStates(
-    driving_style=("style_0", "style_1", "style_2"), #("cautious", "normal", "aggressive")
-    action=("action_0", "action_1", "action_2", "action_3", "action_4", "action_5") #("maintain_speed", "accelerate", "decelerate", "hard_brake" "lane_change_left", "lane_change_right") 
+    driving_style=("style_0", "style_1", "style_2"),
+    action=("dummy",)
     )
 
 
@@ -58,30 +58,31 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 100
     early_stop_patience: int = 3
-    early_stop_min_delta_per_obs: float = 1e-4
+    early_stop_min_delta_per_obs: float = 5e-3
     early_stop_delta_A_thresh: float = 1e-5
     verbose: int = 1
     use_progress: bool = True
+    use_classwise_scaling: bool = True
+    emission_jitter: float = 1e-6
+    min_cov_diag: float = 1e-5
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: int | None = None
+    max_highd_recordings: Optional[int] = None
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
     wandb_run_name: Optional[str] = "Training with all track.csv files"
 
-    backend: str = "torch"          # ("torch" / "cupy")
-    device: str = "cuda"            # "cuda" or "cpu"
-    dtype: str = "float64"    
+    backend: Literal["torch"] = "torch"
+    device: Literal["cuda", "cpu"] = "cuda"
+    dtype: Literal["float32", "float64"] = "float64"
 
     use_batched_padding: bool = False
     batch_size_seqs: int = 64
 
-    # CPD initialisation
-    cpd_init = "random"   # "uniform" | "random" | "sticky"
-    cpd_alpha = 1.0       # used when cpd_init == "random"
-    cpd_stay_style = 0.8  # used when cpd_init == "sticky"
-    cpd_seed = 123        # None allowed; if None, falls back to TRAINING_CONFIG.seed
-
+    cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
+    cpd_alpha: float = 1.0
+    cpd_stay_style: float = 0.8
+    cpd_seed: Optional[int] = 123
 
 TRAINING_CONFIG = TrainingConfig()

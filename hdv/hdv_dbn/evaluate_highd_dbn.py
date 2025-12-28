@@ -52,14 +52,25 @@ def main():
         print(f"[evaluate_highd_dbn] ERROR loading highD: {e}", file=sys.stderr)
         sys.exit(1)
 
-    feature_cols = ["x", "y", "vx", "vy", "ax", "ay"]
-    sequences = df_to_sequences(df, feature_cols)
+    feature_cols = [
+        "y", "vx", "vy", "ax", "ay", "lane_id",
+        "front_exists", "front_dx", "front_dvx",
+        "rear_exists",  "rear_dx",  "rear_dvx",
+    ]
+
+    meta_cols = [
+        "meta_class",
+        "meta_drivingDirection"
+    ]
+
+    df[feature_cols] = df[feature_cols].fillna(0.0) # Fill NaNs in features with 0.0
+
+    sequences = df_to_sequences(df, feature_cols=feature_cols, meta_cols=meta_cols)
 
     train_seqs, val_seqs, test_seqs = train_val_test_split(
         sequences,
         train_frac=0.7,
         val_frac=0.1,
-        seed=TRAINING_CONFIG.seed,
     )
 
     print(
@@ -84,7 +95,25 @@ def main():
             f"Ensure the model was trained with feature scaling enabled."
         )
     
-    test_obs_seqs = [scale_obs(seq.obs, scaler_mean, scaler_std) for seq in test_seqs]
+    def scale_obs(obs, mean, std):
+        return (obs - mean) / (std + 1e-12)
+
+    # Build scaled test obs
+    test_obs_seqs = []
+    for seq in test_seqs:
+        if isinstance(scaler_mean, dict) and isinstance(scaler_std, dict):
+            if seq.meta is None or "meta_class" not in seq.meta:
+                raise RuntimeError("Class-wise scaler loaded but seq.meta['meta_class'] is missing.")
+            cls = str(seq.meta["meta_class"])
+            if cls not in scaler_mean:
+                raise RuntimeError(f"Class '{cls}' not found in saved class-wise scalers.")
+            mean = scaler_mean[cls]
+            std = scaler_std[cls]
+        else:
+            mean = scaler_mean
+            std = scaler_std
+
+        test_obs_seqs.append(scale_obs(seq.obs, mean, std))
 
     # ------------------------------------------------------------------
     # Evaluate log-likelihood on the test set

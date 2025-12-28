@@ -13,7 +13,7 @@ Pipeline
 from pathlib import Path
 import sys
 
-from .datasets import load_highd_folder, df_to_sequences, train_val_test_split, compute_feature_scaler, scale_sequences
+from .datasets import load_highd_folder, df_to_sequences, train_val_test_split, compute_feature_scaler, scale_sequences, compute_classwise_feature_scalers, scale_sequences_classwise
 from .trainer import HDVTrainer
 from .config import TRAINING_CONFIG
 
@@ -21,6 +21,8 @@ if TRAINING_CONFIG.use_wandb:
     import wandb
 else:
     wandb = None
+
+USE_CLASSWISE_SCALING = TRAINING_CONFIG.use_classwise_scaling
 
 def main():
     """Run the full training job."""
@@ -34,24 +36,46 @@ def main():
         if not data_root.exists():
             raise FileNotFoundError(f"Data directory not found: {data_root}")
         
-        cache_path = project_root / "data" / "highd_all.feather"
+        cache_path = project_root / "data" / "highd_all_with_meta.feather"
         df = load_highd_folder(data_root, cache_path=cache_path, force_rebuild=False, max_recordings=TRAINING_CONFIG.max_highd_recordings)
     except Exception as e:
         print(f"[train_highd_dbn] ERROR during initialization: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Observation features used by the emission model
-    feature_cols = ["x", "y", "vx", "vy", "ax", "ay"]
+    # Observation features used by the emission model (baseline set)
+    feature_cols = [
+        "y", "vx", "vy", "ax", "ay", "lane_id",
+        "front_exists", "front_dx", "front_dvx",
+        "rear_exists",  "rear_dx",  "rear_dvx",
+    ]
+    # Meta features for analysis / scaling choices
+    meta_cols = [
+        "meta_class",
+        "meta_drivingDirection"
+    ]
 
-    sequences = df_to_sequences(df, feature_cols) # Convert the dataframe into per–vehicle sequences
+    df[feature_cols] = df[feature_cols].fillna(0.0) # Fill NaNs in features with 0.0 (e.g., missing front/rear vehicle info)
+
+    sequences = df_to_sequences(df, feature_cols=feature_cols, meta_cols=meta_cols)
     print(f"[train_highd_dbn] Total sequences (vehicles) loaded: {len(sequences)}")
 
     train_seqs, val_seqs, test_seqs = train_val_test_split(sequences, train_frac=0.7, val_frac=0.1)
-    train_mean, train_std = compute_feature_scaler(train_seqs) # compute scaler on training set
-    # scale all splits
-    train_seqs_scaled = scale_sequences(train_seqs, train_mean, train_std)
-    val_seqs_scaled   = scale_sequences(val_seqs,   train_mean, train_std)
-    test_seqs_scaled  = scale_sequences(test_seqs,  train_mean, train_std)
+    # -----------------------------
+    # Choose scaling strategy
+    # -----------------------------
+    if USE_CLASSWISE_SCALING:
+        scalers = compute_classwise_feature_scalers(train_seqs, class_key="meta_class")
+        train_seqs_scaled = scale_sequences_classwise(train_seqs, scalers, class_key="meta_class")
+        val_seqs_scaled   = scale_sequences_classwise(val_seqs, scalers, class_key="meta_class")
+        test_seqs_scaled  = scale_sequences_classwise(test_seqs, scalers, class_key="meta_class")
+        scaler_to_store = scalers  # dict: {class -> (mean,std)}
+    else:
+        train_mean, train_std = compute_feature_scaler(train_seqs) # compute scaler on training set
+        # scale all splits
+        train_seqs_scaled = scale_sequences(train_seqs, train_mean, train_std)
+        val_seqs_scaled   = scale_sequences(val_seqs, train_mean, train_std)
+        test_seqs_scaled  = scale_sequences(test_seqs, train_mean, train_std)
+        scaler_to_store = (train_mean, train_std)  # tuple: (mean,std)
     print(
         f"[train_highd_dbn] Split sizes -> "
         f"Train: {len(train_seqs)}  "
@@ -61,12 +85,16 @@ def main():
 
     obs_dim = len(feature_cols)
     trainer = HDVTrainer(obs_dim=obs_dim)
-    trainer.scaler_mean = train_mean
-    trainer.scaler_std = train_std
+    # Store scalers for saving later (trainer.save will handle dict vs arrays after our patch below)
+    if USE_CLASSWISE_SCALING:
+        trainer.scaler_mean = {k: v[0] for k, v in scaler_to_store.items()}
+        trainer.scaler_std  = {k: v[1] for k, v in scaler_to_store.items()}
+    else:
+        trainer.scaler_mean, trainer.scaler_std = scaler_to_store
 
     # Convert TrajectorySequence objects -> raw numpy observation sequences
     train_obs_seqs = [seq.obs for seq in train_seqs_scaled]
-    val_obs_seqs = [seq.obs for seq in val_seqs_scaled] if len(val_seqs) > 0 else None
+    val_obs_seqs   = [seq.obs for seq in val_seqs_scaled] if len(val_seqs_scaled) > 0 else None
 
     wandb_run = None
     if TRAINING_CONFIG.use_wandb and wandb is not None:

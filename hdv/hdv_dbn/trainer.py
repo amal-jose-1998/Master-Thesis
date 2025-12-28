@@ -685,7 +685,7 @@ class HDVTrainer:
         mean_norms = np.linalg.norm(means_2d, axis=1)
 
         # π diagnostics
-        pi_entropy = float(-np.sum(pi_np * np.log(pi_np + 1e-15)))
+        pi_entropy = float(-np.sum(pi_np * np.log(pi_np + 1e-15))) # Shannon entropy
         pi_max = float(pi_np.max())
         pi_min = float(pi_np.min())
 
@@ -885,9 +885,24 @@ class HDVTrainer:
         pi_np = self.pi_z.detach().cpu().numpy()
         A_np = self.A_zz.detach().cpu().numpy()
         means, covs = self.emissions.to_arrays()
-        np.savez_compressed(path, pi_z=pi_np, A_zz=A_np, means=means, covs=covs, scaler_mean=self.scaler_mean, scaler_std=self.scaler_std)
-        print(f"[HDVTrainer] Saved model parameters to {path}")
+    
+        payload = dict(pi_z=pi_np, A_zz=A_np, means=means, covs=covs)
 
+        # ---- scaler serialization ----
+        if isinstance(self.scaler_mean, dict) and isinstance(self.scaler_std, dict):
+            classes = sorted(self.scaler_mean.keys())
+            payload["scaler_mode"] = np.array(["classwise"], dtype=object)
+            payload["scaler_classes"] = np.array(classes, dtype=object)
+            payload["scaler_means"] = np.stack([self.scaler_mean[c] for c in classes], axis=0)
+            payload["scaler_stds"]  = np.stack([self.scaler_std[c]  for c in classes], axis=0)
+        else:
+            payload["scaler_mode"] = np.array(["global"], dtype=object)
+            payload["scaler_mean"] = self.scaler_mean if self.scaler_mean is not None else np.array([])
+            payload["scaler_std"]  = self.scaler_std  if self.scaler_std  is not None else np.array([])
+
+        np.savez_compressed(path, **payload)
+        print(f"[HDVTrainer] Saved model parameters to {path}")
+        
     @classmethod
     def load(cls, path):
         """
@@ -919,8 +934,17 @@ class HDVTrainer:
         trainer.emissions.from_arrays(means, covs)
         trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)  
 
-        trainer.scaler_mean = data["scaler_mean"] if "scaler_mean" in data.files else None
-        trainer.scaler_std = data["scaler_std"] if "scaler_std" in data.files else None
+        mode = data["scaler_mode"][0] if "scaler_mode" in data.files else "global"
+
+        if mode == "classwise":
+            classes = list(data["scaler_classes"])
+            means_stack = data["scaler_means"]   # (C, obs_dim)
+            stds_stack  = data["scaler_stds"]    # (C, obs_dim)
+            trainer.scaler_mean = {str(c): means_stack[i] for i, c in enumerate(classes)}
+            trainer.scaler_std  = {str(c): stds_stack[i]  for i, c in enumerate(classes)}
+        else:
+            trainer.scaler_mean = data["scaler_mean"] if "scaler_mean" in data.files else None
+            trainer.scaler_std = data["scaler_std"] if "scaler_std" in data.files else None
 
         print(f"[HDVTrainer] Loaded model parameters from {path}")
         return trainer  

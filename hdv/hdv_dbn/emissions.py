@@ -304,6 +304,10 @@ class GaussianEmissionModel:
         else:
             x = torch.as_tensor(obs_seq, device=self._device, dtype=self._dtype)
 
+        if torch.isnan(x).any():
+            raise ValueError("NaN detected in obs_seq passed to GaussianEmissionModel.loglik_all_states(). "
+                            "Fill missing context values (e.g., dx/dvx) with 0 using masks before training/eval.")
+
         # Shapes:
         # x: (T, D)
         # means: (N, D)
@@ -408,7 +412,8 @@ class GaussianEmissionModel:
         diag = torch.diagonal(cov, dim1=-2, dim2=-1)
         cov = cov.clone()
         cov.diagonal(dim1=-2, dim2=-1).copy_(torch.clamp(diag, min=min_diag))
-        cov = cov + eps * torch.eye(obs_dim, device=device, dtype=dtype).unsqueeze(0)
+        jitter = float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6))
+        cov = cov + jitter * torch.eye(obs_dim, device=device, dtype=dtype).unsqueeze(0)
 
         # Write back to self.params in (style, action) layout on CPU as NumPy
         mean_np = mean.detach().cpu().numpy()
