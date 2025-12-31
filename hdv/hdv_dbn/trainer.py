@@ -1,10 +1,5 @@
 """
-EM training loop for the HDV DBN with Gaussian emissions.
-
-Key performance changes compared to the original NumPy version:
-1) Remove Python loops over (t, z) when building logB:
-      logB = emissions.loglik_all_states(obs)   # (T, N) in one GPU call
-2) Run forward–backward in Torch using logsumexp (GPU-friendly).
+EM training loop for the HDV DBN with Mixed emissions (Gaussian + discrete).
 
 Design choice:
 - Transition structure (pi_z, A_zz) is initialised once from pgmpy CPDs on CPU, then
@@ -21,7 +16,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from .model import HDVDBN
-from .emissions import GaussianEmissionModel, GaussianEmissionParams
+from .emissions import MixedEmissionModel, GaussianParams
 from .config import TRAINING_CONFIG
 
 # -----------------------------------------------------------------------------
@@ -42,7 +37,7 @@ def build_joint_transition_matrix(hdv_dbn):
     Joint initial distribution: pi_z(s, a) = P(Style_0=s) * P(Action_0=a | Style_0=s)
 
     Joint transition: A_zz[(s,a),(s',a')] = P(Style_{t+1}=s' | Style_t=s) *
-                             P(Action_{t+1}=a' | Action_t=a, Style_t=s, Style_{t+1}=s')
+                             P(Action_{t+1}=a' | Action_t=a, Style_{t+1}=s')
 
     Parameters
     hdv_dbn : HDVDBN
@@ -72,6 +67,12 @@ def build_joint_transition_matrix(hdv_dbn):
 
     pi_sa = (P_action0_given_style0 * P_style0[None, :]).T   # (S, A)
     pi_z = pi_sa.reshape(N)                                   # (N,)
+
+    pi_sum = float(pi_z.sum())
+    if not np.isfinite(pi_sum) or pi_sum <= 0.0:
+        pi_z = np.full((N,), 1.0 / N, dtype=float)
+    else:
+        pi_z = pi_z / pi_sum
             
     # -------------------------
     # transition A_zz' = P(Z_{t+1} = z' | Z_t = z)
@@ -80,7 +81,7 @@ def build_joint_transition_matrix(hdv_dbn):
     #   P(Style_{t+1} | Style_t)
     #   P(Action_{t+1} | Action_t, Style_t, Style_{t+1})
     P_style1_given_style0 = np.asarray(cpd_style1.values, dtype=float).reshape(S, S) # (S, S): rows=new, cols=old
-    P_action1_given_action0_style0_style1 = np.asarray(cpd_action1.values, dtype=float).reshape(A, A * S * S) # (A, A*S*S)
+    P_action1_given_action0_style1 = np.asarray(cpd_action1.values, dtype=float).reshape(A, A * S) # (A, A*S)
 
     A_zz = np.zeros((N, N), dtype=float)
     for s in range(S):
@@ -90,8 +91,8 @@ def build_joint_transition_matrix(hdv_dbn):
                 p_s = P_style1_given_style0[s_next, s]
                 for a_next in range(A):
                     z_next = s_next * A + a_next # flat index for next state.
-                    col = ((a * S) + s) * S + s_next # Column index in cpd_action1 corresponding to (Action_0 = a, Style_0 = s, Style_1 = s_next)
-                    p_a = P_action1_given_action0_style0_style1[a_next, col]
+                    col = a * S + s_next  # Column for (Action_0=a, Style_1=s_next)
+                    p_a = P_action1_given_action0_style1[a_next, col] 
                     A_zz[z, z_next] = p_s * p_a
 
     # normalize rows (each row must sum to 1.)  
@@ -133,6 +134,12 @@ def forward_backward_torch(pi_z, A_zz, logB):
     # N = number of latent joint states z = (Style, Action).
     # T = number of time steps in the observation sequence (trajectory).
     T, N = logB.shape
+    if T == 0:  
+        gamma = torch.empty((0, N), device=logB.device, dtype=logB.dtype)  
+        xi_sum = torch.zeros((N, N), device=logB.device, dtype=logB.dtype)  
+        loglik = torch.tensor(0.0, device=logB.device, dtype=logB.dtype) 
+        return gamma, xi_sum, loglik  
+    
     device = logB.device
     dtype = logB.dtype
 
@@ -189,22 +196,25 @@ def forward_backward_torch(pi_z, A_zz, logB):
 # =============================================================================
 class HDVTrainer:
     """
-    Trainer for the joint (Style, Action) HMM-equivalent model with Gaussian emissions.
+    Trainer for the joint (Style, Action) HMM-equivalent model with Mixed emissions.
     This class runs EM:
       - E-step: forward–backward per trajectory to compute gamma and xi_sum
       - M-step:
           * update pi_z and A_zz from expected counts
-          * update Gaussian emissions using gamma responsibilities
+          * update Mixed emissions (Gaussian + Bernoulli + categorical lane_pos) using gamma
     """
 
-    def __init__(self, obs_dim):
+    def __init__(self, obs_names, lane_num_categories):
         """
         Parameters
-        obs_dim : int
-            Observation dimensionality (e.g., 6 for [x, y, vx, vy, ax, ay]).
+        obs_names : list[str]
+            Names of observation features (for MixedEmissionModel).
+        lane_num_categories : int
+            Number of categorical lane_pos categories (valid {0,1,2}; invalid -1 is ignored).
         """
         self.hdv_dbn = HDVDBN()
-        self.emissions = GaussianEmissionModel(obs_dim=obs_dim)
+        self.obs_names = list(obs_names)
+        self.emissions = MixedEmissionModel(obs_names=self.obs_names, lane_num_categories=lane_num_categories)
 
         self.S = self.hdv_dbn.num_style
         self.A = self.hdv_dbn.num_action
@@ -214,6 +224,10 @@ class HDVTrainer:
         pi_np, A_np = build_joint_transition_matrix(self.hdv_dbn)
 
         self.device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
+        if self.device.type == "cuda" and not torch.cuda.is_available():
+            if getattr(TRAINING_CONFIG, "verbose", 1):
+                print("[HDVTrainer] WARNING: CUDA requested but not available. Falling back to CPU.")
+            self.device = torch.device("cpu")
         dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
         self.dtype = torch.float32 if dtype_str == "float32" else torch.float64
 
@@ -485,6 +499,8 @@ class HDVTrainer:
 
         with torch.no_grad():
             for i, obs in iterator:
+                if obs is None or obs.shape[0] == 0:
+                    continue
                 logB = self._compute_logB_for_sequence(obs) # Compute emission log-likelihoods logB[t,z] = log p(o_t | z)
                 gamma, xi_sum, loglik = forward_backward_torch(self.pi_z, self.A_zz, logB)
 
@@ -591,7 +607,7 @@ class HDVTrainer:
     
     def _m_step_emissions(self, train_obs_seqs, gamma_all, use_progress, verbose):
         """
-        Update Gaussian emission parameters from responsibilities.
+        Update Mixed emission parameters from responsibilities.
 
         Parameters
         train_obs_seqs : list[np.ndarray]
@@ -669,17 +685,17 @@ class HDVTrainer:
         A_np = self.A_zz.detach().cpu().numpy()  
 
         # Emission stats
-        means, covs = self.emissions.to_arrays()
-        obs_dim = self.emissions.obs_dim
-        means_2d = means.reshape(self.num_states, obs_dim)
-        covs_2d = covs.reshape(self.num_states, obs_dim, obs_dim)
-        cov_traces = np.trace(covs_2d, axis1=1, axis2=2)
+        g_means, g_covs = self.emissions.gauss.to_arrays()  # (S,A,cont_dim), (S,A,cont_dim,cont_dim)  # MOD
+        cont_dim = int(self.emissions.cont_dim)  # MOD
+        means_2d = g_means.reshape(self.num_states, cont_dim)  # MOD
+        covs_2d = g_covs.reshape(self.num_states, cont_dim, cont_dim)  # MOD
+        cov_traces = np.trace(covs_2d, axis1=1, axis2=2)  # MOD
 
         cov_logdets = []
         for z in range(self.num_states):
             s = z // self.A
             a = z % self.A
-            sign, logdet = np.linalg.slogdet(self.emissions.params[s, a].cov)
+            sign, logdet = np.linalg.slogdet(self.emissions.gauss.params[s, a].cov)  # MOD
             cov_logdets.append(logdet if sign > 0 else np.nan)
 
         mean_norms = np.linalg.norm(means_2d, axis=1)
@@ -807,7 +823,10 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     def _init_emissions_kmeans(self, train_obs_seqs):
         """
-        Initialise GaussianEmissionModel parameters using MiniBatchKMeans on a subsample.
+        Initialise MixedEmissionModel parameters using MiniBatchKMeans on continuous dims.
+        - Gaussian part: KMeans on continuous dimensions only.
+        - Bernoulli part: global mean of binary features.
+        - Lane categorical: global empirical lane distribution with smoothing.
 
         Parameters
         train_obs_seqs : list[np.ndarray]
@@ -818,95 +837,197 @@ class HDVTrainer:
         print("[HDVTrainer] Initialising emissions with (subsampled) k-means...")
 
         # Stack all time steps from all trajectories
-        X_all = np.vstack(train_obs_seqs)  # shape (N_total, obs_dim)
-        N_total, obs_dim = X_all.shape
-        K = self.num_states
+        X_all = np.vstack(train_obs_seqs)  # (N_total, obs_dim)
+        N_total = int(X_all.shape[0])
+        K = int(self.num_states)
+
+        # -----------------------------
+        # Continuous part (Gaussian)
+        # -----------------------------
+        cont_idx = np.asarray(self.emissions.cont_idx, dtype=int)  
+        if cont_idx.size == 0:
+            raise RuntimeError("MixedEmissionModel has no continuous dimensions to initialise.")  
+
+        X_all_cont = X_all[:, cont_idx]  # (N_total, cont_dim)
+        cont_dim = int(X_all_cont.shape[1])
 
         # Choose a random subset for clustering
         rng = np.random.default_rng(seed)
         if N_total > max_samples:
             idx = rng.choice(N_total, size=max_samples, replace=False)
-            X = X_all[idx]
-            print(f"  Using subsample of {max_samples} out of {N_total} points "
-                  f"for k-means initialisation.")
+            Xc = X_all_cont[idx]
+            print(f"  Using subsample of {max_samples} out of {N_total} points for k-means initialisation.")
         else:
-            X = X_all
+            Xc = X_all_cont
             print(f"  Using all {N_total} points for k-means initialisation.")
 
         # Global covariance as a fallback if a cluster has too few points
-        global_cov = np.cov(X, rowvar=False) + 1e-6 * np.eye(obs_dim)
-        
+        global_cov = np.cov(Xc, rowvar=False) + 1e-6 * np.eye(cont_dim)
         if np.any(np.isnan(global_cov)):
             print("  WARNING: Global covariance contains NaN. Using identity matrix.")
-            global_cov = np.eye(obs_dim)
+            global_cov = np.eye(cont_dim)
 
         # ---- Fast clustering ----
-        mbk = MiniBatchKMeans(n_clusters=K, batch_size=2048, max_iter=100, n_init=5, random_state=seed)
-        labels = mbk.fit_predict(X)        # labels for subsample
-        centers = mbk.cluster_centers_     # shape (K, obs_dim)
+        mbk = MiniBatchKMeans(
+                n_clusters=K,
+                batch_size=2048,
+                max_iter=100,
+                n_init=5,
+                random_state=seed
+            )
+        labels = mbk.fit_predict(Xc)
+        centers = mbk.cluster_centers_  # (K, cont_dim)
 
         # For each cluster (joint state index z)
         for z in range(K):
             mask = (labels == z)
-            num_points = mask.sum()
+            num_points = int(mask.sum())
 
-            if num_points < obs_dim + 1:
-                # Too few points to estimate a full covariance reliably. so use global covariance and k-means center
+            if num_points < cont_dim + 1:
                 mean_z = centers[z]
                 cov_z = global_cov.copy()
-                print(f"  Cluster z={z:02d}: only {num_points} points, "
-                      f"using global covariance as fallback.")
+                if TRAINING_CONFIG.verbose >= 1:
+                    print(f"  Cluster z={z:02d}: only {num_points} points -> using global covariance fallback.")
             else:
-                X_z = X[mask]
+                X_z = Xc[mask]
                 mean_z = X_z.mean(axis=0)
-                cov_z = np.cov(X_z, rowvar=False) + 1e-6 * np.eye(obs_dim)
+                cov_z = np.cov(X_z, rowvar=False) + 1e-6 * np.eye(cont_dim)
 
-            s = z // self.A
-            a = z % self.A
+            s, a = self.emissions.gauss._z_to_sa(z)  
+            self.emissions.gauss.params[s, a] = GaussianParams(mean=mean_z, cov=cov_z)  
+        
+        # -----------------------------
+        # Discrete parts (Bernoulli + lane categorical)
+        # -----------------------------
+        if self.emissions.bin_dim > 0:  
+            xb = X_all[:, self.emissions.bin_idx]
+            xb = np.clip(xb, 0.0, 1.0)
+            p0 = xb.mean(axis=0)
+            p0 = np.clip(p0, 1e-3, 1.0 - 1e-3)
+            self.emissions.bern_p = np.tile(p0[None, :], (K, 1))  
+        # lane_pos init must ignore invalid lane_pos == -1 (or any out-of-range)
+        lane_raw = X_all[:, self.emissions.lane_idx]
+        lane_int = np.rint(lane_raw).astype(int)
+        valid = (lane_int >= 0) & (lane_int < self.emissions.lane_K)
+        if np.any(valid):
+            lane_valid = lane_int[valid] 
+            counts = np.bincount(lane_valid, minlength=self.emissions.lane_K).astype(np.float64)  
+        else:
+            # fallback to uniform if everything is invalid
+            counts = np.ones((self.emissions.lane_K,), dtype=np.float64)  
+        alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
+        p_lane = (counts + alpha) / (counts.sum() + alpha * self.emissions.lane_K)
+        self.emissions.lane_p = np.tile(p_lane[None, :], (K, 1))
 
-            self.emissions.params[s, a] = GaussianEmissionParams(mean=mean_z, cov=cov_z)
-
-            if TRAINING_CONFIG.verbose >= 2:
-                print(f"  Init mean for z={z:02d} (s={s}, a={a}): {mean_z}")
-                sign, logdet = np.linalg.slogdet(cov_z)
-                print(f"  Cov logdet for z={z:02d}: sign={sign}, logdet={logdet:.3e} (points={num_points})")
+        self.emissions.invalidate_cache()
+        self.emissions.to_device(device=self.device, dtype=self.dtype)
 
         print("[HDVTrainer] k-means initialisation done.")
 
+
     def save(self, path):
         """
-        Save the learned joint transition parameters, Gaussian emissions, and feature scaler to a .npz file.
+        Save the learned joint transition parameters, Mixed emissions, and feature scaler to a .npz file.
+        Saves:
+          - Joint transitions: pi_z, A_zz
+          - Emissions: MixedEmissionModel.to_arrays() (stored under em__*)
+          - Scaler: global or classwise
 
         Parameters
         path : str or Path
             Target file path (e.g. 'models/dbn_highd.npz').
         """
         path = str(path)
+        # -----------------------------
+        # Transitions
+        # -----------------------------
+        if self.pi_z is None or self.A_zz is None:
+            raise ValueError("Cannot save: transitions (pi_z/A_zz) are not initialized.")
+
         pi_np = self.pi_z.detach().cpu().numpy()
         A_np = self.A_zz.detach().cpu().numpy()
-        means, covs = self.emissions.to_arrays()
-    
-        payload = dict(pi_z=pi_np, A_zz=A_np, means=means, covs=covs)
 
-        # ---- scaler serialization ----
+        if pi_np.ndim != 1:
+            raise ValueError(f"pi_z must be 1D, got shape {pi_np.shape}")
+        if A_np.ndim != 2 or A_np.shape[0] != A_np.shape[1]:
+            raise ValueError(f"A_zz must be square 2D, got shape {A_np.shape}")
+        if A_np.shape[0] != pi_np.shape[0]:
+            raise ValueError(f"pi_z length {pi_np.shape[0]} does not match A_zz size {A_np.shape[0]}")
+
+        payload = {
+            "pi_z": pi_np,
+            "A_zz": A_np,
+        }
+
+        # -----------------------------
+        # Meta needed to reconstruct trainer
+        # -----------------------------
+        payload["obs_names"] = np.array(self.obs_names, dtype=object)
+        payload["lane_num_categories"] = np.array([int(getattr(self.emissions, "lane_K", 0))], dtype=np.int64)
+        if int(payload["lane_num_categories"][0]) <= 0:
+            raise ValueError("lane_num_categories is invalid (<=0). Emissions may not be initialized correctly.")
+
+        # -----------------------------
+        # Emissions (strict keys)
+        # -----------------------------
+        required = {
+            "obs_names",
+            "lane_K",
+            "cont_idx",
+            "bin_idx",
+            "lane_idx",
+            "gauss_means",
+            "gauss_covs",
+            "bern_p",
+            "lane_p",
+        }
+        missing = [k for k in sorted(required) if k not in em_dict]
+        if missing:
+            raise ValueError(
+                f"MixedEmissionModel.to_arrays() is missing keys: {missing}. "
+                "Check emissions.py to_arrays()/from_arrays() implementation."
+            )
+        em_dict = self.emissions.to_arrays()  
+
+        laneK_header = int(payload["lane_num_categories"][0])
+        laneK_em = int(np.asarray(em_dict["lane_K"]).reshape(-1)[0])
+        if laneK_header != laneK_em:
+            raise ValueError(f"lane_K mismatch: header={laneK_header}, emissions={laneK_em}")
+
+        for k, v in em_dict.items():      
+            payload[f"em__{k}"] = v           
+
+        # -----------------------------
+        # Scaler (global vs classwise)
+        # -----------------------------
         if isinstance(self.scaler_mean, dict) and isinstance(self.scaler_std, dict):
             classes = sorted(self.scaler_mean.keys())
+            if set(classes) != set(self.scaler_std.keys()):
+                raise ValueError("Classwise scaler keys mismatch between scaler_mean and scaler_std.")
+
+            means_stack = np.stack([np.asarray(self.scaler_mean[c]) for c in classes], axis=0)
+            stds_stack = np.stack([np.asarray(self.scaler_std[c]) for c in classes], axis=0)
+
             payload["scaler_mode"] = np.array(["classwise"], dtype=object)
             payload["scaler_classes"] = np.array(classes, dtype=object)
-            payload["scaler_means"] = np.stack([self.scaler_mean[c] for c in classes], axis=0)
-            payload["scaler_stds"]  = np.stack([self.scaler_std[c]  for c in classes], axis=0)
+            payload["scaler_means"] = means_stack
+            payload["scaler_stds"] = stds_stack
         else:
             payload["scaler_mode"] = np.array(["global"], dtype=object)
-            payload["scaler_mean"] = self.scaler_mean if self.scaler_mean is not None else np.array([])
-            payload["scaler_std"]  = self.scaler_std  if self.scaler_std  is not None else np.array([])
+            payload["scaler_mean"] = np.asarray(self.scaler_mean) if self.scaler_mean is not None else np.array([])
+            payload["scaler_std"] = np.asarray(self.scaler_std) if self.scaler_std is not None else np.array([])
 
         np.savez_compressed(path, **payload)
         print(f"[HDVTrainer] Saved model parameters to {path}")
-        
+
     @classmethod
     def load(cls, path):
         """
-        Load a trained HDVTrainer instance from a .npz file.
+        Load a trained HDVTrainer instance from a .npz file and restore Mixed emissions.
+        Restores:
+          - Joint transition parameters (pi_z, A_zz)
+          - Mixed emission parameters (Gaussian + Bernoulli + categorical lane_pos)
+          - Feature scaling parameters (global or classwise)
 
         Parameters
         path : str or Path
@@ -917,34 +1038,75 @@ class HDVTrainer:
             A trainer instance with pi_z, A_zz and emission parameters restored.
         """
         path = str(path)
-        data = np.load(path)
+        data = np.load(path, allow_pickle=True)
 
-        pi_z = data["pi_z"]
-        A_zz = data["A_zz"]
-        means = data["means"]
-        covs = data["covs"]
+        # ------------------------------------------------------------------
+        # Reconstruct trainer (MixedEmissionModel requires obs_names & lane_K). 
+        # ------------------------------------------------------------------
+        if "obs_names" not in data.files or "lane_num_categories" not in data.files:  
+            raise ValueError(
+                "Saved model is missing 'obs_names' or 'lane_num_categories'. "
+                "Re-save the model with the updated save() implementation."
+            )  
 
-        obs_dim = means.shape[-1]
-        trainer = cls(obs_dim=obs_dim)
+        obs_names = [str(x) for x in list(data["obs_names"])]  
+        lane_K = int(np.asarray(data["lane_num_categories"]).ravel()[0])  
+        obs_dim = len(obs_names)  
 
-        # Override initial values with loaded ones
-        trainer.pi_z = torch.as_tensor(pi_z, device=trainer.device, dtype=trainer.dtype)  
-        trainer.A_zz = torch.as_tensor(A_zz, device=trainer.device, dtype=trainer.dtype)  
+        trainer = cls(obs_dim=obs_dim, obs_names=obs_names, lane_num_categories=lane_K)  
 
-        trainer.emissions.from_arrays(means, covs)
-        trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)  
+        # ------------------------------------------------------------------
+        # Restore transitions
+        # ------------------------------------------------------------------
+        if "pi_z" not in data.files or "A_zz" not in data.files:
+            raise ValueError("Checkpoint is missing 'pi_z' or 'A_zz'.")
 
-        mode = data["scaler_mode"][0] if "scaler_mode" in data.files else "global"
+        trainer.pi_z = torch.as_tensor(data["pi_z"], device=trainer.device, dtype=trainer.dtype)
+        trainer.A_zz = torch.as_tensor(data["A_zz"], device=trainer.device, dtype=trainer.dtype)
+
+        # ------------------------------------------------------------------
+        # Restore emissions (MixedEmissionModel)
+        # ------------------------------------------------------------------
+        em_payload = {}
+        for k in data.files:
+            if k.startswith("em__"):
+                em_payload[k[len("em__"):]] = data[k]
+
+        # Minimal required keys for the mixed model
+        required = {"obs_names", "lane_K", "cont_idx", "bin_idx", "lane_idx", "gauss_means", "gauss_covs", "bern_p", "lane_p"}
+        missing = [k for k in sorted(required) if k not in em_payload]
+        if missing:
+            raise ValueError(
+                f"Checkpoint is missing emission keys: {missing}. "
+                "Re-save the model using the updated save() implementation."
+            )
+
+        trainer.emissions.from_arrays(em_payload)
+        trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)
+
+        # ------------------------------------------------------------------
+        # Restore scaler
+        # ------------------------------------------------------------------
+        mode = str(np.asarray(data["scaler_mode"]).reshape(-1)[0]) if "scaler_mode" in data.files else "global"
 
         if mode == "classwise":
-            classes = list(data["scaler_classes"])
-            means_stack = data["scaler_means"]   # (C, obs_dim)
-            stds_stack  = data["scaler_stds"]    # (C, obs_dim)
-            trainer.scaler_mean = {str(c): means_stack[i] for i, c in enumerate(classes)}
-            trainer.scaler_std  = {str(c): stds_stack[i]  for i, c in enumerate(classes)}
+            for key in ("scaler_classes", "scaler_means", "scaler_stds"):
+                if key not in data.files:
+                    raise ValueError(f"Checkpoint marked classwise scaling but missing '{key}'.")
+
+            classes = [str(c) for c in list(data["scaler_classes"])]
+            means_stack = np.asarray(data["scaler_means"])
+            stds_stack = np.asarray(data["scaler_stds"])
+            if means_stack.shape[0] != len(classes) or stds_stack.shape[0] != len(classes):
+                raise ValueError(
+                    f"Scaler class count mismatch: classes={len(classes)}, "
+                    f"means={means_stack.shape}, stds={stds_stack.shape}"
+                )
+            trainer.scaler_mean = {classes[i]: means_stack[i] for i in range(len(classes))}
+            trainer.scaler_std = {classes[i]: stds_stack[i] for i in range(len(classes))}
         else:
             trainer.scaler_mean = data["scaler_mean"] if "scaler_mean" in data.files else None
             trainer.scaler_std = data["scaler_std"] if "scaler_std" in data.files else None
 
         print(f"[HDVTrainer] Loaded model parameters from {path}")
-        return trainer  
+        return trainer

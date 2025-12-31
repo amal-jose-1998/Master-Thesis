@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Tuple, Optional, Literal
+from typing import Tuple, Optional, Literal, List
 
 @dataclass(frozen=True)
 class DBNStates:
@@ -14,6 +14,95 @@ DBN_STATES = DBNStates(
     action=("dummy",)
     )
 
+# =============================================================================
+# Observation feature configuration for highD dataset
+# =============================================================================
+
+# meta columns stored per sequence (not part of obs vector)
+META_COLS: List[str] = [
+    "meta_class",
+    "meta_drivingDirection",
+]
+
+EGO_FEATURES: List[str] = [
+    "y",
+    "vx", "vy",
+    "ax", "ay",
+    "lane_pos",
+]
+
+FRONT_FEATURES: List[str] = [
+    "front_exists",
+    "front_dx", "front_dy",
+    "front_dvx", "front_dvy",
+]
+
+REAR_FEATURES: List[str] = [
+    "rear_exists",
+    "rear_dx", "rear_dy",
+    "rear_dvx", "rear_dvy",
+]
+
+LEFT_FRONT_FEATURES: List[str] = [
+    "left_front_exists",
+    "left_front_dx", "left_front_dy",
+    "left_front_dvx", "left_front_dvy",
+]
+
+LEFT_REAR_FEATURES: List[str] = [
+    "left_rear_exists",
+    "left_rear_dx", "left_rear_dy",
+    "left_rear_dvx", "left_rear_dvy",
+]
+
+RIGHT_FRONT_FEATURES: List[str] = [
+    "right_front_exists",
+    "right_front_dx", "right_front_dy",
+    "right_front_dvx", "right_front_dvy",
+]
+
+RIGHT_REAR_FEATURES: List[str] = [
+    "right_rear_exists",
+    "right_rear_dx", "right_rear_dy",
+    "right_rear_dvx", "right_rear_dvy",
+]
+
+LEFT_SIDE_FEATURES: List[str] = [  
+    "left_side_exists",            
+    "left_side_dx", "left_side_dy",
+    "left_side_dvx", "left_side_dvy",
+]                                 
+
+RIGHT_SIDE_FEATURES: List[str] = [
+    "right_side_exists",           
+    "right_side_dx", "right_side_dy",
+    "right_side_dvx", "right_side_dvy",
+]     
+
+BASELINE_FEATURE_COLS: List[str] = (
+    EGO_FEATURES
+    + FRONT_FEATURES
+    + REAR_FEATURES
+    + LEFT_FRONT_FEATURES
+    + LEFT_REAR_FEATURES
+    + LEFT_SIDE_FEATURES
+    + RIGHT_SIDE_FEATURES 
+    + RIGHT_FRONT_FEATURES
+    + RIGHT_REAR_FEATURES
+)
+
+# discrete features (do NOT z-score scale; do NOT model with a plain Gaussian)
+# lane_pos is categorical; *_exists are binary masks.
+DISCRETE_FEATURES: List[str] = [
+    "lane_pos",
+    "front_exists", "rear_exists",
+    "left_front_exists", "left_side_exists", "left_rear_exists",      
+    "right_front_exists", "right_side_exists", "right_rear_exists",   
+]
+
+# continuous features = all baseline minus discrete
+CONTINUOUS_FEATURES: List[str] = [f for f in BASELINE_FEATURE_COLS if f not in DISCRETE_FEATURES]
+# =============================================================================
 
 @dataclass(frozen=True)
 class TrainingConfig:
@@ -56,7 +145,7 @@ class TrainingConfig:
         Number of trajectories per batch when padded batching is enabled.
     """
     seed: int = 123
-    em_num_iters: int = 100
+    em_num_iters: int = 2
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
     early_stop_delta_A_thresh: float = 1e-5
@@ -64,6 +153,7 @@ class TrainingConfig:
     use_progress: bool = True
     use_classwise_scaling: bool = True
     emission_jitter: float = 1e-6
+    cat_alpha: float = 1.0
     min_cov_diag: float = 1e-5
 
     max_kmeans_samples: int = 100000
@@ -71,7 +161,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "Training with all track.csv files"
+    wandb_run_name: Optional[str] = "Training with the latest observation set with baseline (latent style only)"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"

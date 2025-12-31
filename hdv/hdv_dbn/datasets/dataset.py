@@ -19,7 +19,7 @@ class TrajectorySequence:
             F = number of observation features.
     obs_names : list[str]
         Names of the observation features, length F, matching columns of `obs`.
-    recording_id : object, optional
+    recording_id : object
         Identifier of the recording (e.g. highD recording number). Useful when
         datasets contain multiple independent recordings.
     meta : dict, optional
@@ -31,8 +31,7 @@ class TrajectorySequence:
     frames: np.ndarray
     obs: np.ndarray
     obs_names: List[str]
-
-    recording_id: Optional[object] = None
+    recording_id: object = None
     meta: Optional[dict] = None 
 
     @property
@@ -44,7 +43,7 @@ class TrajectorySequence:
         int
             Number of time steps T in the sequence.
         """
-        return int(len(self.frames))
+        return int(self.frames.shape[0])
 
     @property
     def F(self):

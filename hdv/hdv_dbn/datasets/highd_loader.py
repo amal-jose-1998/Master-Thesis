@@ -1,12 +1,14 @@
 """
-HighD dataset utilities.
+HighD dataset utilities (loader + sequence builder).
 
 This module:
 - loads highD `*_tracks.csv` + `*_tracksMeta.csv` + `*_recordingMeta.csv` files
 - merges meta into the per-frame table
 - applies vehicle-centric direction normalization (sign flips)
+- derives neighbor-relative context features (dx, dy, dvx, dvy) with existence masks
+- derives a stable lane-position category (lane_pos) from lane markings (upper/lower) + direction
 - converts the table into per-vehicle `TrajectorySequence` objects
-- optionally computes and applies feature scaling
+- provides scaling helpers (including "masked" scaling that leaves discrete features untouched)
 - creates reproducible train/val/test splits (seeded via TRAINING_CONFIG)
 """
 
@@ -17,7 +19,7 @@ import pandas as pd
 try:
     # When imported as a package module
     from .dataset import TrajectorySequence
-    from ..config import TRAINING_CONFIG
+    from ..config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS
 except ImportError:
     # When run as a standalone script (debug)
     import sys
@@ -25,7 +27,7 @@ except ImportError:
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
     from hdv.hdv_dbn.datasets.dataset import TrajectorySequence
-    from hdv.hdv_dbn.config import TRAINING_CONFIG
+    from hdv.hdv_dbn.config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS
 
 # Map highD column names to the generic internal names.
 HIGHD_COL_MAP = {
@@ -38,17 +40,21 @@ HIGHD_COL_MAP = {
     "xAcceleration": "ax",
     "yAcceleration": "ay",
     "laneId": "lane_id",
+
     "frontSightDistance": "front_sight_dist",
     "backSightDistance": "back_sight_dist",
     "dhw": "dhw",
     "thw": "thw",
     "ttc": "ttc",
+
     "precedingXVelocity": "preceding_vx",
     "precedingId": "preceding_id",
     "followingId": "following_id",
+
     "leftPrecedingId": "left_preceding_id",
     "leftAlongsideId": "left_alongside_id",
     "leftFollowingId": "left_following_id",
+
     "rightPrecedingId": "right_preceding_id",
     "rightAlongsideId": "right_alongside_id",
     "rightFollowingId": "right_following_id",
@@ -108,6 +114,9 @@ def _infer_dir_sign(driving_dir):
     np.ndarray  
         Array of shape (N,) with +1.0 or -1.0 values.
     """
+    if driving_dir is None:
+        return np.ones(0, dtype=np.float64)
+    
     vals = pd.unique(driving_dir.dropna())
     vals = np.array(sorted([int(v) for v in vals])) if len(vals) else np.array([])
 
@@ -215,133 +224,136 @@ def _merge_neighbor_state(df, neighbor_id_col, prefix):
     return out
 
 # ---------------------------------------------------------------------
-# Scaling utilities 
+# Lane markings -> lane_pos
 # ---------------------------------------------------------------------
-def compute_feature_scaler(sequences):
+def _parse_lane_markings(value):
     """
-    Compute per-feature mean and standard deviation from a set of sequences. 
+    Parse recordingMeta lane markings fields into a sorted float array.
 
     Parameters
-    sequences : sequence of TrajectorySequence
-        Sequences whose `.obs` arrays will be stacked along time.
-
+    value : str | list | tuple | np.ndarray | None
+        Raw lane markings field from recordingMeta.
+    
     Returns
-    mean : np.ndarray
-        Feature-wise mean, shape (F,).
-    std : np.ndarray
-        Feature-wise standard deviation, shape (F,). Very small std values are
-        clamped to 1.0 to avoid division by near-zero during scaling.
+    np.ndarray
+        Sorted array of lane marking positions (float64).
     """
-    X = np.vstack([seq.obs for seq in sequences])  # (N_total, F)
-    mean = X.mean(axis=0)
-    std = X.std(axis=0)
-    std[std < 1e-6] = 1.0  # avoid division by ~0
-    return mean, std
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return np.asarray([], dtype=np.float64)
 
-def compute_classwise_feature_scalers(sequences, class_key="meta_class"):
-    """
-    Compute one (mean, std) scaler per vehicle class.
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return np.sort(np.asarray(value, dtype=np.float64))
 
-    Parameters
-    sequences : list[TrajectorySequence]
-        Input sequences (usually training split only).
-    class_key : str
-        Key inside seq.meta indicating vehicle class (e.g. "meta_class").
+    s = str(value).strip()
+    if not s:
+        return np.asarray([], dtype=np.float64)
 
-    Returns
-    dict
-        Mapping: class_name -> (mean, std)
-    """
-    buckets = {}
+    s = s.replace("[", "").replace("]", "").replace("(", "").replace(")", "")
+    parts = [p.strip() for p in (s.split(";") if ";" in s else s.split(",")) if p.strip()]
 
-    for seq in sequences:
-        if seq.meta is None or class_key not in seq.meta:
+    out = []
+    for p in parts:
+        try:
+            out.append(float(p))
+        except ValueError:
             continue
-        cls = seq.meta[class_key]
-        buckets.setdefault(cls, []).append(seq)
+    return np.sort(np.asarray(out, dtype=np.float64))
 
-    scalers = {}
-    for cls, seqs in buckets.items():
-        mean, std = compute_feature_scaler(seqs)
-        scalers[cls] = (mean, std)
 
-    return scalers
-
-def scale_sequences_classwise(sequences, scalers, class_key="meta_class"):
+def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y", upper_key="rec_upperLaneMarkings", lower_key="rec_lowerLaneMarkings"):
     """
-    Apply class-specific feature scaling to sequences.
+    Derive stable lane-position categories from lane markings + direction.
 
+    Output:
+      df["lane_pos"] in {-1,0,1,2}
+       -1 = outside / non-drivable / unknown
+        0 = leftmost (vehicle-centric)
+        1 = middle lane(s)
+        2 = rightmost (vehicle-centric)
+        
+    Direction choice:
+      drivingDirection==1 -> use upperLaneMarkings
+      drivingDirection==2 -> use lowerLaneMarkings
+
+    Vehicle-centric left/right:
+      - For direction==2 (moving right), smaller y is left.
+      - For direction==1 (moving left), smaller y is right => reverse index.
+    
     Parameters
-    sequences : list[TrajectorySequence]
-        Sequences to scale.
-    scalers : dict
-        Output of compute_classwise_feature_scalers().
-    class_key : str
-        Key inside seq.meta indicating vehicle class.
-
+    df : pd.DataFrame
+        Input table containing at least:
+          - `y_col` (lateral position)
+          - `dir_col` (driving direction)
+          - `recording_id` (if available)
+          - `upper_key`, `lower_key` columns with lane markings info
+    dir_col : str
+        Column name containing driving direction labels.
+    y_col : str
+        Column name containing lateral position.
+    upper_key : str
+        Column name containing upper lane markings info.
+    lower_key : str
+        Column name containing lower lane markings info.
+    
     Returns
-    list[TrajectorySequence]
-        Scaled sequences.
+    pd.DataFrame
+        DataFrame with new `lane_pos` column added. 
     """
-    out = []
+    if y_col not in df.columns or dir_col not in df.columns:
+        df["lane_pos"] = 1
+        return df
 
-    for seq in sequences:
-        if seq.meta is None or class_key not in seq.meta:
-            raise ValueError("Sequence missing class information for class-wise scaling.")
+    # Pre-parse markings per recording 
+    rec_ids = df["recording_id"].dropna().unique().tolist() if "recording_id" in df.columns else [None]
+    rec_to_upper = {}
+    rec_to_lower = {}
 
-        cls = seq.meta[class_key]
-        if cls not in scalers:
-            raise ValueError(f"No scaler found for class '{cls}'.")
+    for rid in rec_ids:
+        sub = df[df["recording_id"] == rid] if rid is not None else df
+        up_val = sub[upper_key].iloc[0] if (upper_key in sub.columns and len(sub)) else None
+        lo_val = sub[lower_key].iloc[0] if (lower_key in sub.columns and len(sub)) else None
+        rec_to_upper[rid] = _parse_lane_markings(up_val)
+        rec_to_lower[rid] = _parse_lane_markings(lo_val)
 
-        mean, std = scalers[cls]
-        obs_scaled = (seq.obs - mean) / std
+    y = df[y_col].to_numpy(dtype=np.float64, copy=False)
+    d = df[dir_col].to_numpy(copy=False)
+    rid_arr = df["recording_id"].to_numpy(copy=False) if "recording_id" in df.columns else np.full(len(df), None)
 
-        out.append(
-            TrajectorySequence(
-                vehicle_id=seq.vehicle_id,
-                frames=seq.frames,
-                obs=obs_scaled,
-                obs_names=seq.obs_names,
-                recording_id=seq.recording_id,
-                meta=seq.meta,
-            )
-        )
+    lane_pos = np.full(len(df), -1, dtype=np.int64) # initialize as outside-lane by default
 
-    return out
+    for i in range(len(df)):
+        rid = rid_arr[i]
+        di = int(d[i]) if not pd.isna(d[i]) else -1
 
-def scale_sequences(sequences, mean, std):
-    """
-    Apply z-score feature scaling to a list of sequences.
-    Scaling is applied as:
-        obs_scaled = (obs - mean) / std
+        if di == 1:
+            marks = rec_to_upper.get(rid, np.asarray([], dtype=np.float64))
+        elif di == 2:
+            marks = rec_to_lower.get(rid, np.asarray([], dtype=np.float64))
+        else:
+            marks = np.asarray([], dtype=np.float64)
 
-    Parameters
-    sequences : sequence of TrajectorySequence
-        Input sequences to be scaled.
-    mean : np.ndarray
-        Feature-wise mean, shape (F,).
-    std : np.ndarray
-        Feature-wise std, shape (F,).
+        if marks.size < 2 or np.isnan(y[i]):
+            lane_pos[i] = -1
+            continue
 
-    Returns
-    list[TrajectorySequence]
-        New sequence objects containing scaled observations. Metadata (vehicle_id,
-        frames, obs_names, recording_id) is preserved.
-    """
-    out = []
-    for seq in sequences:
-        obs_scaled = (seq.obs - mean) / std
-        out.append(
-            TrajectorySequence(
-                vehicle_id=seq.vehicle_id,
-                frames=seq.frames,
-                obs=obs_scaled,
-                obs_names=seq.obs_names,
-                recording_id=seq.recording_id,
-                meta=seq.meta
-            )
-        )
-    return out
+        num_lanes = int(marks.size - 1)
+        j = int(np.searchsorted(marks, y[i], side="right") - 1)  # lane interval index
+        if j < 0 or j >= num_lanes:
+            lane_pos[i] = -1
+            continue
+
+        # Vehicle-centric left/right
+        j_vehicle = (num_lanes - 1) - j if di == 1 else j
+
+        if j_vehicle == 0:
+            lane_pos[i] = 0
+        elif j_vehicle == (num_lanes - 1):
+            lane_pos[i] = 2
+        else:
+            lane_pos[i] = 1
+
+    df["lane_pos"] = lane_pos
+    return df
 
 # ---------------------------------------------------------------------
 # Context features
@@ -386,9 +398,12 @@ def add_direction_aware_context_features(df):
         # existence mask before merge
         nid = out[id_col].fillna(0).astype("Int64")
         out[f"{prefix}_exists"] = (nid > 0).astype(np.float64)
-        out[id_col] = nid.mask(nid <= 0, pd.NA) # set missing neighbor IDs to NaN
+        out[id_col] = nid.mask(nid <= 0, pd.NA) # set missing neighbor IDs to NaN for merge
 
         out = _merge_neighbor_state(out, id_col, prefix)
+
+        if f"{prefix}_x" in out.columns:
+            out[f"{prefix}_exists"] = out[f"{prefix}_exists"] * (~out[f"{prefix}_x"].isna()).astype(np.float64) 
 
         # relative features (NaN if neighbor missing)
         out[f"{prefix}_dx"]  = out[f"{prefix}_x"]  - out["x"]
@@ -396,9 +411,154 @@ def add_direction_aware_context_features(df):
         out[f"{prefix}_dvx"] = out[f"{prefix}_vx"] - out["vx"]
         out[f"{prefix}_dvy"] = out[f"{prefix}_vy"] - out["vy"]
 
-        rel_cols = [f"{prefix}_dx", f"{prefix}_dy", f"{prefix}_dvx", f"{prefix}_dvy"]
-        miss = out[f"{prefix}_exists"] == 0.0
-        out.loc[miss, rel_cols] = 0.0
+        # direction-aware adjustments
+        if "dir_sign" in out.columns:
+            out[f"{prefix}_dx"] *= out["dir_sign"]
+            out[f"{prefix}_dy"] *= out["dir_sign"]
+
+    return out
+
+# ---------------------------------------------------------------------
+# Scaling utilities 
+# ---------------------------------------------------------------------
+def compute_feature_scaler_masked(sequences, scale_idx):
+    """
+    Compute per-feature mean and standard deviation from a set of sequences,
+    only for the features specified by scale_idx.
+
+    Parameters
+    sequences : sequence of TrajectorySequence
+        Sequences whose `.obs` arrays will be stacked along time.
+    scale_idx : list or np.ndarray
+        Indices of features to compute mean/std for.
+    
+    Returns
+    mean : np.ndarray
+        Feature-wise mean, shape (F,).
+    std : np.ndarray
+        Feature-wise standard deviation, shape (F,). Very small std values are
+        clamped to 1.0 to avoid division by near-zero during scaling.
+    """
+    if len(sequences) == 0:
+        raise ValueError("No sequences provided.")
+    
+    F = int(sequences[0].obs.shape[1])
+    scale_idx = np.asarray(list(scale_idx), dtype=int)
+
+    mean = np.zeros((F,), dtype=np.float64)
+    std = np.ones((F,), dtype=np.float64)
+
+    X = np.vstack([seq.obs for seq in sequences])
+    Xm = X[:, scale_idx]
+    mean_m = Xm.mean(axis=0)
+    std_m = Xm.std(axis=0)
+    std_m[std_m < 1e-6] = 1.0
+
+    mean[scale_idx] = mean_m
+    std[scale_idx] = std_m
+    return mean, std
+
+def compute_classwise_feature_scalers_masked(sequences, scale_idx, class_key="meta_class"):
+    """
+    Compute one *masked* scaler per class.
+
+    Parameters
+    sequences : list[TrajectorySequence]
+        Input sequences (usually training split only).
+    scale_idx : list or np.ndarray
+        Indices of features to compute mean/std for.
+    class_key : str
+        Key inside seq.meta indicating vehicle class.
+    
+    Returns
+    dict
+        Mapping: class_name -> (mean, std)
+    """
+    buckets = {}
+    for seq in sequences:
+        if not seq.meta or class_key not in seq.meta:
+            continue
+        cls = str(seq.meta[class_key])
+        buckets.setdefault(cls, []).append(seq)
+
+    scalers = {}
+    for cls, seqs in buckets.items():
+        scalers[cls] = compute_feature_scaler_masked(seqs, scale_idx=scale_idx)
+    return scalers
+
+def scale_sequences(sequences, mean, std):
+    """
+    Apply z-score feature scaling to a list of sequences.
+    Scaling is applied as:
+        obs_scaled = (obs - mean) / std
+
+    Parameters
+    sequences : sequence of TrajectorySequence
+        Input sequences to be scaled.
+    mean : np.ndarray
+        Feature-wise mean, shape (F,).
+    std : np.ndarray
+        Feature-wise std, shape (F,).
+
+    Returns
+    list[TrajectorySequence]
+        New sequence objects containing scaled observations. Metadata (vehicle_id,
+        frames, obs_names, recording_id) is preserved.
+    """
+    out = []
+    for seq in sequences:
+        obs_scaled = (seq.obs - mean) / std
+        out.append(
+            TrajectorySequence(
+                vehicle_id=seq.vehicle_id,
+                frames=seq.frames,
+                obs=obs_scaled,
+                obs_names=seq.obs_names,
+                recording_id=seq.recording_id,
+                meta=seq.meta
+            )
+        )
+    return out
+
+def scale_sequences_classwise(sequences, scalers, class_key="meta_class"):
+    """
+    Apply class-specific feature scaling to sequences.
+
+    Parameters
+    sequences : list[TrajectorySequence]
+        Sequences to scale.
+    scalers : dict
+        Mapping: class_name -> (mean, std)
+    class_key : str
+        Key inside seq.meta indicating vehicle class.
+
+    Returns
+    list[TrajectorySequence]
+        Scaled sequences.
+    """
+    out = []
+
+    for seq in sequences:
+        if seq.meta is None or class_key not in seq.meta:
+            raise ValueError("Sequence missing class information for class-wise scaling.")
+
+        cls = seq.meta[class_key]
+        if cls not in scalers:
+            raise ValueError(f"No scaler found for class '{cls}'.")
+
+        mean, std = scalers[cls]
+        obs_scaled = (seq.obs - mean) / std
+
+        out.append(
+            TrajectorySequence(
+                vehicle_id=seq.vehicle_id,
+                frames=seq.frames,
+                obs=obs_scaled,
+                obs_names=seq.obs_names,
+                recording_id=seq.recording_id,
+                meta=seq.meta,
+            )
+        )
 
     return out
 
@@ -438,16 +598,22 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
     # Try to load from cache
     if max_recordings is None and cache_path.exists() and not force_rebuild:
         print(f"[highd_loader] Loading cached DataFrame from: {cache_path}")
-        return pd.read_feather(cache_path)
+        df_cached = pd.read_feather(cache_path)
+
+        # ensure lane_pos exists even for older caches
+        if "lane_pos" not in df_cached.columns:
+            raise RuntimeError(
+                "Cached highD feather is missing lane_pos. Delete the cache or set force_rebuild=True "
+                "so lane_pos can be computed from recordingMeta lane markings."
+            )
+        return df_cached
     
     # Otherwise build from CSVs
     tracks_paths = sorted(root.glob("*_tracks.csv"))
     if not tracks_paths:
         raise RuntimeError(f"No *_tracks.csv files found in {root}")
     
-    rec_ids = [int(p.stem.split("_")[0]) for p in tracks_paths]
-    rec_ids = sorted(rec_ids)
-    
+    rec_ids = sorted([int(p.stem.split("_")[0]) for p in tracks_paths])
     if max_recordings is not None:
         rec_ids = rec_ids[:max_recordings]
         print(f"[load_highd_folder] Using only first {len(rec_ids)} recordings.")
@@ -469,9 +635,9 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
             df_tracksmeta = df_tracksmeta.rename(columns={"id": "vehicle_id"})
 
         # Prefix meta columns to avoid name collisions
-        meta_cols = [c for c in df_tracksmeta.columns if c != "vehicle_id"]
-        df_tracksmeta = df_tracksmeta[["vehicle_id"] + meta_cols].copy()
-        df_tracksmeta = df_tracksmeta.rename(columns={c: f"meta_{c}" for c in meta_cols})
+        tracksmeta_cols = [c for c in df_tracksmeta.columns if c != "vehicle_id"]  
+        df_tracksmeta = df_tracksmeta[["vehicle_id"] + tracksmeta_cols].copy()
+        df_tracksmeta = df_tracksmeta.rename(columns={c: f"meta_{c}" for c in tracksmeta_cols})  
 
         # RecordingMeta: usually one row; prefix as rec_
         if len(df_recmeta) >= 1:
@@ -492,11 +658,8 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
 
         # Apply vehicle-centric normalization
         if apply_vehicle_centric:
-            # highD tracksMeta commonly provides drivingDirection there
-            # after prefix it becomes meta_drivingDirection
             dir_col = "meta_drivingDirection" if "meta_drivingDirection" in df.columns else None
             if dir_col is not None:
-                # create a temporary un-prefixed column name expected by normalize function
                 df["drivingDirection"] = df[dir_col]
                 df = normalize_vehicle_centric(df, dir_col="drivingDirection", flip_longitudinal=True, flip_lateral=flip_lateral, flip_positions=flip_positions)
                 df = df.drop(columns=["drivingDirection"], errors="ignore")
@@ -504,6 +667,7 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
                 df["dir_sign"] = 1.0
         
         df = add_direction_aware_context_features(df)
+        df = add_lane_position_feature(df)
 
         dfs.append(df)
 
@@ -522,10 +686,36 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
     # cast types explicitly
     df_all["vehicle_id"] = df_all["vehicle_id"].astype(int)
     df_all["frame"] = df_all["frame"].astype(int)
-    df_all["lane_id"] = df_all["lane_id"].astype(int)
+    df_all["lane_pos"] = df_all["lane_pos"].astype(int)
     df_all["recording_id"] = df_all["recording_id"].astype(int)
-    for col in ["x", "y", "vx", "vy", "ax", "ay"]:
-        df_all[col] = df_all[col].astype(float)
+
+    float_base = ["x", "y", "vx", "vy", "ax", "ay"]  
+    float_rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")  
+    float_cols = []
+
+    for c in float_base:
+        if c in df_all.columns:
+            float_cols.append(c)
+    
+    for c in df_all.columns:  
+        if any(c.endswith(suf) for suf in float_rel_suffixes):  
+            float_cols.append(c) 
+    
+    float_cols = sorted(set(float_cols))
+
+    for c in float_cols:
+        df_all[c] = df_all[c].astype(float)
+    
+    for c in df_all.columns:  
+        if c.endswith("_exists"): 
+            df_all[c] = df_all[c].astype(float)  
+
+    df_all = prune_columns(
+        df_all,
+        feature_cols=BASELINE_FEATURE_COLS,  
+        meta_cols=META_COLS,                 
+        keep_extra=[],                       
+    )
 
     # Save cache for future calls only for full dataset
     if max_recordings is None:
@@ -535,7 +725,7 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
     return df_all
 
 # ---------------------------------------------------------------------
-# Sequences: keep obs clean, store meta in seq.meta
+# Sequences + split + pruning
 # ---------------------------------------------------------------------
 def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame",  meta_cols=None):
     """
@@ -628,110 +818,26 @@ def train_val_test_split(sequences, train_frac=0.7, val_frac=0.15):
 
     return pick(train_idx), pick(val_idx), pick(test_idx)
 
-# ---------------------------------------------------------------------
-# Main for quick sanity check
-# ---------------------------------------------------------------------
-def main():
-    """Quick sanity check for the highD loader."""
-    HIGH_D_ROOT = Path(
-        r"C:\Users\amalj\OneDrive\Desktop\Master's Thesis\Implementation\hdv\data\highd"
-    )
 
-    print("Loading highD data...")
-    df = load_highd_folder(
-        root=HIGH_D_ROOT,
-        max_recordings=2,          # limit for quick testing
-        apply_vehicle_centric=True,
-        flip_lateral=True,
-        flip_positions=False,
-    )
+def prune_columns(df, feature_cols, meta_cols=None, keep_extra=None):
+    """
+    Keep only essential columns to reduce memory usage.
 
-    print("DataFrame loaded.")
+    Keeps:
+      - keys: recording_id, vehicle_id, frame
+      - observation features (feature_cols)
+      - metadata (meta_cols)
+      - optional extras (keep_extra)
+    """
+    if meta_cols is None:
+        meta_cols = []
+    if keep_extra is None:
+        keep_extra = []
 
-    bad = df[(df["front_exists"] == 1) & (df["front_x"].isna())]
-    print("front_exists=1 but front_x is NaN:", len(bad))
+    base_cols = ["recording_id", "vehicle_id", "frame"]
+    keep = base_cols + list(feature_cols) + list(meta_cols) + list(keep_extra)
 
-    bad2 = df[(df["preceding_id"] == 0) & (df["front_exists"] == 1)]
-    print("preceding_id=0 but front_exists=1:", len(bad2))
+    # remove duplicates, keep only existing columns
+    keep = [c for c in dict.fromkeys(keep) if c in df.columns]
 
-
-    print("Columns:", list(df.columns))
-    print("Number of rows:", len(df))
-
-    # -----------------------------
-    # Feature + meta selection
-    # -----------------------------
-    # baseline feature set
-    feature_cols = [
-        "y","vx","vy","ax","ay","lane_id",
-        "front_exists","front_dx","front_dvx",
-        "rear_exists","rear_dx","rear_dvx",
-    ]
-    # extended feature set with more context
-    #feature_cols = [
-    #    "y","vx","vy","ax","ay","lane_id",
-    #    "front_exists","front_dx","front_dvx",
-    #    "rear_exists","rear_dx","rear_dvx",
-    #
-    #    "left_front_exists","left_front_dx","left_front_dvx",
-    #    "right_front_exists","right_front_dx","right_front_dvx",
-    #    "left_side_exists","left_side_dy",
-    #    "right_side_exists","right_side_dy",
-    #]
-
-    meta_cols = [
-        "meta_class",
-        "meta_drivingDirection"
-    ]
-
-    print("\nBuilding sequences...")
-    seqs = df_to_sequences(
-        df,
-        feature_cols=feature_cols,
-        meta_cols=meta_cols,
-    )
-
-    print(f"Total sequences: {len(seqs)}")
-
-    # -----------------------------
-    # Inspect a few sequences
-    # -----------------------------
-    for i, seq in enumerate(seqs[:3]):
-        print(f"\nSequence {i}")
-        print("  vehicle_id:", seq.vehicle_id)
-        print("  recording_id:", seq.recording_id)
-        print("  T:", seq.T)
-        print("  F:", seq.F)
-        print("  meta:", seq.meta)
-        print("  obs mean (first 3 features):", seq.obs.mean(axis=0)[:3])
-
-    # -----------------------------
-    # Train / val / test split
-    # -----------------------------
-    train_seqs, val_seqs, test_seqs = train_val_test_split(seqs)
-
-    print("\nSplit sizes:")
-    print("  train:", len(train_seqs))
-    print("  val  :", len(val_seqs))
-    print("  test :", len(test_seqs))
-
-    # -----------------------------
-    # Class-wise scaling
-    # -----------------------------
-    print("\nComputing class-wise scalers...")
-    scalers = compute_classwise_feature_scalers(train_seqs)
-
-    for cls, (mean, std) in scalers.items():
-        print(f"  class '{cls}': mean[0]={mean[0]:.3f}, std[0]={std[0]:.3f}")
-
-    train_scaled = scale_sequences_classwise(train_seqs, scalers)
-    val_scaled   = scale_sequences_classwise(val_seqs, scalers)
-    test_scaled  = scale_sequences_classwise(test_seqs, scalers)
-
-    print("\nScaling successful.")
-    print("Example scaled obs mean (train, first seq):",
-          train_scaled[0].obs.mean(axis=0)[:3])
-
-
-if __name__ == "__main__":
-    main()
+    return df[keep].copy()

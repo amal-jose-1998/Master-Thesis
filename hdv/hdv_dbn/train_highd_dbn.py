@@ -13,9 +13,17 @@ Pipeline
 from pathlib import Path
 import sys
 
-from .datasets import load_highd_folder, df_to_sequences, train_val_test_split, compute_feature_scaler, scale_sequences, compute_classwise_feature_scalers, scale_sequences_classwise
+from .datasets import (
+    load_highd_folder,
+    df_to_sequences,
+    train_val_test_split,
+    compute_feature_scaler_masked,  
+    scale_sequences,
+    compute_classwise_feature_scalers_masked,  
+    scale_sequences_classwise,
+)
 from .trainer import HDVTrainer
-from .config import TRAINING_CONFIG
+from .config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS, CONTINUOUS_FEATURES
 
 if TRAINING_CONFIG.use_wandb:
     import wandb
@@ -43,18 +51,17 @@ def main():
         sys.exit(1)
 
     # Observation features used by the emission model (baseline set)
-    feature_cols = [
-        "y", "vx", "vy", "ax", "ay", "lane_id",
-        "front_exists", "front_dx", "front_dvx",
-        "rear_exists",  "rear_dx",  "rear_dvx",
-    ]
+    feature_cols = BASELINE_FEATURE_COLS
     # Meta features for analysis / scaling choices
-    meta_cols = [
-        "meta_class",
-        "meta_drivingDirection"
-    ]
+    meta_cols = META_COLS
 
-    df[feature_cols] = df[feature_cols].fillna(0.0) # Fill NaNs in features with 0.0 (e.g., missing front/rear vehicle info)
+    scale_idx = [i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES] # scale exactly the continuous features from config
+
+    # Fill NaNs in features with 0.0 (e.g., missing front/rear vehicle info)
+    if "lane_pos" in feature_cols:
+        df["lane_pos"] = df["lane_pos"].fillna(-1)  # invalid/unknown stays -1
+    fill_cols = [c for c in feature_cols if c != "lane_pos"]  
+    df[fill_cols] = df[fill_cols].fillna(0.0)                 
 
     sequences = df_to_sequences(df, feature_cols=feature_cols, meta_cols=meta_cols)
     print(f"[train_highd_dbn] Total sequences (vehicles) loaded: {len(sequences)}")
@@ -64,18 +71,18 @@ def main():
     # Choose scaling strategy
     # -----------------------------
     if USE_CLASSWISE_SCALING:
-        scalers = compute_classwise_feature_scalers(train_seqs, class_key="meta_class")
-        train_seqs_scaled = scale_sequences_classwise(train_seqs, scalers, class_key="meta_class")
-        val_seqs_scaled   = scale_sequences_classwise(val_seqs, scalers, class_key="meta_class")
-        test_seqs_scaled  = scale_sequences_classwise(test_seqs, scalers, class_key="meta_class")
+        scalers = compute_classwise_feature_scalers_masked(train_seqs, scale_idx=scale_idx, class_key="meta_class")  
+        train_seqs_scaled = scale_sequences_classwise(train_seqs, scalers, class_key="meta_class")  
+        val_seqs_scaled   = scale_sequences_classwise(val_seqs, scalers, class_key="meta_class")    
+        test_seqs_scaled  = scale_sequences_classwise(test_seqs, scalers, class_key="meta_class")   
         scaler_to_store = scalers  # dict: {class -> (mean,std)}
     else:
-        train_mean, train_std = compute_feature_scaler(train_seqs) # compute scaler on training set
-        # scale all splits
+        train_mean, train_std = compute_feature_scaler_masked(train_seqs, scale_idx=scale_idx)  
         train_seqs_scaled = scale_sequences(train_seqs, train_mean, train_std)
         val_seqs_scaled   = scale_sequences(val_seqs, train_mean, train_std)
         test_seqs_scaled  = scale_sequences(test_seqs, train_mean, train_std)
         scaler_to_store = (train_mean, train_std)  # tuple: (mean,std)
+
     print(
         f"[train_highd_dbn] Split sizes -> "
         f"Train: {len(train_seqs)}  "
@@ -84,7 +91,8 @@ def main():
     )
 
     obs_dim = len(feature_cols)
-    trainer = HDVTrainer(obs_dim=obs_dim)
+    lane_K = 3 # valid {0,1,2}, ignore -1
+    trainer = HDVTrainer(obs_names=feature_cols, lane_num_categories=lane_K)
     # Store scalers for saving later (trainer.save will handle dict vs arrays after our patch below)
     if USE_CLASSWISE_SCALING:
         trainer.scaler_mean = {k: v[0] for k, v in scaler_to_store.items()}
