@@ -1,9 +1,24 @@
 from dataclasses import dataclass
 from typing import Tuple, Optional, Literal, List
 
+# =============================================================================
+# Latent state space configuration
+# =============================================================================
 @dataclass(frozen=True)
 class DBNStates:
-    """Dataclass to hold the different state categories for the DBN model."""
+    """
+    Container for the discrete latent state spaces used by the model.
+
+    The implementation uses a *joint* latent state:
+        z = (driving_style, action)
+    which is flattened into a single HMM/DBN-equivalent state index internally.
+    
+    Attributes
+    driving_style : Tuple[str, ...]
+        Names of discrete driving style states (e.g., conservative/normal/aggressive).
+    action : Tuple[str, ...]
+        Names of discrete maneuver/action states (e.g., keep_lane, lane_change_left, ...).
+    """
     driving_style: Tuple[str, ...]
     action: Tuple[str, ...]
    
@@ -20,10 +35,13 @@ DBN_STATES = DBNStates(
 
 # meta columns stored per sequence (not part of obs vector)
 META_COLS: List[str] = [
-    "meta_class",
-    "meta_drivingDirection",
+    "meta_class",           # vehicle class (e.g., car/truck)
+    "meta_drivingDirection",# driving direction (+1 or -1)
 ]
 
+# -----------------------------
+# Ego features
+# -----------------------------
 EGO_FEATURES: List[str] = [
     "y",
     "vx", "vy",
@@ -31,6 +49,9 @@ EGO_FEATURES: List[str] = [
     "lane_pos",
 ]
 
+# -----------------------------
+# Neighbor feature blocks
+# -----------------------------
 FRONT_FEATURES: List[str] = [
     "front_exists",
     "front_dx", "front_dy",
@@ -79,20 +100,31 @@ RIGHT_SIDE_FEATURES: List[str] = [
     "right_side_dvx", "right_side_dvy",
 ]     
 
+# Full baseline observation vector (feature order matters!)
 BASELINE_FEATURE_COLS: List[str] = (
-    EGO_FEATURES
+     EGO_FEATURES
     + FRONT_FEATURES
     + REAR_FEATURES
     + LEFT_FRONT_FEATURES
-    + LEFT_REAR_FEATURES
     + LEFT_SIDE_FEATURES
-    + RIGHT_SIDE_FEATURES 
+    + LEFT_REAR_FEATURES
     + RIGHT_FRONT_FEATURES
+    + RIGHT_SIDE_FEATURES
     + RIGHT_REAR_FEATURES
 )
 
-# discrete features (do NOT z-score scale; do NOT model with a plain Gaussian)
-# lane_pos is categorical; *_exists are binary masks.
+# -----------------------------
+# Discrete vs continuous split
+# -----------------------------
+"""
+Discrete features are handled by non-Gaussian emission components:
+  - lane_pos: categorical distribution
+  - *_exists: independent Bernoulli distributions
+
+Continuous features are modeled by a multivariate Gaussian per latent state.
+Only continuous features should be z-score normalized.
+"""
+
 DISCRETE_FEATURES: List[str] = [
     "lane_pos",
     "front_exists", "rear_exists",
@@ -100,61 +132,89 @@ DISCRETE_FEATURES: List[str] = [
     "right_front_exists", "right_side_exists", "right_rear_exists",   
 ]
 
-# continuous features = all baseline minus discrete
 CONTINUOUS_FEATURES: List[str] = [f for f in BASELINE_FEATURE_COLS if f not in DISCRETE_FEATURES]
-# =============================================================================
 
+# =============================================================================
+# Training configuration
+# =============================================================================
 @dataclass(frozen=True)
 class TrainingConfig:
     """
-    Global training-related configuration.
+    Global configuration for EM training and numerical settings.
 
+    EM / early stopping
     seed : int
-        Base random seed used for data splits and initialisation.
+        Random seed for reproducibility (splits, init, sampling).
     em_num_iters : int
         Maximum number of EM iterations.
-    em_tol : float
-        Convergence threshold for EM based on improvement in criterion.
-    verbose : int
-        Default verbosity level for training.
-            0 = no prints,
-            1 = per-iteration summary,
-            2 = detailed (more debug prints).
-    use_progress : bool
-        Whether to show tqdm progress bars during training.
+    early_stop_patience : int
+        Stop if no meaningful improvement is observed for this many iterations.
+    early_stop_min_delta_per_obs : float
+        Minimum increase in average log-likelihood per observation required
+        to be considered an improvement.
+    early_stop_delta_A_thresh : float
+        Minimum change in transition matrix A required; if A stabilizes below
+        this threshold, training may stop early.
+
+    Emission numerical stability
+    emission_jitter : float
+        Small diagonal term added to covariances for numerical stability.
+    min_cov_diag : float
+        Lower bound for covariance diagonal entries.
+    gauss_min_state_mass : float
+        Skip Gaussian parameter update for states with total responsibility mass
+        below this threshold.
+    gauss_min_eig : float
+        Minimum eigenvalue used when projecting covariances to SPD (Symmetric Positive Definite).
+
+    Data / initialization
+    use_classwise_scaling : bool
+        If True, compute separate scalers for different vehicle classes (e.g., car vs truck).
     max_kmeans_samples : int
-        Max number of samples for k-means initialisation.
-    max_highd_recordings : int | None
-        If not None, limit number of highD CSV recordings used (for debugging).
-    backend : str
-        Numerical backend identifier. Currently only "torch" is supported,
-        but this field allows future extension (e.g., "cupy").
-    device : str
-        Torch device string:
-            "cuda" → use NVIDIA GPU (if available)
-            "cpu"  → force CPU execution
-    dtype : str
-        Floating-point precision used for Torch tensors.
-            "float32" → faster, lower memory, usually sufficient
-            "float64" → higher precision, slower, safer for numerical stability
-    use_batched_padding : bool
-        If True, variable-length trajectories can be grouped into padded batches
-        with masking. This enables higher GPU utilization but requires additional
-        logic in the trainer.
-    batch_size_seqs : int
-        Number of trajectories per batch when padded batching is enabled.
+        Max number of observations used for k-means emission initialization.
+    max_highd_recordings : Optional[int]
+        If set, limit the number of recordings for debugging.
+
+    Runtime / logging
+    backend : Literal["torch"]
+        Numerical backend (currently Torch).
+    device : Literal["cuda", "cpu"]
+        Device selection.
+    dtype : Literal["float32", "float64"]
+        Floating point precision for Torch computations.
+    use_wandb : bool
+        Enable Weights & Biases logging.
+    wandb_project : str
+        W&B project name.
+    wandb_run_name : Optional[str]
+        W&B run name.
+
+    Transition initialization
+    cpd_init : Literal["uniform", "random", "sticky"]
+        How to initialize transition probabilities.
+    cpd_alpha : float
+        Strength of Dirichlet smoothing / pseudocounts for transitions.
+    cpd_stay_style : float
+        If using "sticky" init, prior probability of staying in the same style state.
+    cpd_seed : int
+        Seed used for random CPD initialization (kept separate for clarity).
     """
     seed: int = 123
-    em_num_iters: int = 2
+    em_num_iters: int = 100
+
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
     early_stop_delta_A_thresh: float = 1e-5
+
     verbose: int = 1
     use_progress: bool = True
     use_classwise_scaling: bool = True
+
     emission_jitter: float = 1e-6
     cat_alpha: float = 1.0
     min_cov_diag: float = 1e-5
+    gauss_min_state_mass: float = 50.0
+    gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
     max_highd_recordings: Optional[int] = None
@@ -167,12 +227,10 @@ class TrainingConfig:
     device: Literal["cuda", "cpu"] = "cuda"
     dtype: Literal["float32", "float64"] = "float64"
 
-    use_batched_padding: bool = False
-    batch_size_seqs: int = 64
-
     cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
-    cpd_seed: Optional[int] = 123
+    cpd_seed: int = 123
+    
 
 TRAINING_CONFIG = TrainingConfig()
