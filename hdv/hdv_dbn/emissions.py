@@ -27,6 +27,29 @@ from .config import DBN_STATES, TRAINING_CONFIG
 EPSILON = 1e-8
 MAX_JITTER_ATTEMPTS = 4
 
+# ---------------------------------------------------------------------
+# SPD projection (numerical stability)
+# ---------------------------------------------------------------------
+def _project_spd_torch(C, min_eig):
+    """
+    Project a symmetric matrix to Symmetric Positive Definite (SPD) form by
+    flooring eigenvalues.
+
+    Parameters
+    C : torch.Tensor, shape (D, D)
+        Input covariance-like matrix (may be slightly non-symmetric / indefinite).
+    min_eig : float
+        Minimum eigenvalue floor.
+
+    Returns
+    C_spd : torch.Tensor, shape (D, D)
+        Symmetric positive definite matrix suitable for Cholesky.
+    """
+    C_sym = 0.5 * (C + C.transpose(-1, -2))              # enforce symmetry
+    evals, evecs = torch.linalg.eigh(C_sym)              # stable for symmetric matrices
+    evals = torch.clamp(evals, min=min_eig)              # floor eigenvalues
+    return (evecs * evals.unsqueeze(-2)) @ evecs.transpose(-1, -2)
+
 # =============================================================================
 # Parameter containers
 # =============================================================================
@@ -111,8 +134,7 @@ class GaussianEmissionModel:
     # =========================================================================
     def to_device(self, device, dtype):
         """
-        Build caches on the target device/dtype.
-        Uses Cholesky when possible; falls back to pseudo-inverse for hard cases.
+        Build caches on the target device/dtype. Uses Cholesky.
 
         Parameters
         device : str | torch.device
@@ -158,10 +180,13 @@ class GaussianEmissionModel:
                     jitter *= 10.0
 
             if not ok:
+                # project covariance to SPD and compute inverse/logdet consistently via Cholesky
+                min_eig = float(getattr(TRAINING_CONFIG, "gauss_min_eig", 1e-4))
                 C2 = C + (1e-3 * eye)
-                cov_inv_t[z] = torch.linalg.pinv(C2)
-                sign, ld = torch.slogdet(C2)
-                logdet_t[z] = ld if sign > 0 else torch.tensor(0.0, device=self._device, dtype=self._dtype)
+                C2 = _project_spd_torch(C2, min_eig=min_eig)
+                L = torch.linalg.cholesky(C2)
+                cov_inv_t[z] = torch.cholesky_inverse(L)
+                logdet_t[z] = 2.0 * torch.log(torch.diagonal(L)).sum()
 
         self._means_t = means_t
         self._cov_inv_t = cov_inv_t
@@ -268,7 +293,10 @@ class GaussianEmissionModel:
             it = tqdm(it, total=len(obs_seqs), desc="M-step emissions (gauss)", leave=False)
 
         for obs, gamma in it:
-            x = torch.as_tensor(obs, device=device, dtype=dtype)
+            if torch.is_tensor(obs):
+                x = obs.to(device=device, dtype=dtype)  # MOD: explicit move/cast
+            else:
+                x = torch.as_tensor(obs, device=device, dtype=dtype)
             g = gamma if torch.is_tensor(gamma) else torch.as_tensor(gamma, device=device, dtype=dtype)
             g = g.to(device=device, dtype=dtype)
 
@@ -277,21 +305,54 @@ class GaussianEmissionModel:
             sum_x += g.T @ x              # (N,D)
             sum_xx += torch.einsum("tn,td,te->nde", g, x, x)  # (N,D,D)
 
-        mean = sum_x / (weights[:, None] + EPSILON) 
-        cov = (sum_xx / (weights[:, None, None] + EPSILON)) - torch.einsum("nd,ne->nde", mean, mean) 
+        mean_new = sum_x / (weights[:, None] + EPSILON)  # (N,D)
+        cov_new = (sum_xx / (weights[:, None, None] + EPSILON)) - torch.einsum("nd,ne->nde", mean_new, mean_new)  # (N,D,D)
 
         min_diag = float(getattr(TRAINING_CONFIG, "min_cov_diag", 1e-5))
-        cov = cov.clone()
-        diag = torch.diagonal(cov, dim1=-2, dim2=-1)
-        cov.diagonal(dim1=-2, dim2=-1).copy_(torch.clamp(diag, min=min_diag))
-        cov = cov + (float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6)) * torch.eye(D, device=device, dtype=dtype))[None, :, :]
+        jitter = float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6))
+        min_mass = float(getattr(TRAINING_CONFIG, "gauss_min_state_mass", 50.0))     
+        min_eig = float(getattr(TRAINING_CONFIG, "gauss_min_eig", 1e-4))             
+        eye = torch.eye(D, device=device, dtype=dtype)
 
+        #get previous params (for low-mass states)
+        prev_means = torch.as_tensor(
+            np.vstack([self.params[self._z_to_sa(z)[0], self._z_to_sa(z)[1]].mean for z in range(N)]),
+            device=device, dtype=dtype
+        )
+        prev_covs = torch.as_tensor(
+            np.stack([self.params[self._z_to_sa(z)[0], self._z_to_sa(z)[1]].cov for z in range(N)], axis=0),
+            device=device, dtype=dtype
+        )
+        
+        mean = prev_means.clone()  # start from old params
+        cov = prev_covs.clone()
+
+        for z in range(N):
+            if float(weights[z].detach().cpu().item()) < min_mass:
+                continue  # keep previous mean/cov for near-empty states
+
+            Cz = cov_new[z]
+            Cz = 0.5 * (Cz + Cz.T)  # symmetrize
+
+            # floor diagonal
+            d = torch.diagonal(Cz, 0)
+            Cz = Cz.clone()
+            Cz.diagonal(0).copy_(torch.clamp(d, min=min_diag))
+
+            # add jitter then project SPD
+            Cz = Cz + jitter * eye
+            Cz = _project_spd_torch(Cz, min_eig=min_eig)
+
+            mean[z] = mean_new[z]
+            cov[z] = Cz
+        
         mean_np = mean.detach().cpu().numpy()
         cov_np = cov.detach().cpu().numpy()
 
         for z in range(N):
             s, a = self._z_to_sa(z)
             self.params[s, a] = GaussianParams(mean=mean_np[z], cov=cov_np[z])
+
 
         self.invalidate_cache()
         return weights.detach().cpu().numpy()
@@ -450,18 +511,16 @@ class MixedEmissionModel:
         lane_p_t = torch.as_tensor(self.lane_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0)
         self._lane_logp_t = torch.log(lane_p_t)
 
-    def loglik_all_states(self, obs):
+    def loglik_parts_all_states(self, obs): 
         """
-        This is the main emission evaluator. Compute logB[t,z] = log p(o_t | z) for all t and all states z.
+        Compute emission log-likelihood parts for one trajectory, for all states:
+          - Gaussian part (continuous dims) -> (T, N)
+          - Bernoulli part (binary dims)    -> (T, N)   [already summed over bin features]
+          - Lane categorical part           -> (T, N)   [0 for invalid lane frames]
 
-        Parameters
-        obs : np.ndarray | torch.Tensor
-            Observation sequence of shape (T, obs_dim).
-        
         Returns
-        logB : torch.Tensor
-            Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
-        """
+        (logp_gauss, logp_bern, logp_lane) each torch.Tensor of shape (T, N).
+        """ 
         if (
             self._lane_logp_t is None
             or (self.bin_dim > 0 and self._bern_p_t is None)
@@ -490,31 +549,47 @@ class MixedEmissionModel:
 
         # (1) Gaussian part
         x_cont = x[:, self.cont_idx] if self.cont_dim > 0 else x[:, :0] # (T,cont_dim)
-        logp = self.gauss.loglik_all_states(x_cont)  # (T,N) 
+        logp_gauss = self.gauss.loglik_all_states(x_cont)  # (T,N) 
 
-        # (2) Bernoulli part for *_exists
+        # (2) Bernoulli part (summed over binary features)
         if self.bin_dim > 0:
-            xb = x[:, self.bin_idx].clamp(0.0, 1.0)          # (T,B)
-            p = self._bern_p_t[None, :, :]                   # (1,N,B)
-            xb = xb[:, None, :]                              # (T,1,B)
-            # Compute per time/state/feature
-            logp_bern = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)  # (T,N,B)
-            # sums over feature, adds to logp
-            logp = logp + logp_bern.sum(dim=2)               # (T,N)
+            xb = x[:, self.bin_idx].clamp(0.0, 1.0)       # (T,B)
+            p = self._bern_p_t[None, :, :]                # (1,N,B)
+            xb = xb[:, None, :]                           # (T,1,B)
+            logp_bern_full = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)  # (T,N,B)
+            logp_bern = logp_bern_full.sum(dim=2)         # (T,N)
+        else:
+            logp_bern = torch.zeros_like(logp_gauss)
 
-        # (3) Categorical lane_pos
-        lane_col = x[:, self.lane_idx]                          # (T,)
-        # treat non-finite values as invalid (maps to missing)
+        # (3) Lane categorical part (0 for invalid frames)
+        logp_lane = torch.zeros_like(logp_gauss)
+        lane_col = x[:, self.lane_idx]  # (T,)
         lane_col = torch.where(torch.isfinite(lane_col), lane_col, torch.tensor(-1.0, device=x.device, dtype=x.dtype))
-        
         lane_raw = lane_col.round().to(torch.long)               # (T,)
-        valid = (lane_raw >= 0) & (lane_raw < self.lane_K)       # valid lane categories only
+        valid = (lane_raw >= 0) & (lane_raw < self.lane_K) # valid lane categories only
         if valid.any():
-            lane_valid = lane_raw[valid]                       # (Tv,)
-            logp_lane_valid = self._lane_logp_t[:, lane_valid] # (N,Tv)
-            # only add for valid frames; invalid frames add 0 (uninformative)
-            logp[valid] = logp[valid] + logp_lane_valid.T
+            lane_valid = lane_raw[valid]                        # (Tv,)
+            logp_lane_valid = self._lane_logp_t[:, lane_valid]  # (N,Tv)
+            logp_lane[valid] = logp_lane_valid.T                # (Tv,N)
 
+        return logp_gauss, logp_bern, logp_lane
+
+    def loglik_all_states(self, obs):
+        """
+        This is the main emission evaluator. Compute 
+        logB[t,z] = log p(o_t | z) = logp_gauss + logp_bern + logp_lane 
+        for all t and all states z.
+
+        Parameters
+        obs : np.ndarray | torch.Tensor
+            Observation sequence of shape (T, obs_dim).
+        
+        Returns
+        logB : torch.Tensor
+            Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
+        """
+        logp_gauss, logp_bern, logp_lane = self.loglik_parts_all_states(obs)  
+        logp = logp_gauss +  logp_bern + logp_lane
         return logp
 
     def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress, verbose):
@@ -544,9 +619,8 @@ class MixedEmissionModel:
 
         N = self.num_states
         # allocate accumulators
-        weights = torch.zeros((N,), device=device, dtype=dtype)
-        sum_bin = torch.zeros((N, self.bin_dim), device=device, dtype=dtype) if self.bin_dim > 0 else None
-        lane_counts = torch.zeros((N, self.lane_K), device=device, dtype=dtype)
+        sum_bin = torch.zeros((N, self.bin_dim), device=device, dtype=dtype) if self.bin_dim > 0 else None # for Bernoulli MLE
+        lane_counts = torch.zeros((N, self.lane_K), device=device, dtype=dtype) # for categorical MLE
 
         cont_obs_seqs = []
 
@@ -559,10 +633,8 @@ class MixedEmissionModel:
             g = gamma if torch.is_tensor(gamma) else torch.as_tensor(gamma, device=device, dtype=dtype)
             g = g.to(device=device, dtype=dtype)
 
-            weights += g.sum(dim=0)
-
             if self.bin_dim > 0:
-                xb = x[:, self.bin_idx].clamp(0.0, 1.0)  # (T,B)
+                xb = (x[:, self.bin_idx] > 0.5).to(dtype=dtype)
                 sum_bin += g.T @ xb                      # (N,B)
 
             # ignore invalid lane_pos == -1
@@ -574,13 +646,13 @@ class MixedEmissionModel:
             if valid.any():
                 lane_valid = lane_raw[valid]                               # (Tv,)
                 g_valid = g[valid]                                         # (Tv,N)
-                lane_oh = torch.nn.functional.one_hot(lane_valid, num_classes=self.lane_K).to(dtype=dtype)                                          # (Tv,K)
+                lane_oh = torch.nn.functional.one_hot(lane_valid, num_classes=self.lane_K).to(dtype=dtype)    # (Tv,K)
                 lane_counts += g_valid.T @ lane_oh                          # (N,K)
 
             if self.cont_dim > 0:
-                cont_obs_seqs.append(x[:, self.cont_idx].detach().cpu().numpy())
+                cont_obs_seqs.append(x[:, self.cont_idx].detach())  # (T, cont_dim)
             else:
-                cont_obs_seqs.append(np.zeros((x.shape[0], 0), dtype=np.float64))
+                cont_obs_seqs.append(torch.empty((x.shape[0], 0), device=device, dtype=dtype)) 
 
         # Gaussian update (continuous)
         weights_np = self.gauss.update_from_posteriors(
@@ -589,10 +661,11 @@ class MixedEmissionModel:
                                     use_progress=use_progress,
                                     verbose=verbose,
                                 )
-
+        
+        weights_t = torch.as_tensor(weights_np, device=device, dtype=dtype)  # (N,)
         # Bernoulli update
         if self.bin_dim > 0:
-            p = sum_bin / (weights[:, None] + EPSILON)  # (N,B)
+            p = sum_bin / (weights_t[:, None] + EPSILON)  # (N,B)  # MOD
             p = p.clamp(EPSILON, 1.0 - EPSILON)
             self.bern_p = p.detach().cpu().numpy()
 
