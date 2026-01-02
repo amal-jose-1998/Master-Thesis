@@ -2,14 +2,14 @@
 Mixed emission model for an HMM / DBN-equivalent formulation with joint latent state z.
 
 Observation vector o_t is partitioned into:
-  (1) Continuous features  o_t[cont]  -> Multivariate Gaussian per state
-  (2) Binary features      o_t[bin_d]  -> Independent Bernoulli per state (e.g., *_exists)
-  (3) Categorical feature  o_t[cat_c]  -> Categorical per state (e.g., lane_pos)
+  (1) Continuous features  o_t[cont]  -> Diagonal Gaussian per state (with optional gating masks)
+  (2) Binary features      o_t[bin_d] -> Independent Bernoulli per state (e.g., *_exists)
+  (3) Categorical feature  o_t[cat_c] -> Categorical per state (e.g., lane_pos)
 
 Likelihood factorization (conditional independence given z):
   Factorization (conditional independence given z):
     p(o_t | z) =
-        N(o_t[cont] ; mu_z, Sigma_z)
+        N_diag(o_t[cont] ; mu_z, diag(var_z))   [with gating for missing relative dims]
         * Π_d Bern(o_t[bin_d] ; p_zd)
         * Π_c Cat(o_t[cat_c] ; pi_zc)
 """
@@ -25,30 +25,6 @@ from .config import DBN_STATES, TRAINING_CONFIG
 # Numerical stability
 # ---------------------------------------------------------------------
 EPSILON = 1e-8
-MAX_JITTER_ATTEMPTS = 4
-
-# ---------------------------------------------------------------------
-# SPD projection (numerical stability)
-# ---------------------------------------------------------------------
-def _project_spd_torch(C, min_eig):
-    """
-    Project a symmetric matrix to Symmetric Positive Definite (SPD) form by
-    flooring eigenvalues.
-
-    Parameters
-    C : torch.Tensor, shape (D, D)
-        Input covariance-like matrix (may be slightly non-symmetric / indefinite).
-    min_eig : float
-        Minimum eigenvalue floor.
-
-    Returns
-    C_spd : torch.Tensor, shape (D, D)
-        Symmetric positive definite matrix suitable for Cholesky.
-    """
-    C_sym = 0.5 * (C + C.transpose(-1, -2))              # enforce symmetry
-    evals, evecs = torch.linalg.eigh(C_sym)              # stable for symmetric matrices
-    evals = torch.clamp(evals, min=min_eig)              # floor eigenvalues
-    return (evecs * evals.unsqueeze(-2)) @ evecs.transpose(-1, -2)
 
 # =============================================================================
 # Parameter containers
@@ -56,16 +32,18 @@ def _project_spd_torch(C, min_eig):
 @dataclass(frozen=True)
 class GaussianParams:
     """
-    Mean/covariance for one multivariate Gaussian.
+    Mean and *diagonal* variance for one Gaussian.
+    We model the continuous emission as a diagonal Gaussian per joint state:
+        p(x | z) = N(x; mean_z, diag(var_z))
 
     Attributes
     mean : np.ndarray
-        Mean vector of shape (D,)
-    cov : np.ndarray
-        Covariance matrix of shape (D,D)
+        Mean vector, shape (D,).
+    var : np.ndarray
+        Variance vector (diagonal of covariance), shape (D,).
     """
-    mean: np.ndarray  
-    cov: np.ndarray   
+    mean: np.ndarray
+    var: np.ndarray
 
 
 # =============================================================================
@@ -73,7 +51,12 @@ class GaussianParams:
 # =============================================================================
 class GaussianEmissionModel:
     """
-    Multivariate Gaussian per joint state z = (style, action).
+    Diagonal Gaussian emission model (continuous features), with optional gating masks.
+
+    Gating (mask):
+      For each time t and dimension d, a mask m[t,d] in {0,1} indicates whether that
+      continuous dimension is valid/observed. Log-likelihood and M-step statistics
+      only include dimensions where m[t,d] == 1.
 
     Provides:
       - loglik_all_states(x): (T, N) log-likelihoods for all states
@@ -100,16 +83,17 @@ class GaussianEmissionModel:
         for s in range(self.num_style):
             for a in range(self.num_action):
                 self.params[s, a] = GaussianParams(
-                                        mean=np.zeros(self.obs_dim, dtype=np.float64),
-                                        cov=np.eye(self.obs_dim, dtype=np.float64),
-                                    )
+                    mean=np.zeros(self.obs_dim, dtype=np.float64),
+                    var=np.ones(self.obs_dim, dtype=np.float64),
+                )
 
         # Torch caches
         self._device = torch.device("cpu")
         self._dtype = torch.float32
-        self._means_t = None     # (N,D), where N = num_states and D = obs_dim
-        self._cov_inv_t = None   # (N,D,D)
-        self._logdet_t = None    # (N,)
+        self._means_t = None    # (N,D)
+        self._var_t = None      # (N,D)
+        self._inv_var_t = None  # (N,D)
+        self._log_var_t = None  # (N,D)
 
     # =========================================================================
     # Internal mapping helpers
@@ -148,62 +132,39 @@ class GaussianEmissionModel:
 
         N, D = self.num_states, self.obs_dim
         means = np.zeros((N, D), dtype=np.float64)
-        covs = np.zeros((N, D, D), dtype=np.float64)
+        var = np.ones((N, D), dtype=np.float64)
 
         for z in range(N):
             s, a = self._z_to_sa(z)
             means[z] = self.params[s, a].mean
-            covs[z] = self.params[s, a].cov
+            var[z] = self.params[s, a].var
 
         means_t = torch.as_tensor(means, device=self._device, dtype=self._dtype)
-        covs_t = torch.as_tensor(covs, device=self._device, dtype=self._dtype)
+        var_t = torch.as_tensor(var, device=self._device, dtype=self._dtype)
 
-        cov_inv_t = torch.empty_like(covs_t)
-        logdet_t = torch.empty((N,), device=self._device, dtype=self._dtype)
-
-        eye = torch.eye(D, device=self._device, dtype=self._dtype)
-        base_jitter = float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6))
-        
-        # Precompute cov_inv and logdet with jittered Cholesky
-        for z in range(N):
-            C = covs_t[z]
-            jitter = base_jitter
-            ok = False
-            for _ in range(MAX_JITTER_ATTEMPTS):
-                try:
-                    L = torch.linalg.cholesky(C + jitter * eye)
-                    cov_inv_t[z] = torch.cholesky_inverse(L)
-                    logdet_t[z] = 2.0 * torch.log(torch.diagonal(L)).sum()
-                    ok = True
-                    break
-                except Exception:
-                    jitter *= 10.0
-
-            if not ok:
-                # project covariance to SPD and compute inverse/logdet consistently via Cholesky
-                min_eig = float(getattr(TRAINING_CONFIG, "gauss_min_eig", 1e-4))
-                C2 = C + (1e-3 * eye)
-                C2 = _project_spd_torch(C2, min_eig=min_eig)
-                L = torch.linalg.cholesky(C2)
-                cov_inv_t[z] = torch.cholesky_inverse(L)
-                logdet_t[z] = 2.0 * torch.log(torch.diagonal(L)).sum()
+        # numerical floors
+        min_diag = float(getattr(TRAINING_CONFIG, "min_cov_diag", 1e-5))
+        jitter = float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6))
+        var_t = torch.clamp(var_t, min=min_diag) + jitter
 
         self._means_t = means_t
-        self._cov_inv_t = cov_inv_t
-        self._logdet_t = logdet_t
+        self._var_t = var_t
+        self._inv_var_t = 1.0 / var_t
+        self._log_var_t = torch.log(var_t)
 
     def invalidate_cache(self):
         """
         Invalidate Torch caches. They will be rebuilt on next use.
         """
         self._means_t = None
-        self._cov_inv_t = None
-        self._logdet_t = None
+        self._var_t = None
+        self._inv_var_t = None
+        self._log_var_t = None
 
     # =========================================================================
     # Likelihood evaluation
     # =========================================================================
-    def loglik_all_states(self, obs_cont):
+    def loglik_all_states(self, obs_cont, mask=None):
         """
         Vectorized evaluation of log-likelihoods for ALL states and ALL time steps.
         Computes:
@@ -213,6 +174,8 @@ class GaussianEmissionModel:
         Parameters
         obs_cont : np.ndarray | torch.Tensor
             Observation sequence of shape (T, obs_dim) with continuous features only.
+        mask : (T,D) or None
+            Optional gating mask (0/1). If provided, only masked-in dims contribute.
 
         Returns
         logB : torch.Tensor
@@ -224,7 +187,7 @@ class GaussianEmissionModel:
             T = int(x.shape[0]) if hasattr(x, "shape") else 0
             return torch.zeros((T, self.num_states), device=self._device, dtype=self._dtype)
 
-        if self._means_t is None or self._cov_inv_t is None or self._logdet_t is None:
+        if self._means_t is None or self._inv_var_t is None or self._log_var_t is None:
             dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
             dtype = torch.float32 if dtype_str == "float32" else torch.float64
             device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
@@ -236,27 +199,46 @@ class GaussianEmissionModel:
         else:
             x = x.to(device=self._device, dtype=self._dtype)
 
+        if x.ndim != 2:
+            raise ValueError(f"Expected obs_cont with shape (T,D), got {tuple(x.shape)}")
         T, D = x.shape
         if D != self.obs_dim:
             raise ValueError(f"GaussianEmissionModel expected obs_dim={self.obs_dim}, got {D}")
 
-        diff = x[:, None, :] - self._means_t[None, :, :]               # (T,N,D) => xt​−μz​
-        tmp = torch.einsum("tnd,ndk->tnk", diff, self._cov_inv_t)      # (T,N,D)
-        maha = torch.einsum("tnk,tnd->tn", tmp, diff)                  # (T,N)
+        if mask is None:
+            m = None
+        else:
+            m = mask
+            if not torch.is_tensor(m):
+                m = torch.as_tensor(m, device=self._device, dtype=self._dtype)
+            else:
+                m = m.to(device=self._device, dtype=self._dtype)
+            if m.shape != x.shape:
+                raise ValueError(f"mask shape {tuple(m.shape)} must match obs_cont shape {tuple(x.shape)}")
+            m = (m > 0.5).to(dtype=self._dtype)
 
-        const = float(self.obs_dim) * math.log(2.0 * math.pi)
-        return -0.5 * (const + self._logdet_t[None, :] + maha)  # (T,N)
+        # log N(x; mu, var) = -0.5 * [log(2π) + log(var) + (x-mu)^2 / var]
+        diff = x[:, None, :] - self._means_t[None, :, :]            # (T,N,D)
+        quad = (diff * diff) * self._inv_var_t[None, :, :]          # (T,N,D)
+        per_dim = -0.5 * (math.log(2.0 * math.pi) + self._log_var_t[None, :, :] + quad)  # (T,N,D)
+
+        if m is not None:
+            per_dim = per_dim * m[:, None, :]
+
+        return per_dim.sum(dim=2)  # (T,N)
 
     # =========================================================================
     # EM M-step update
     # =========================================================================
-    def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress, verbose):
+    def update_from_posteriors(self, obs_seqs, gamma_seqs, mask_seqs=None, use_progress=False, verbose=0):
         """
-        M-step update for Gaussian params using responsibilities gamma[t,z].
+        M-step update for Gaussian params using responsibilities gamma[t,z] (with optional masks).
             gamma[t, z] = P(Z_t = z | O_1:T)
-        For each state z, the updates are:
-            μ_z = (∑_t gamma[t,z] o_t) / (∑_t gamma[t,z])
-            Σ_z = (∑_t gamma[t,z] (o_t - μ_z)(o_t - μ_z)^T) / (∑_t gamma[t,z])
+        With masks m[t,d]:
+            W[z,d]   = Σ_t γ[t,z] m[t,d]
+            μ[z,d]   = Σ_t γ[t,z] m[t,d] x[t,d]   / W[z,d]
+            E[x^2]   = Σ_t γ[t,z] m[t,d] x[t,d]^2 / W[z,d]
+            var[z,d] = E[x^2] - μ[z,d]^2
 
         Parameters
         obs_seqs : list of np.ndarray
@@ -284,78 +266,90 @@ class GaussianEmissionModel:
         self.to_device(device=device, dtype=dtype)
 
         # init accumulators
-        weights = torch.zeros((N,), device=device, dtype=dtype) # shape (N,) total responsibility per state
-        sum_x = torch.zeros((N, D), device=device, dtype=dtype) # shape (N,D) weighted sum of observations
-        sum_xx = torch.zeros((N, D, D), device=device, dtype=dtype) # shape (N,D,D) weighted sum of outer products
+        weights_z = torch.zeros((N,), device=device, dtype=dtype)        # (N,)
+        weights_zd = torch.zeros((N, D), device=device, dtype=dtype)     # (N,D)
+        sum_x = torch.zeros((N, D), device=device, dtype=dtype)          # (N,D)
+        sum_x2 = torch.zeros((N, D), device=device, dtype=dtype)         # (N,D)
 
-        it = zip(obs_seqs, gamma_seqs)
+        if mask_seqs is None:
+            mask_seqs = [None] * len(obs_seqs)
+        if len(mask_seqs) != len(obs_seqs):
+            raise ValueError("mask_seqs must be None or have the same length as obs_seqs")
+
+        it = zip(obs_seqs, gamma_seqs, mask_seqs)
         if use_progress:
-            it = tqdm(it, total=len(obs_seqs), desc="M-step emissions (gauss)", leave=False)
+            it = tqdm(it, total=len(obs_seqs), desc="M-step emissions (gauss-diag)", leave=False)
 
-        for obs, gamma in it:
-            if torch.is_tensor(obs):
-                x = obs.to(device=device, dtype=dtype)  # MOD: explicit move/cast
-            else:
-                x = torch.as_tensor(obs, device=device, dtype=dtype)
+        for obs, gamma, mask in it:
+            x = obs if torch.is_tensor(obs) else torch.as_tensor(obs, device=device, dtype=dtype)
             g = gamma if torch.is_tensor(gamma) else torch.as_tensor(gamma, device=device, dtype=dtype)
+            x = x.to(device=device, dtype=dtype)
             g = g.to(device=device, dtype=dtype)
 
-            w = g.sum(dim=0)              # (N,)
-            weights += w
-            sum_x += g.T @ x              # (N,D)
-            sum_xx += torch.einsum("tn,td,te->nde", g, x, x)  # (N,D,D)
+            if x.ndim != 2 or x.shape[1] != D:
+                raise ValueError(f"Expected obs_cont shape (T,{D}), got {tuple(x.shape)}")
+            if g.ndim != 2 or g.shape[1] != N:
+                raise ValueError(f"Expected gamma shape (T,{N}), got {tuple(g.shape)}")
 
-        mean_new = sum_x / (weights[:, None] + EPSILON)  # (N,D)
-        cov_new = (sum_xx / (weights[:, None, None] + EPSILON)) - torch.einsum("nd,ne->nde", mean_new, mean_new)  # (N,D,D)
+            # state mass
+            w = g.sum(dim=0)  # (N,)
+            weights_z += w
+
+            # mask
+            if mask is None:
+                m = torch.ones((x.shape[0], D), device=device, dtype=dtype)
+            else:
+                m = mask if torch.is_tensor(mask) else torch.as_tensor(mask, device=device, dtype=dtype)
+                m = m.to(device=device, dtype=dtype)
+                if m.shape != x.shape:
+                    raise ValueError(f"mask shape {tuple(m.shape)} must match obs_cont shape {tuple(x.shape)}")
+                m = (m > 0.5).to(dtype=dtype)
+
+            # Weighted sums, per (z,d)
+            weights_zd += g.T @ m
+            sum_x += g.T @ (m * x)
+            sum_x2 += g.T @ (m * (x * x))
+
+        mean_new = sum_x / (weights_zd + EPSILON)                 # (N,D)
+        ex2 = sum_x2 / (weights_zd + EPSILON)                     # (N,D)
+        var_new = ex2 - mean_new * mean_new                       # (N,D)
 
         min_diag = float(getattr(TRAINING_CONFIG, "min_cov_diag", 1e-5))
         jitter = float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6))
-        min_mass = float(getattr(TRAINING_CONFIG, "gauss_min_state_mass", 50.0))     
-        min_eig = float(getattr(TRAINING_CONFIG, "gauss_min_eig", 1e-4))             
-        eye = torch.eye(D, device=device, dtype=dtype)
+        min_mass = float(getattr(TRAINING_CONFIG, "gauss_min_state_mass", 50.0))
 
         #get previous params (for low-mass states)
         prev_means = torch.as_tensor(
             np.vstack([self.params[self._z_to_sa(z)[0], self._z_to_sa(z)[1]].mean for z in range(N)]),
             device=device, dtype=dtype
         )
-        prev_covs = torch.as_tensor(
-            np.stack([self.params[self._z_to_sa(z)[0], self._z_to_sa(z)[1]].cov for z in range(N)], axis=0),
+        prev_vars = torch.as_tensor(
+            np.vstack([self.params[self._z_to_sa(z)[0], self._z_to_sa(z)[1]].var for z in range(N)]),
             device=device, dtype=dtype
         )
         
-        mean = prev_means.clone()  # start from old params
-        cov = prev_covs.clone()
+        mean = prev_means.clone()
+        var = prev_vars.clone()
 
         for z in range(N):
-            if float(weights[z].detach().cpu().item()) < min_mass:
-                continue  # keep previous mean/cov for near-empty states
+            if float(weights_z[z].detach().cpu().item()) < min_mass:
+                continue
+            # only update dims that actually had effective observations
+            obs_ok = weights_zd[z] > 1.0
+            if obs_ok.any():
+                mean[z, obs_ok] = mean_new[z, obs_ok]
+                var[z, obs_ok] = torch.clamp(var_new[z, obs_ok], min=min_diag) + jitter
 
-            Cz = cov_new[z]
-            Cz = 0.5 * (Cz + Cz.T)  # symmetrize
-
-            # floor diagonal
-            d = torch.diagonal(Cz, 0)
-            Cz = Cz.clone()
-            Cz.diagonal(0).copy_(torch.clamp(d, min=min_diag))
-
-            # add jitter then project SPD
-            Cz = Cz + jitter * eye
-            Cz = _project_spd_torch(Cz, min_eig=min_eig)
-
-            mean[z] = mean_new[z]
-            cov[z] = Cz
         
         mean_np = mean.detach().cpu().numpy()
-        cov_np = cov.detach().cpu().numpy()
+        var_np = var.detach().cpu().numpy()
 
         for z in range(N):
             s, a = self._z_to_sa(z)
-            self.params[s, a] = GaussianParams(mean=mean_np[z], cov=cov_np[z])
-
+            self.params[s, a] = GaussianParams(mean=mean_np[z], var=var_np[z])
 
         self.invalidate_cache()
-        return weights.detach().cpu().numpy()
+        return weights_z.detach().cpu().numpy()
 
     # =========================================================================
     # Saving / loading helpers
@@ -368,19 +362,19 @@ class GaussianEmissionModel:
         means : np.ndarray
             Shape (num_style, num_action, obs_dim)
 
-        covs : np.ndarray
-            Shape (num_style, num_action, obs_dim, obs_dim)
+        vars : np.ndarray
+            Shape (num_style, num_action, obs_dim)
         """
         means = np.zeros((self.num_style, self.num_action, self.obs_dim), dtype=np.float64)
-        covs = np.zeros((self.num_style, self.num_action, self.obs_dim, self.obs_dim), dtype=np.float64)
+        vars_ = np.zeros((self.num_style, self.num_action, self.obs_dim), dtype=np.float64)
         for s in range(self.num_style):
             for a in range(self.num_action):
                 p = self.params[s, a]
                 means[s, a] = p.mean
-                covs[s, a] = p.cov
-        return means, covs
+                vars_[s, a] = p.var
+        return means, vars_
 
-    def from_arrays(self, means, covs):
+    def from_arrays(self, means, covs_or_vars):
         """
         Load Gaussian parameters from dense arrays in (style, action) layout.
 
@@ -388,23 +382,31 @@ class GaussianEmissionModel:
         means : np.ndarray
             Shape (num_style, num_action, obs_dim)
 
-        covs : np.ndarray
-            Shape (num_style, num_action, obs_dim, obs_dim)
+        covs_or_vars : np.ndarray
+            Shape (num_style, num_action, obs_dim, obs_dim) or (num_style, num_action, obs_dim)
         """
         exp_means = (self.num_style, self.num_action, self.obs_dim)
-        exp_covs = (self.num_style, self.num_action, self.obs_dim, self.obs_dim)
-
         if means.shape != exp_means:
             raise ValueError(f"means has shape {means.shape}, expected {exp_means}")
-        if covs.shape != exp_covs:
-            raise ValueError(f"covs has shape {covs.shape}, expected {exp_covs}")
-        
+
+        # accept either vars (S,A,D) or legacy covs (S,A,D,D)
+        if covs_or_vars.ndim == 3:
+            vars_ = covs_or_vars
+        elif covs_or_vars.ndim == 4:
+            vars_ = np.diagonal(covs_or_vars, axis1=-2, axis2=-1)
+        else:
+            raise ValueError("covs_or_vars must have ndim 3 (vars) or 4 (covs)")
+
+        exp_vars = (self.num_style, self.num_action, self.obs_dim)
+        if vars_.shape != exp_vars:
+            raise ValueError(f"vars has shape {vars_.shape}, expected {exp_vars}")
+
         for s in range(self.num_style):
             for a in range(self.num_action):
                 self.params[s, a] = GaussianParams(
-                                        mean=np.asarray(means[s, a], dtype=np.float64),
-                                        cov=np.asarray(covs[s, a], dtype=np.float64),
-                                    )
+                    mean=np.asarray(means[s, a], dtype=np.float64),
+                    var=np.asarray(vars_[s, a], dtype=np.float64),
+                )
         self.invalidate_cache()
 
 # =============================================================================
@@ -414,7 +416,7 @@ class MixedEmissionModel:
     """
     Hybrid emission model over the full observation vector (T, F), split by names:
 
-      - Continuous indices: GaussianEmissionModel
+      - Continuous indices: GaussianEmissionModel (diagonal) with gating for relative dims
       - Binary indices (*_exists): independent Bernoulli per state
       - Categorical indices (default: lane_pos): categorical per state
 
@@ -457,16 +459,31 @@ class MixedEmissionModel:
         self.lane_name = lane_name
         self.lane_idx = int(self.obs_names.index(lane_name)) # index of lane_pos feature
 
-        self.bin_idx = [i for i, n in enumerate(self.obs_names) if n.endswith(exists_suffix)] # indices where name ends with _exists
+        self.bin_idx = [i for i, n in enumerate(self.obs_names) if n.endswith(exists_suffix)]
+        bin_set = set(self.bin_idx)
 
         # continuous = everything except categorical and binary
-        bin_set = set(self.bin_idx)
         self.cont_idx = [i for i in range(self.obs_dim) if i != self.lane_idx and i not in bin_set]
-        
+
+        # Gating map for neighbor-relative continuous features 
+        # Any continuous feature ending with _dx/_dy/_dvx/_dvy will be gated by its corresponding *_exists
+        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")
+        name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
+        self._cont_rel_gate = []  # list of (cont_local_idx, exists_global_idx)
+        for local_j, global_j in enumerate(self.cont_idx):
+            fname = self.obs_names[global_j]
+            for suf in rel_suffixes:
+                if fname.endswith(suf):
+                    prefix = fname[: -len(suf)]
+                    ex_name = f"{prefix}_exists"
+                    if ex_name in name_to_idx:
+                        self._cont_rel_gate.append((local_j, int(name_to_idx[ex_name])))
+                    break
+
         # store dimensions
         self.cont_dim = len(self.cont_idx)
         self.bin_dim = len(self.bin_idx)
-        self.lane_K = int(lane_num_categories) # should be 3 for valid lanes {0,1,2}
+        self.lane_K = int(lane_num_categories)
         if self.lane_K < 2:
             raise ValueError("lane_num_categories must be >= 2")
 
@@ -549,7 +566,13 @@ class MixedEmissionModel:
 
         # (1) Gaussian part
         x_cont = x[:, self.cont_idx] if self.cont_dim > 0 else x[:, :0] # (T,cont_dim)
-        logp_gauss = self.gauss.loglik_all_states(x_cont)  # (T,N) 
+        if self.cont_dim > 0 and self._cont_rel_gate:
+            mask_cont = torch.ones((x.shape[0], self.cont_dim), device=x.device, dtype=self._dtype)
+            for local_j, ex_idx in self._cont_rel_gate:
+                mask_cont[:, local_j] = (x[:, ex_idx] > 0.5).to(dtype=self._dtype)
+        else:
+            mask_cont = None
+        logp_gauss = self.gauss.loglik_all_states(x_cont, mask=mask_cont)  # (T,N) 
 
         # (2) Bernoulli part (summed over binary features)
         if self.bin_dim > 0:
@@ -623,6 +646,7 @@ class MixedEmissionModel:
         lane_counts = torch.zeros((N, self.lane_K), device=device, dtype=dtype) # for categorical MLE
 
         cont_obs_seqs = []
+        cont_mask_seqs = []
 
         it = zip(obs_seqs, gamma_seqs)
         if use_progress:
@@ -633,11 +657,12 @@ class MixedEmissionModel:
             g = gamma if torch.is_tensor(gamma) else torch.as_tensor(gamma, device=device, dtype=dtype)
             g = g.to(device=device, dtype=dtype)
 
+            # Bernoulli update
             if self.bin_dim > 0:
                 xb = (x[:, self.bin_idx] > 0.5).to(dtype=dtype)
                 sum_bin += g.T @ xb                      # (N,B)
 
-            # ignore invalid lane_pos == -1
+            # Categorical update (ignore invalid lane_pos == -1)
             lane_col = x[:, self.lane_idx]
             lane_col = torch.where(torch.isfinite(lane_col), lane_col, torch.tensor(-1.0, device=x.device, dtype=x.dtype))
             lane_raw = lane_col.round().to(torch.long)
@@ -648,31 +673,44 @@ class MixedEmissionModel:
                 g_valid = g[valid]                                         # (Tv,N)
                 lane_oh = torch.nn.functional.one_hot(lane_valid, num_classes=self.lane_K).to(dtype=dtype)    # (Tv,K)
                 lane_counts += g_valid.T @ lane_oh                          # (N,K)
-
+            
+            # Continuous + mask for gated diagonal Gaussian
             if self.cont_dim > 0:
-                cont_obs_seqs.append(x[:, self.cont_idx].detach())  # (T, cont_dim)
-            else:
-                cont_obs_seqs.append(torch.empty((x.shape[0], 0), device=device, dtype=dtype)) 
+                cont_x = x[:, self.cont_idx].detach()
+                cont_obs_seqs.append(cont_x)
 
-        # Gaussian update (continuous)
+                if self._cont_rel_gate:
+                    m = torch.ones((x.shape[0], self.cont_dim), device=device, dtype=dtype)
+                    for local_j, ex_idx in self._cont_rel_gate:
+                        m[:, local_j] = (x[:, ex_idx] > 0.5).to(dtype=dtype)
+                    cont_mask_seqs.append(m)
+                else:
+                    cont_mask_seqs.append(None)
+            else:
+                cont_obs_seqs.append(torch.empty((x.shape[0], 0), device=device, dtype=dtype))
+                cont_mask_seqs.append(None)
+
+        # Gaussian update (continuous, diagonal, gated)
         weights_np = self.gauss.update_from_posteriors(
-                                    obs_seqs=cont_obs_seqs,
-                                    gamma_seqs=gamma_seqs,
-                                    use_progress=use_progress,
-                                    verbose=verbose,
-                                )
+            obs_seqs=cont_obs_seqs,
+            gamma_seqs=gamma_seqs,
+            mask_seqs=cont_mask_seqs,
+            use_progress=use_progress,
+            verbose=verbose,
+        )
         
         weights_t = torch.as_tensor(weights_np, device=device, dtype=dtype)  # (N,)
-        # Bernoulli update
+
+        # Bernoulli MLE
         if self.bin_dim > 0:
-            p = sum_bin / (weights_t[:, None] + EPSILON)  # (N,B)  # MOD
+            p = sum_bin / (weights_t[:, None] + EPSILON)
             p = p.clamp(EPSILON, 1.0 - EPSILON)
             self.bern_p = p.detach().cpu().numpy()
 
-        # Categorical update with additive smoothing
+        # Categorical (Dirichlet smoothing)
         alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
         lane_p = (lane_counts + alpha)
-        lane_p = lane_p / (lane_p.sum(dim=1, keepdim=True) + EPSILON)  # (N,K)
+        lane_p = lane_p / (lane_p.sum(dim=1, keepdim=True) + EPSILON)
         self.lane_p = lane_p.detach().cpu().numpy()
 
         self.invalidate_cache()
@@ -689,7 +727,14 @@ class MixedEmissionModel:
         payload : Dict[str, np.ndarray]
             Dictionary of NumPy arrays representing the model parameters.
         """
-        g_means, g_covs = self.gauss.to_arrays()
+        g_means, g_vars = self.gauss.to_arrays()
+
+        # Backward-compatible diagonal covariance export
+        S, A, D = g_vars.shape
+        g_covs = np.zeros((S, A, D, D), dtype=np.float64)
+        diag_idx = np.arange(D)
+        g_covs[:, :, diag_idx, diag_idx] = g_vars
+        
         return dict(
             obs_names=np.array(self.obs_names, dtype=object),
             lane_name=np.array([self.lane_name], dtype=object),
@@ -698,6 +743,7 @@ class MixedEmissionModel:
             bin_idx=np.array(self.bin_idx, dtype=np.int64),
             lane_idx=np.array([self.lane_idx], dtype=np.int64),
             gauss_means=g_means,
+            gauss_vars=g_vars,
             gauss_covs=g_covs,
             bern_p=np.asarray(self.bern_p, dtype=np.float64),
             lane_p=np.asarray(self.lane_p, dtype=np.float64),
@@ -728,8 +774,28 @@ class MixedEmissionModel:
         self.cont_dim = len(self.cont_idx)
         self.bin_dim = len(self.bin_idx)
 
+        # rebuild gating map
+        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")
+        name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
+        self._cont_rel_gate = []
+        for local_j, global_j in enumerate(self.cont_idx):
+            fname = self.obs_names[global_j]
+            for suf in rel_suffixes:
+                if fname.endswith(suf):
+                    prefix = fname[: -len(suf)]
+                    ex_name = f"{prefix}_exists"
+                    if ex_name in name_to_idx:
+                        self._cont_rel_gate.append((local_j, int(name_to_idx[ex_name])))
+                    break
+
         self.gauss = GaussianEmissionModel(obs_dim=self.cont_dim)
-        self.gauss.from_arrays(payload["gauss_means"], payload["gauss_covs"])
+
+        g_means = payload["gauss_means"]
+        if "gauss_vars" in payload:
+            g_second = payload["gauss_vars"]
+        else:
+            g_second = payload["gauss_covs"]  # legacy checkpoints
+        self.gauss.from_arrays(g_means, g_second)
 
         self.bern_p = np.asarray(payload["bern_p"], dtype=np.float64)
         self.lane_p = np.asarray(payload["lane_p"], dtype=np.float64)
