@@ -45,9 +45,9 @@ def build_joint_transition_matrix(hdv_dbn):
 
     Returns
     pi_z : np.ndarray
-        Shape (N,), N = S*A.
+        Joint initial distribution. Shape (N,), N = S*A.
     A_zz : np.ndarray
-        Shape (N, N), row-stochastic.
+        Joint transition matrix. Shape (N, N).
     """
     S = int(hdv_dbn.num_style)
     A = int(hdv_dbn.num_action)
@@ -287,6 +287,7 @@ class HDVTrainer:
         self.emissions.to_device(device=self.device, dtype=self.dtype)
         
         prev_criterion = None 
+        prev_train_ll_full = None  # for EM monotonicity check
 
         if verbose:
             print("\n==================== EM TRAINING START ====================\n")
@@ -339,6 +340,29 @@ class HDVTrainer:
                 use_progress=use_progress,
                 verbose=verbose,
             )
+
+            # ----------------------
+            # EM monotonicity check (FULL log-likelihood)
+            # ----------------------
+            train_ll_after = self._total_loglik_on_dataset(
+                obs_seqs=train_obs_seqs,
+                use_progress=False,
+                desc=None,
+            )
+
+            if prev_train_ll_full is not None:
+                delta_ll = train_ll_after - prev_train_ll_full
+                if verbose:
+                    print(f"  EM monotonicity check: ΔLL = {delta_ll:.6e}")
+                if delta_ll < -1e-6:
+                    print(
+                        "  WARNING: EM monotonicity violated! "
+                        f"(ΔLL = {delta_ll:.3e})"
+                    )
+            else:
+                delta_ll = np.nan
+
+            prev_train_ll_full = train_ll_after
             
             # ----------------------
             # Compute validation log-likelihood (if available)
@@ -353,10 +377,10 @@ class HDVTrainer:
                 if verbose:
                     print("Validation E-step:")
                 val_ll = self._total_loglik_on_dataset(
-                    obs_seqs=val_obs_seqs,
-                    use_progress=use_progress,
-                    desc=f"E-step val (iter {it+1})",
-                )
+                            obs_seqs=val_obs_seqs,
+                            use_progress=use_progress,
+                            desc=f"E-step val (iter {it+1})",
+                        )
                 if verbose:
                     print(f"  Total val loglik: {val_ll:.3f}")
                 # Scale-invariant criterion: average loglik per timestep
@@ -390,6 +414,8 @@ class HDVTrainer:
                     val_obs_seqs=val_obs_seqs,
                     A_prev=A_prev,
                     A_new=A_new,
+                    delta_ll=delta_ll,
+                    train_ll_after=train_ll_after
                 )
                 continue
 
@@ -438,6 +464,8 @@ class HDVTrainer:
                 val_obs_seqs=val_obs_seqs,
                 A_prev=A_prev,
                 A_new=A_new,
+                delta_ll=delta_ll,
+                train_ll_after=train_ll_after
             )
             
         if verbose:
@@ -636,7 +664,7 @@ class HDVTrainer:
     # WandB logging helper
     # ------------------------------------------------------------------
     def _log_wandb_iteration(self, wandb_run, it, iter_start, total_train_loglik, total_val_loglik, improvement, criterion_for_stop, val_num_obs, train_num_obs, 
-                             delta_pi, delta_A, state_weights_flat, total_responsibility_mass, state_weights_frac, val_obs_seqs, A_prev, A_new):
+                             delta_pi, delta_A, state_weights_flat, total_responsibility_mass, state_weights_frac, val_obs_seqs, A_prev, A_new, delta_ll, train_ll_after):
         """
         Log per-iteration metrics to Weights & Biases.
 
@@ -685,18 +713,13 @@ class HDVTrainer:
         A_np = self.A_zz.detach().cpu().numpy()  
 
         # Emission stats
-        g_means, g_covs = self.emissions.gauss.to_arrays()  # (S,A,cont_dim), (S,A,cont_dim,cont_dim)  # MOD
-        cont_dim = int(self.emissions.cont_dim)  # MOD
-        means_2d = g_means.reshape(self.num_states, cont_dim)  # MOD
-        covs_2d = g_covs.reshape(self.num_states, cont_dim, cont_dim)  # MOD
-        cov_traces = np.trace(covs_2d, axis1=1, axis2=2)  # MOD
+        g_means, g_vars = self.emissions.gauss.to_arrays()  # (S,A,cont_dim), (S,A,cont_dim)
+        cont_dim = int(self.emissions.cont_dim)
+        means_2d = g_means.reshape(self.num_states, cont_dim)
+        vars_2d  = g_vars.reshape(self.num_states, cont_dim)
+        cov_traces = vars_2d.sum(axis=1) # "trace" analogue for diagonal covariance is sum of variances
 
-        cov_logdets = []
-        for z in range(self.num_states):
-            s = z // self.A
-            a = z % self.A
-            sign, logdet = np.linalg.slogdet(self.emissions.gauss.params[s, a].cov)  # MOD
-            cov_logdets.append(logdet if sign > 0 else np.nan)
+        cov_logdets = np.sum(np.log(vars_2d + 1e-15), axis=1)
 
         mean_norms = np.linalg.norm(means_2d, axis=1)
 
@@ -713,17 +736,21 @@ class HDVTrainer:
             "train/delta_A": float(delta_A), # Mean absolute difference between old and new transition matrices
             "train/log_delta_A": float(np.log10(delta_A + 1e-15)),
             "emissions/total_responsibility_mass": total_responsibility_mass, # Sum of γ over all trajectories, time steps, and states; ie. total number of time steps across all sequences
-            "emissions/cov_logdet": cov_logdets,
+            "emissions/cov_logdet_mean": float(np.mean(cov_logdets)),
+            "emissions/cov_logdet_std": float(np.std(cov_logdets)),
             "pi/entropy": pi_entropy,
             "pi/max": pi_max,
             "pi/min": pi_min
         }
+        metrics["em/monotonicity_delta_ll"] = delta_ll
+
         metrics["early_stop/criterion"] = criterion_for_stop
         metrics["early_stop/source"] = "val" if val_obs_seqs is not None else "train"
         metrics["early_stop/improvement_per_obs"] = float(improvement) if np.isfinite(improvement) else np.nan
         # Here "observation" refers to a single timestep in a trajectory.
-
         metrics["train/loglik_per_obs"] = total_train_loglik / max(train_num_obs, 1)
+        metrics["train/loglik_after_m"] = float(train_ll_after)  
+        metrics["train/loglik_after_m_per_obs"] = float(train_ll_after) / max(train_num_obs, 1)  
 
         if val_obs_seqs is not None:
             metrics["val/loglik"] = total_val_loglik # Sum of log-likelihood on the validation set
@@ -731,6 +758,13 @@ class HDVTrainer:
         else:
             metrics["val/loglik"] = np.nan
 
+        bern_p = getattr(self.emissions, "bern_p", None)
+        if bern_p is not None and self.emissions.bin_dim > 0:
+            bern_p = np.asarray(bern_p, dtype=np.float64)  # (N,B)
+            bern_mean_state = bern_p.mean(axis=1)
+            metrics["bern/mean_overall"] = float(bern_p.mean())
+            metrics["bern/mean_state_std"] = float(bern_mean_state.std())
+            
         try:
 
             # π bar plot
@@ -808,10 +842,10 @@ class HDVTrainer:
             # covariance trace per state 
             fig_ct, ax_ct = plt.subplots()
             ax_ct.plot(np.arange(self.num_states), cov_traces, marker="o")
-            ax_ct.set_title("Covariance trace per state Tr(Σ_z)")
+            ax_ct.set_title("Diagonal variance sum per state Σ_d var_zd") 
             ax_ct.set_xlabel("joint state z")
-            ax_ct.set_ylabel("trace")
-            metrics["emissions/cov_trace_plot"] = wandb.Image(fig_ct)
+            ax_ct.set_ylabel("sum of variances")  # MOD
+            metrics["emissions/var_sum_plot"] = wandb.Image(fig_ct)  
             plt.close(fig_ct)
         except Exception:
             pass
@@ -861,11 +895,10 @@ class HDVTrainer:
             Xc = X_all_cont
             print(f"  Using all {N_total} points for k-means initialisation.")
 
-        # Global covariance as a fallback if a cluster has too few points
-        global_cov = np.cov(Xc, rowvar=False) + 1e-6 * np.eye(cont_dim)
-        if np.any(np.isnan(global_cov)):
-            print("  WARNING: Global covariance contains NaN. Using identity matrix.")
-            global_cov = np.eye(cont_dim)
+        # global variance (diag) as fallback
+        global_var = np.var(Xc, axis=0) + 1e-6  
+        global_var = np.where(np.isfinite(global_var), global_var, 1.0) 
+        global_var = np.maximum(global_var, 1e-6)  
 
         # ---- Fast clustering ----
         mbk = MiniBatchKMeans(
@@ -885,16 +918,20 @@ class HDVTrainer:
 
             if num_points < cont_dim + 1:
                 mean_z = centers[z]
-                cov_z = global_cov.copy()
+                var_z = global_var.copy() 
                 if TRAINING_CONFIG.verbose >= 1:
-                    print(f"  Cluster z={z:02d}: only {num_points} points -> using global covariance fallback.")
+                    print(f"  Cluster z={z:02d}: only {num_points} points -> using global var fallback.")  
             else:
                 X_z = Xc[mask]
                 mean_z = X_z.mean(axis=0)
-                cov_z = np.cov(X_z, rowvar=False) + 1e-6 * np.eye(cont_dim)
+                var_z = np.var(X_z, axis=0) + 1e-6  # diagonal var
 
-            s, a = self.emissions.gauss._z_to_sa(z)  
-            self.emissions.gauss.params[s, a] = GaussianParams(mean=mean_z, cov=cov_z)  
+                # stability clamp
+                var_z = np.where(np.isfinite(var_z), var_z, global_var)
+                var_z = np.maximum(var_z, 1e-6)
+
+            s, a = self.emissions.gauss._z_to_sa(z)
+            self.emissions.gauss.params[s, a] = GaussianParams(mean=mean_z, var=var_z)  
         
         # -----------------------------
         # Discrete parts (Bernoulli + lane categorical)
@@ -977,17 +1014,17 @@ class HDVTrainer:
             "bin_idx",
             "lane_idx",
             "gauss_means",
-            "gauss_covs",
+            "gauss_vars",   
             "bern_p",
             "lane_p",
         }
+        em_dict = self.emissions.to_arrays()  
         missing = [k for k in sorted(required) if k not in em_dict]
         if missing:
             raise ValueError(
                 f"MixedEmissionModel.to_arrays() is missing keys: {missing}. "
                 "Check emissions.py to_arrays()/from_arrays() implementation."
             )
-        em_dict = self.emissions.to_arrays()  
 
         laneK_header = int(payload["lane_num_categories"][0])
         laneK_em = int(np.asarray(em_dict["lane_K"]).reshape(-1)[0])
@@ -1051,9 +1088,8 @@ class HDVTrainer:
 
         obs_names = [str(x) for x in list(data["obs_names"])]  
         lane_K = int(np.asarray(data["lane_num_categories"]).ravel()[0])  
-        obs_dim = len(obs_names)  
 
-        trainer = cls(obs_dim=obs_dim, obs_names=obs_names, lane_num_categories=lane_K)  
+        trainer = cls(obs_names=obs_names, lane_num_categories=lane_K)  
 
         # ------------------------------------------------------------------
         # Restore transitions
@@ -1073,13 +1109,17 @@ class HDVTrainer:
                 em_payload[k[len("em__"):]] = data[k]
 
         # Minimal required keys for the mixed model
-        required = {"obs_names", "lane_K", "cont_idx", "bin_idx", "lane_idx", "gauss_means", "gauss_covs", "bern_p", "lane_p"}
-        missing = [k for k in sorted(required) if k not in em_payload]
-        if missing:
+        required_base = {"obs_names", "lane_K", "cont_idx", "bin_idx", "lane_idx", "gauss_means", "bern_p", "lane_p"}  
+        missing_base = [k for k in sorted(required_base) if k not in em_payload]
+        if missing_base:
             raise ValueError(
-                f"Checkpoint is missing emission keys: {missing}. "
+                f"Checkpoint is missing emission keys: {missing_base}. "
                 "Re-save the model using the updated save() implementation."
             )
+
+        # require at least one of vars/covs
+        if ("gauss_vars" not in em_payload) and ("gauss_covs" not in em_payload):
+            raise ValueError("Checkpoint must contain either 'gauss_vars' (new) or 'gauss_covs' (legacy).")  
 
         trainer.emissions.from_arrays(em_payload)
         trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)

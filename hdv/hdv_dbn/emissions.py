@@ -331,14 +331,16 @@ class GaussianEmissionModel:
         mean = prev_means.clone()
         var = prev_vars.clone()
 
-        for z in range(N):
-            if float(weights_z[z].detach().cpu().item()) < min_mass:
-                continue
-            # only update dims that actually had effective observations
-            obs_ok = weights_zd[z] > 1.0
-            if obs_ok.any():
-                mean[z, obs_ok] = mean_new[z, obs_ok]
-                var[z, obs_ok] = torch.clamp(var_new[z, obs_ok], min=min_diag) + jitter
+        # vectorized low-mass mask + observed-dim mask
+        mass_ok = (weights_z >= min_mass)[:, None]          # (N,1) boolean
+        obs_ok = (weights_zd > 1.0)                         # (N,D) boolean
+        upd = mass_ok & obs_ok                              # (N,D)
+
+        mean = prev_means.clone()
+        var = prev_vars.clone()
+
+        mean[upd] = mean_new[upd]
+        var[upd] = torch.clamp(var_new[upd], min=min_diag) + jitter
 
         
         mean_np = mean.detach().cpu().numpy()
@@ -542,8 +544,8 @@ class MixedEmissionModel:
             self._lane_logp_t is None
             or (self.bin_dim > 0 and self._bern_p_t is None)
             or self.gauss._means_t is None
-            or self.gauss._cov_inv_t is None
-            or self.gauss._logdet_t is None
+            or self.gauss._inv_var_t is None
+            or self.gauss._log_var_t is None
         ):
             dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
             dtype = torch.float32 if dtype_str == "float32" else torch.float64
@@ -647,6 +649,7 @@ class MixedEmissionModel:
 
         cont_obs_seqs = []
         cont_mask_seqs = []
+        gamma_cont_seqs = []
 
         it = zip(obs_seqs, gamma_seqs)
         if use_progress:
@@ -656,6 +659,7 @@ class MixedEmissionModel:
             x = torch.as_tensor(obs, device=device, dtype=dtype)
             g = gamma if torch.is_tensor(gamma) else torch.as_tensor(gamma, device=device, dtype=dtype)
             g = g.to(device=device, dtype=dtype)
+            gamma_cont_seqs.append(g) 
 
             # Bernoulli update
             if self.bin_dim > 0:
@@ -693,7 +697,7 @@ class MixedEmissionModel:
         # Gaussian update (continuous, diagonal, gated)
         weights_np = self.gauss.update_from_posteriors(
             obs_seqs=cont_obs_seqs,
-            gamma_seqs=gamma_seqs,
+            gamma_seqs=gamma_cont_seqs,
             mask_seqs=cont_mask_seqs,
             use_progress=use_progress,
             verbose=verbose,
