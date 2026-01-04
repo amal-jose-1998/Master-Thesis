@@ -1,40 +1,60 @@
+"""
+Lane-change count analysis utilities.
+
+This module computes lane-change counts per trajectory and provides simple
+histogram plots. It also includes a validation routine against highD tracksMeta
+(numLaneChanges).
+"""
+
+import json
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import pandas as pd
-import json
 
-from pathlib import Path
-# -----------------------------
+
+# =========================================================
 # Core computations
-# -----------------------------
+# =========================================================
+
 def count_lane_changes(lane_id):
     """
     Count lane changes in a lane-id sequence.
 
     Parameters
-    lane_id : np.ndarray, shape (T,)
-        Lane id per frame.
+    ----------
+    lane_id : array-like
+        Lane id per frame (length T).
 
     Returns
+    -------
     int
         Number of indices t where lane_id[t] != lane_id[t-1].
     """
-    if lane_id is None or lane_id.size <= 1:
+    if lane_id is None:
+        return 0
+    lane_id = np.asarray(lane_id)
+    if lane_id.size <= 1:
         return 0
     return int(np.sum(lane_id[1:] != lane_id[:-1]))
 
+
 def _as_1d_int(x):
     """
-    Convert to 1D int array or return None if unusable.
+    Convert to a 1D int array. Returns None if unusable.
 
     Parameters
-    x : array-like or None
+    ----------
+    x : array-like | None
 
     Returns
-    np.ndarray, shape (N,), dtype int64, or None
-    
+    -------
+    np.ndarray | None
+        1D int array or None.
     """
     if x is None:
         return None
@@ -43,77 +63,106 @@ def _as_1d_int(x):
         return None
     return a.astype(np.int64, copy=False)
 
-def compute_lane_change_arrays(trajs, lane_key="lane_id"):
+
+def compute_lane_change_counts(trajs, lane_key="lane_id"):
     """
-    Extract two arrays from trajectories:
-    - lane_changes_per_traj: (N,)
-    - dwell_times_frames: (M,)
+    Compute lane-change count for each trajectory.
 
     Parameters
+    ----------
     trajs : iterable of dict
+        Per-trajectory dicts.
     lane_key : str
+        Key for lane-id sequence. If missing, "laneId" is tried.
 
     Returns
-    (lc, dwell)
-        lc: np.ndarray[int64], shape (N,)
-        dwell: np.ndarray[int64], shape (M,)
+    -------
+    np.ndarray
+        Counts per usable trajectory (length N).
     """
     lane_changes = []
-
     for tr in trajs:
         lane = _as_1d_int(tr.get(lane_key, None))
         if lane is None:
-            lane = _as_1d_int(tr.get("laneId", None))  # highD fallback
-        if lane is None or lane.size <= 0:
+            lane = _as_1d_int(tr.get("laneId", None))
+        if lane is None or lane.size == 0:
             continue
-
         lane_changes.append(count_lane_changes(lane))
+    return np.asarray(lane_changes, dtype=np.int64)
 
-    lc = np.asarray(lane_changes, dtype=np.int64)
-    return lc
 
-# -----------------------------
+# =========================================================
 # Plot helpers
-# -----------------------------
+# =========================================================
+
 def _finite_1d(x):
     """
-    Return finite values as 1D float array.
+    Return finite values as a 1D float array.
 
     Parameters
-    x : array-like or None
+    ----------
+    x : array-like | None
 
     Returns
-    np.ndarray, shape (N,), dtype float
+    -------
+    np.ndarray
+        Finite float values.
     """
     if x is None:
         return np.array([], dtype=float)
     a = np.asarray(x).astype(float, copy=False).ravel()
     return a[np.isfinite(a)]
 
+
 def _save_hist(values, out_path, title, xlabel, ylabel="count", bins=60):
+    """
+    Save a histogram plot to disk.
+
+    Parameters
+    ----------
+    values : array-like
+        Data to histogram.
+    out_path : str | Path
+        Output png.
+    title : str
+        Plot title.
+    xlabel : str
+        X label.
+    ylabel : str
+        Y label.
+    bins : int
+        Histogram bins.
+    """
     v = _finite_1d(values)
     if v.size == 0:
         return
+
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
     plt.figure()
     plt.hist(v, bins=bins, edgecolor="black", alpha=0.7)
     plt.title(title)
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-
     plt.tight_layout()
     plt.savefig(out_path, dpi=200)
     plt.close()
 
+
 def _lane_change_frequency_dict(lc):
     """
-    Compute lane-change frequency dict.
+    Compute a frequency dict for show/recording.
+
     Parameters
-    lc : array-like, shape (N,)
-        Number of lane changes per trajectory.
+    ----------
+    lc : array-like
+        Lane-change counts per trajectory.
+
     Returns
+    -------
     dict
-        Return frequency dict: how many trajectories have k lane changes.
+        {"total_trajectories": N, "counts": {"0": c0, "1": c1, ...}}
     """
     lc = np.asarray(lc, dtype=np.int64)
     if lc.size == 0:
@@ -125,61 +174,59 @@ def _lane_change_frequency_dict(lc):
         "counts": {str(int(k)): int(v) for k, v in zip(uniq, cnt)},
     }
 
-# -----------------------------
+
+# =========================================================
 # Public API
-# -----------------------------
+# =========================================================
+
 def save_lane_change_plots(out_dir, trajs, lane_key="lane_id", bins=40):
     """
-    Compute lane-change arrays and save plots.
+    Compute lane-change counts and save plots.
 
     Parameters
+    ----------
     out_dir : str | Path
-        Output directory for PNG files.
+        Output directory.
     trajs : iterable of dict
         Per-trajectory dicts.
     lane_key : str
-        Lane id key (default "lane_id"). Fallback key "laneId" is auto-tried.
-    frame_rate : float | None
-        If provided, also plot dwell times in seconds (dwell_frames / frame_rate).
-        For highD, frame_rate is typically 25.0 Hz.
-    config : LaneChangePlotConfig | None
-        Plot style/limits configuration.
+        Lane sequence key. "laneId" is auto-tried if missing.
     bins : int
-        Number of histogram bins.
+        Histogram bins.
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    lc = compute_lane_change_arrays(trajs, lane_key=lane_key)
+    lc = compute_lane_change_counts(trajs, lane_key=lane_key)
 
     _save_hist(
         lc,
         out_dir / "lane_changes_per_trajectory_hist.png",
         title="Lane changes per trajectory",
         xlabel="Number of lane changes",
-        bins=bins
+        bins=bins,
     )
-    
-def validate_lane_changes_against_meta(out_dir, trajs, df_tracks_meta, lane_key="lane_id", meta_col="numLaneChanges", make_plots=True):
+
+    freq = _lane_change_frequency_dict(lc)
+    (out_dir / "lanechange_frequency_computed.json").write_text(json.dumps(freq, indent=2))
+
+
+def validate_lane_changes_against_meta(out_dir, trajs, df_tracks_meta, lane_key="lane_id", meta_col="numLaneChanges"):
     """
-    Validate lane-change counts computed from lane-id sequences against tracksMeta.
+    Validate computed lane-change counts against tracksMeta.
 
     Parameters
+    ----------
     out_dir : str | Path
-        Output directory for validation artifacts.
-    trajs : iterable[dict]
-        Trajectory dict 
+        Output directory for JSON summary.
+    trajs : iterable of dict
+        Trajectory dicts containing recording_id and id/vehicle_id.
     df_tracks_meta : pd.DataFrame
-        Must contain columns:
-          - recording_id
-          - id
-          - meta_col (default: 'numLaneChanges')
+        tracksMeta table. Must include recording_id, id, and meta_col.
     lane_key : str
-        Trajectory lane sequence key (default: 'lane_id').
+        Key name for lane id sequence.
     meta_col : str
-        tracksMeta lane-change count column (default: 'numLaneChanges').
-    make_plots : bool
-        If True, save a diff histogram and scatter plot.
+        tracksMeta lane-change count column (default: numLaneChanges).
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -209,26 +256,25 @@ def validate_lane_changes_against_meta(out_dir, trajs, df_tracks_meta, lane_key=
             "status": "no_computed_rows",
             "num_computed": 0,
             "num_matched": 0,
+            "match_rate_over_computed": None,
             "exact_match_rate": None,
-            "lane_change_frequency_meta": None
+            "lane_change_frequency_meta": None,
         }
         (out_dir / "lanechange_validation_summary.json").write_text(json.dumps(summary, indent=2))
+        return
 
-    #Prepare meta table
     meta = df_tracks_meta.copy()
-
     if "recording_id" not in meta.columns:
-        raise KeyError("df_tracks_meta must contain 'recording_id' column (added in load_tracks_and_metadata).")
+        raise KeyError("df_tracks_meta must contain 'recording_id'.")
     if "id" not in meta.columns:
-        raise KeyError("df_tracks_meta must contain 'id' column.")
+        raise KeyError("df_tracks_meta must contain 'id'.")
     if meta_col not in meta.columns:
         raise KeyError(f"df_tracks_meta missing required column '{meta_col}'.")
 
     meta_small = meta[["recording_id", "id", meta_col]].copy()
     meta_small["recording_id"] = meta_small["recording_id"].astype(str)
-    meta_small["id"] = pd.to_numeric(meta_small["id"], errors="coerce").astype("Int64")
+    meta_small["id"] = pd.to_numeric(meta_small["id"], errors="coerce")
     meta_small[meta_col] = pd.to_numeric(meta_small[meta_col], errors="coerce")
-
     meta_small = meta_small.dropna(subset=["id", meta_col]).copy()
     meta_small["id"] = meta_small["id"].astype(int)
     meta_small[meta_col] = meta_small[meta_col].astype(int)
@@ -245,16 +291,15 @@ def validate_lane_changes_against_meta(out_dir, trajs, df_tracks_meta, lane_key=
             "num_matched": 0,
             "match_rate_over_computed": 0.0,
             "exact_match_rate": None,
-            "lane_change_frequency_meta": meta_freq
+            "lane_change_frequency_meta": meta_freq,
         }
         (out_dir / "lanechange_validation_summary.json").write_text(json.dumps(summary, indent=2))
-        
-    merged["diff"] = merged["computed_numLaneChanges"] - merged["meta_numLaneChanges"]
-    merged["abs_diff"] = merged["diff"].abs()
+        return
 
+    merged["diff"] = merged["computed_numLaneChanges"] - merged["meta_numLaneChanges"]
     n_comp = int(len(df_comp))
     n_match = int(len(merged))
-    exact = int((merged["diff"] == 0).sum()) if n_match else 0
+    exact = int((merged["diff"] == 0).sum())
 
     summary = {
         "status": "ok",
@@ -262,19 +307,7 @@ def validate_lane_changes_against_meta(out_dir, trajs, df_tracks_meta, lane_key=
         "num_matched": n_match,
         "match_rate_over_computed": float(n_match / n_comp) if n_comp else None,
         "exact_match_rate": float(exact / n_match) if n_match else None,
-        "lane_change_frequency_meta": meta_freq
+        "lane_change_frequency_meta": meta_freq,
     }
 
-    if make_plots and n_match:
-        # diff histogram
-        plt.figure()
-        plt.hist(merged["diff"].to_numpy(), bins=31, edgecolor="black", alpha=0.7)
-        plt.xlabel("computed - meta")
-        plt.ylabel("count")
-        plt.title(f"Lane-change count difference (N={n_match}, exact={exact})")
-        plt.tight_layout()
-        plt.savefig(out_dir / "lanechange_diff_hist.png", dpi=200)
-        plt.close()
-
-    # write summary json
     (out_dir / "lanechange_validation_summary.json").write_text(json.dumps(summary, indent=2))
