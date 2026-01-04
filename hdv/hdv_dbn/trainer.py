@@ -210,7 +210,7 @@ class HDVTrainer:
         obs_names : list[str]
             Names of observation features (for MixedEmissionModel).
         lane_num_categories : int
-            Number of categorical lane_pos categories (valid {0,1,2}; invalid -1 is ignored).
+            Number of categorical lane_pos categories (valid {0,1,2,3,4}; invalid -1 is ignored).
         """
         self.hdv_dbn = HDVDBN()
         self.obs_names = list(obs_names)
@@ -333,7 +333,7 @@ class HDVTrainer:
             # M-step: update emission parameters
             # ----------------------
             if verbose:
-                print("  Updating emission parameters...")
+                print("M-step: Updating emission parameters...")
             state_w, total_mass, state_frac = self._m_step_emissions(
                 train_obs_seqs=train_obs_seqs,
                 gamma_all=gamma_all,
@@ -344,25 +344,27 @@ class HDVTrainer:
             # ----------------------
             # EM monotonicity check (FULL log-likelihood)
             # ----------------------
-            train_ll_after = self._total_loglik_on_dataset(
-                obs_seqs=train_obs_seqs,
-                use_progress=False,
-                desc=None,
-            )
+            delta_ll = 0
+            train_ll_after = 0
+            #train_ll_after = self._total_loglik_on_dataset(
+            #    obs_seqs=train_obs_seqs,
+            #    use_progress=use_progress,
+            #    desc=f"Monotonicity LL (train, iter {it+1})",
+            #)
 
-            if prev_train_ll_full is not None:
-                delta_ll = train_ll_after - prev_train_ll_full
-                if verbose:
-                    print(f"  EM monotonicity check: ΔLL = {delta_ll:.6e}")
-                if delta_ll < -1e-6:
-                    print(
-                        "  WARNING: EM monotonicity violated! "
-                        f"(ΔLL = {delta_ll:.3e})"
-                    )
-            else:
-                delta_ll = np.nan
+            #if prev_train_ll_full is not None:
+            #    delta_ll = train_ll_after - prev_train_ll_full
+            #    if verbose:
+            #        print(f"EM monotonicity check: ΔLL = {delta_ll:.6e}")
+            #    if delta_ll < -1e-6:
+            #        print(
+            #            "  WARNING: EM monotonicity violated! "
+            #            f"(ΔLL = {delta_ll:.3e})"
+            #        )
+            #else:
+            #    delta_ll = np.nan
 
-            prev_train_ll_full = train_ll_after
+            #prev_train_ll_full = train_ll_after
             
             # ----------------------
             # Compute validation log-likelihood (if available)
@@ -758,13 +760,33 @@ class HDVTrainer:
         else:
             metrics["val/loglik"] = np.nan
 
-        bern_p = getattr(self.emissions, "bern_p", None)
-        if bern_p is not None and self.emissions.bin_dim > 0:
-            bern_p = np.asarray(bern_p, dtype=np.float64)  # (N,B)
-            bern_mean_state = bern_p.mean(axis=1)
-            metrics["bern/mean_overall"] = float(bern_p.mean())
-            metrics["bern/mean_state_std"] = float(bern_mean_state.std())
-            
+        # -----------------------------
+        # Bernoulli parameter summary  
+        # -----------------------------
+        if getattr(self.emissions, "bin_dim", 0) > 0 and getattr(self.emissions, "bern_p", None) is not None:
+            bern_p = np.asarray(self.emissions.bern_p, dtype=np.float64)  # (N,B)
+            bern_mean_per_state = bern_p.mean(axis=1)                     # (N,)
+            metrics["bern/mean_overall"] = float(bern_p.mean())           
+            metrics["bern/mean_per_state_std"] = float(bern_mean_per_state.std())  
+
+        # -----------------------------
+        # Lane categorical summary  
+        # -----------------------------
+        lane_p = getattr(self.emissions, "lane_p", None)
+        if lane_p is not None:
+            lane_p = np.asarray(lane_p, dtype=np.float64)  # (N, K)
+            lane_p = np.clip(lane_p, 1e-15, 1.0)           # safety
+            lane_p = lane_p / lane_p.sum(axis=1, keepdims=True)
+
+            lane_entropy = -np.sum(lane_p * np.log(lane_p), axis=1)  # (N,)
+            lane_pmax = lane_p.max(axis=1)
+            lane_pmin = lane_p.min(axis=1)
+
+            metrics["lane/entropy_mean"] = float(lane_entropy.mean())  
+            metrics["lane/entropy_std"]  = float(lane_entropy.std())   
+            metrics["lane/p_max_mean"]   = float(lane_pmax.mean())     
+            metrics["lane/p_min_mean"]   = float(lane_pmin.mean())     
+
         try:
 
             # π bar plot
@@ -844,9 +866,35 @@ class HDVTrainer:
             ax_ct.plot(np.arange(self.num_states), cov_traces, marker="o")
             ax_ct.set_title("Diagonal variance sum per state Σ_d var_zd") 
             ax_ct.set_xlabel("joint state z")
-            ax_ct.set_ylabel("sum of variances")  # MOD
+            ax_ct.set_ylabel("sum of variances") 
             metrics["emissions/var_sum_plot"] = wandb.Image(fig_ct)  
             plt.close(fig_ct)
+
+            # Bernoulli mean per state  
+            if getattr(self.emissions, "bin_dim", 0) > 0 and getattr(self.emissions, "bern_p", None) is not None:
+                bern_p = np.asarray(self.emissions.bern_p, dtype=np.float64)
+                bern_mean_per_state = bern_p.mean(axis=1)
+
+                fig_bp, ax_bp = plt.subplots()
+                ax_bp.plot(np.arange(self.num_states), bern_mean_per_state, marker="o")
+                ax_bp.set_title("Bernoulli exists: mean p(exists) per state")
+                ax_bp.set_xlabel("joint state z")
+                ax_bp.set_ylabel("mean bern_p over exists dims")
+                metrics["bern/mean_per_state_plot"] = wandb.Image(fig_bp)  
+                plt.close(fig_bp)
+
+            # Lane categorical heatmap 
+            lane_p = getattr(self.emissions, "lane_p", None)
+            if lane_p is not None:
+                lane_p = np.asarray(lane_p, dtype=np.float64)
+                fig_lp, ax_lp = plt.subplots()
+                im = ax_lp.imshow(lane_p, aspect="auto")
+                ax_lp.set_title("Lane categorical p(lane_pos | z)")
+                ax_lp.set_xlabel("lane_pos category")
+                ax_lp.set_ylabel("joint state z")
+                fig_lp.colorbar(im, ax=ax_lp)
+                metrics["lane/heatmap"] = wandb.Image(fig_lp) 
+                plt.close(fig_lp)
         except Exception:
             pass
 

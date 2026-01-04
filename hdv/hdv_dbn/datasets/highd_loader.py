@@ -35,6 +35,8 @@ HIGHD_COL_MAP = {
     "frame": "frame",
     "x": "x", 
     "y": "y",
+    "width": "width",     
+    "height": "height",
     "xVelocity": "vx",
     "yVelocity": "vy",
     "xAcceleration": "ax",
@@ -209,14 +211,14 @@ def _merge_neighbor_state(df, neighbor_id_col, prefix):
     """
     Attach neighbor state (x,y,vx,vy,lane_id) for the vehicle referenced by neighbor_id_col.
     Adds:
-      {prefix}_x, {prefix}_y, {prefix}_vx, {prefix}_vy, {prefix}_lane_id
+      {prefix}_x_center, {prefix}_y_center, {prefix}_vx, {prefix}_vy, {prefix}_lane_id
     
     Parameters
     df : pd.DataFrame
         Input table containing at least:
           - `recording_id`, `frame`, `vehicle_id`
           - neighbor ID column specified by `neighbor_id_col`
-          - x, y, vx, vy, lane_id columns
+          - x_center, y_center, vx, vy, lane_id columns
     neighbor_id_col : str
         Column name containing neighbor vehicle IDs.
     prefix : str
@@ -230,13 +232,13 @@ def _merge_neighbor_state(df, neighbor_id_col, prefix):
         return df
 
     # lookup: (recording_id, frame, neighbor_id) -> neighbor state
-    lookup = df[["recording_id","frame","vehicle_id","x","y","vx","vy","lane_id"]].copy()
+    lookup = df[["recording_id","frame","vehicle_id","x_center","y_center","vx","vy","lane_id"]].copy()
     lookup["vehicle_id"] = lookup["vehicle_id"].astype("Int64")
     lookup = lookup.rename(
         columns={
             "vehicle_id": neighbor_id_col,
-            "x": f"{prefix}_x",
-            "y": f"{prefix}_y",
+            "x_center": f"{prefix}_x_center",
+            "y_center": f"{prefix}_y_center",
             "vx": f"{prefix}_vx",
             "vy": f"{prefix}_vy",
             "lane_id": f"{prefix}_lane_id",
@@ -293,19 +295,21 @@ def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y", up
     Derive stable lane-position categories from lane markings + direction.
 
     Output:
-      df["lane_pos"] in {-1,0,1,2}
-       -1 = outside / non-drivable / unknown
-        0 = leftmost (vehicle-centric)
-        1 = middle lane(s)
-        2 = rightmost (vehicle-centric)
-        
-    Direction choice:
-      drivingDirection==1 -> use upperLaneMarkings
-      drivingDirection==2 -> use lowerLaneMarkings
+      df["lane_pos"] in {-1,0,1,2,3,4}
+        -1 = unknown / cannot determine (no markings, invalid direction, NaN y)
+         0 = left violation  (vehicle is beyond left boundary, vehicle-centric)
+         1 = leftmost lane   (vehicle-centric)
+         2 = middle lane(s)  (vehicle-centric)
+         3 = rightmost lane  (vehicle-centric)
+         4 = right violation (vehicle is beyond right boundary, vehicle-centric)
 
-    Vehicle-centric left/right:
-      - For direction==2 (moving right), smaller y is left.
-      - For direction==1 (moving left), smaller y is right => reverse index.
+    Direction choice:
+      drivingDirection == 1 -> use upperLaneMarkings
+      drivingDirection == 2 -> use lowerLaneMarkings
+
+    Vehicle-centric left/right convention:
+      - direction == 2 (moving right): smaller world-y is vehicle-left
+      - direction == 1 (moving left): smaller world-y is vehicle-right (swap)
     
     Parameters
     df : pd.DataFrame
@@ -327,30 +331,47 @@ def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y", up
     pd.DataFrame
         DataFrame with new `lane_pos` column added. 
     """
+    # If we cannot compute at all, keep a safe default (unknown)
     if y_col not in df.columns or dir_col not in df.columns:
-        df["lane_pos"] = 1
+        df["lane_pos"] = -1
         return df
 
     # Pre-parse markings per recording 
-    rec_ids = df["recording_id"].dropna().unique().tolist() if "recording_id" in df.columns else [None]
+    if "recording_id" in df.columns:
+        rec_ids = df["recording_id"].dropna().unique().tolist()
+    else:
+        rec_ids = [None]
+
     rec_to_upper = {}
     rec_to_lower = {}
 
     for rid in rec_ids:
         sub = df[df["recording_id"] == rid] if rid is not None else df
+
         up_val = sub[upper_key].iloc[0] if (upper_key in sub.columns and len(sub)) else None
         lo_val = sub[lower_key].iloc[0] if (lower_key in sub.columns and len(sub)) else None
+
         rec_to_upper[rid] = _parse_lane_markings(up_val)
         rec_to_lower[rid] = _parse_lane_markings(lo_val)
 
     y = df[y_col].to_numpy(dtype=np.float64, copy=False)
     d = df[dir_col].to_numpy(copy=False)
-    rid_arr = df["recording_id"].to_numpy(copy=False) if "recording_id" in df.columns else np.full(len(df), None)
+    rid_arr = (
+        df["recording_id"].to_numpy(copy=False)
+        if "recording_id" in df.columns
+        else np.full(len(df), None, dtype=object)
+    )
 
-    lane_pos = np.full(len(df), -1, dtype=np.int64) # initialize as outside-lane by default
+    lane_pos = np.full(len(df), -1, dtype=np.int64)  # unknown by default
 
     for i in range(len(df)):
         rid = rid_arr[i]
+        yi = y[i]
+
+        if np.isnan(yi):
+            lane_pos[i] = -1
+            continue
+
         di = int(d[i]) if not pd.isna(d[i]) else -1
 
         if di == 1:
@@ -360,25 +381,47 @@ def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y", up
         else:
             marks = np.asarray([], dtype=np.float64)
 
-        if marks.size < 2 or np.isnan(y[i]):
+        # Need at least 2 boundaries to define 1 lane interval
+        if marks.size < 2:
             lane_pos[i] = -1
             continue
 
+        left_world = marks[0]
+        right_world = marks[-1]
+
+        # Outside boundaries in *world-y*
+        outside_left_world = yi < left_world
+        outside_right_world = yi >= right_world
+
+        if outside_left_world or outside_right_world:
+            # Map boundary violation to *vehicle-centric* left/right depending on direction
+            if di == 2:
+                # smaller world-y => vehicle-left
+                lane_pos[i] = 0 if outside_left_world else 4
+            else:
+                # di == 1: smaller world-y => vehicle-right (swap)
+                lane_pos[i] = 4 if outside_left_world else 0
+            continue
+
+        # Inside boundaries -> find lane interval index j in [0, num_lanes-1]
         num_lanes = int(marks.size - 1)
-        j = int(np.searchsorted(marks, y[i], side="right") - 1)  # lane interval index
+        j = int(np.searchsorted(marks, yi, side="right") - 1)
+
         if j < 0 or j >= num_lanes:
+            # Should be rare because we already handled outside boundaries,
+            # but keep it robust.
             lane_pos[i] = -1
             continue
 
-        # Vehicle-centric left/right
+        # Convert to vehicle-centric lane index
         j_vehicle = (num_lanes - 1) - j if di == 1 else j
 
         if j_vehicle == 0:
-            lane_pos[i] = 0
+            lane_pos[i] = 1  # leftmost lane
         elif j_vehicle == (num_lanes - 1):
-            lane_pos[i] = 2
+            lane_pos[i] = 3  # rightmost lane
         else:
-            lane_pos[i] = 1
+            lane_pos[i] = 2  # middle lanes
 
     df["lane_pos"] = lane_pos
     return df
@@ -390,8 +433,8 @@ def add_direction_aware_context_features(df):
     """
     Build direction-consistent relative context features from neighbor IDs.
     Adds, for each neighbor slot:
-      - dx  = neighbor_x - ego_x
-      - dy  = neighbor_y - ego_y
+      - dx = neighbor_x_center - ego_x_center
+      - dy = neighbor_y_center - ego_y_center
       - dvx = neighbor_vx - ego_vx
       - dvy = neighbor_vy - ego_vy
       - exists mask (0/1)
@@ -419,6 +462,13 @@ def add_direction_aware_context_features(df):
     ]
 
     out = df
+
+    # Ensure ego centers exist 
+    if "x_center" not in out.columns and "x" in out.columns and "width" in out.columns:
+        out["x_center"] = out["x"].astype(np.float64) + 0.5 * out["width"].astype(np.float64)
+    if "y_center" not in out.columns and "y" in out.columns and "height" in out.columns:
+        out["y_center"] = out["y"].astype(np.float64) + 0.5 * out["height"].astype(np.float64)
+
     for id_col, prefix in neighbor_specs:
         if id_col not in out.columns:
             continue
@@ -430,12 +480,15 @@ def add_direction_aware_context_features(df):
 
         out = _merge_neighbor_state(out, id_col, prefix)
 
-        if f"{prefix}_x" in out.columns:
-            out[f"{prefix}_exists"] = out[f"{prefix}_exists"] * (~out[f"{prefix}_x"].isna()).astype(np.float64) 
+        nx = f"{prefix}_x_center"
+        ny = f"{prefix}_y_center"
+
+        if nx in out.columns:
+            out[f"{prefix}_exists"] = out[f"{prefix}_exists"] * (~out[nx].isna()).astype(np.float64)
 
         # relative features (NaN if neighbor missing)
-        out[f"{prefix}_dx"]  = out[f"{prefix}_x"]  - out["x"]
-        out[f"{prefix}_dy"]  = out[f"{prefix}_y"]  - out["y"]
+        out[f"{prefix}_dx"]  = out[nx] - out["x_center"]
+        out[f"{prefix}_dy"]  = out[ny] - out["y_center"]
         out[f"{prefix}_dvx"] = out[f"{prefix}_vx"] - out["vx"]
         out[f"{prefix}_dvy"] = out[f"{prefix}_vy"] - out["vy"]
 
@@ -717,6 +770,13 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
         # Merge tracks with tracksMeta (vehicle-wise)
         df = df_tracks.merge(df_tracksmeta, on="vehicle_id", how="left")
 
+        if "width" in df.columns and "height" in df.columns:
+            df["x_center"] = df["x"].astype(np.float64) + 0.5 * df["width"].astype(np.float64)
+            df["y_center"] = df["y"].astype(np.float64) + 0.5 * df["height"].astype(np.float64)
+        else:
+            df["x_center"] = df["x"].astype(np.float64)
+            df["y_center"] = df["y"].astype(np.float64)
+
         # Attach recording meta as constants for this recording
         for k, v in rec_row.items():
             df[k] = v
@@ -735,7 +795,7 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
                 df["dir_sign"] = 1.0
         
         df = add_direction_aware_context_features(df)
-        df = add_lane_position_feature(df)
+        df = add_lane_position_feature(df, y_col="y_center")
 
         dfs.append(df)
 
@@ -757,7 +817,7 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
     df_all["lane_pos"] = df_all["lane_pos"].astype(int)
     df_all["recording_id"] = df_all["recording_id"].astype(int)
 
-    float_base = ["x", "y", "vx", "vy", "ax", "ay"]  
+    float_base = ["x", "y", "x_center", "y_center", "vx", "vy", "ax", "ay"]
     float_rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")  
     float_cols = []
 

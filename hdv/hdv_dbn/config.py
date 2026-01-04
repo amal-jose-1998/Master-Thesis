@@ -43,7 +43,6 @@ META_COLS: List[str] = [
 # Ego features
 # -----------------------------
 EGO_FEATURES: List[str] = [
-    "y",
     "vx", "vy",
     "ax", "ay",
     "lane_pos",
@@ -104,7 +103,6 @@ RIGHT_SIDE_FEATURES: List[str] = [
 BASELINE_FEATURE_COLS: List[str] = (
      EGO_FEATURES
     + FRONT_FEATURES
-    + REAR_FEATURES
     + LEFT_FRONT_FEATURES
     + LEFT_SIDE_FEATURES
     + LEFT_REAR_FEATURES
@@ -202,6 +200,9 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 100
 
+    exists_as_bernoulli = True          # E1,E3=True, E2=False
+    bern_weight = 1.0                   # E1=1.0, E3=0.5 or 0.25
+
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
     early_stop_delta_A_thresh: float = 1e-5
@@ -217,17 +218,17 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = None
+    max_highd_recordings: Optional[int] = 10
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "Training with the latest observation set with baseline (latent style only)"
+    wandb_run_name: Optional[str] = "exp1: demo1 uniform"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
     dtype: Literal["float32", "float64"] = "float64"
 
-    cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
+    cpd_init: Literal["uniform", "random", "sticky"] = "uniform"
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123

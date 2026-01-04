@@ -12,6 +12,7 @@ Pipeline
 
 from pathlib import Path
 import sys
+import re
 
 from .datasets import (
     load_highd_folder,
@@ -23,7 +24,7 @@ from .datasets import (
     scale_sequences_classwise,
 )
 from .trainer import HDVTrainer
-from .config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS, CONTINUOUS_FEATURES
+from .config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS, CONTINUOUS_FEATURES, DBN_STATES
 
 if TRAINING_CONFIG.use_wandb:
     import wandb
@@ -31,6 +32,48 @@ else:
     wandb = None
 
 USE_CLASSWISE_SCALING = TRAINING_CONFIG.use_classwise_scaling
+
+# -----------------------------
+# Model naming helpers
+# -----------------------------
+def _slug(s):
+    """Make a string safe for filenames."""
+    s = str(s)
+    s = s.strip().lower()
+    s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"[^a-z0-9._-]+", "", s)
+    s = re.sub(r"-{2,}", "-", s)
+    return s
+
+
+def build_model_filename(cfg):
+    """
+    Build a deterministic model filename based on TRAINING_CONFIG and DBN_STATES.
+
+    Includes the key factors that define a training run identity so models do not overwrite.
+    """
+    S = len(DBN_STATES.driving_style)
+    A = len(DBN_STATES.action)
+
+    rec = cfg.max_highd_recordings
+    rec_str = "all" if (rec is None) else str(int(rec))
+
+    parts = [
+        "dbn_highd",
+        f"S{S}",
+        f"A{A}",
+        f"init-{_slug(getattr(cfg, 'cpd_init', 'unknown'))}",
+        f"rec{rec_str}",
+        f"seed{int(cfg.seed)}",
+    ]
+
+    # Optional: include bernoulli settings if present (keeps filename stable across these toggles)
+    if hasattr(cfg, "exists_as_bernoulli"):
+        parts.append(f"bern-{int(bool(cfg.exists_as_bernoulli))}")
+    if hasattr(cfg, "bern_weight"):
+        parts.append(f"bw-{_slug(cfg.bern_weight)}")
+
+    return "_".join(parts) + ".npz"
 
 def main():
     """Run the full training job."""
@@ -91,7 +134,7 @@ def main():
     )
 
     obs_dim = len(feature_cols)
-    lane_K = 3 # valid {0,1,2}, ignore -1
+    lane_K = 5 # valid {0,1,2,3,4}, ignore -1
     trainer = HDVTrainer(obs_names=feature_cols, lane_num_categories=lane_K)
     # Store scalers for saving later (trainer.save will handle dict vs arrays after our patch below)
     if USE_CLASSWISE_SCALING:
@@ -118,6 +161,8 @@ def main():
                 "seed": TRAINING_CONFIG.seed,
                 "max_kmeans_samples": TRAINING_CONFIG.max_kmeans_samples,
                 "max_highd_recordings": TRAINING_CONFIG.max_highd_recordings,
+                "cpd_init": TRAINING_CONFIG.cpd_init,  
+                "use_classwise_scaling": TRAINING_CONFIG.use_classwise_scaling, 
             },
         )
 
@@ -129,8 +174,13 @@ def main():
                 wandb_run=wandb_run
             )
 
-        model_path = model_dir / "dbn_highd.npz"
+        # -----------------------------
+        # Save model with config-based name
+        # -----------------------------
+        model_filename = build_model_filename(TRAINING_CONFIG)  
+        model_path = model_dir / model_filename 
         trainer.save(model_path)
+        print(f"[train_highd_dbn] Model saved to: {model_path}") 
         print(f"[train_highd_dbn] Training finished.")
     except Exception as e:
         print(f"[train_highd_dbn] ERROR during training: {e}", file=sys.stderr)

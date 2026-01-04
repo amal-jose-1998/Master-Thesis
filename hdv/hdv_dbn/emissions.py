@@ -230,7 +230,7 @@ class GaussianEmissionModel:
     # =========================================================================
     # EM M-step update
     # =========================================================================
-    def update_from_posteriors(self, obs_seqs, gamma_seqs, mask_seqs=None, use_progress=False, verbose=0):
+    def update_from_posteriors(self, obs_seqs, gamma_seqs, mask_seqs=None, use_progress=True, verbose=0):
         """
         M-step update for Gaussian params using responsibilities gamma[t,z] (with optional masks).
             gamma[t, z] = P(Z_t = z | O_1:T)
@@ -283,8 +283,10 @@ class GaussianEmissionModel:
         for obs, gamma, mask in it:
             x = obs if torch.is_tensor(obs) else torch.as_tensor(obs, device=device, dtype=dtype)
             g = gamma if torch.is_tensor(gamma) else torch.as_tensor(gamma, device=device, dtype=dtype)
-            x = x.to(device=device, dtype=dtype)
-            g = g.to(device=device, dtype=dtype)
+            if x.device != device or x.dtype != dtype:
+                x = x.to(device=device, dtype=dtype)  
+            if g.device != device or g.dtype != dtype:
+                g = g.to(device=device, dtype=dtype)
 
             if x.ndim != 2 or x.shape[1] != D:
                 raise ValueError(f"Expected obs_cont shape (T,{D}), got {tuple(x.shape)}")
@@ -319,17 +321,15 @@ class GaussianEmissionModel:
         min_mass = float(getattr(TRAINING_CONFIG, "gauss_min_state_mass", 50.0))
 
         #get previous params (for low-mass states)
+        sa_pairs = [self._z_to_sa(z) for z in range(N)]
         prev_means = torch.as_tensor(
-            np.vstack([self.params[self._z_to_sa(z)[0], self._z_to_sa(z)[1]].mean for z in range(N)]),
+            np.stack([self.params[s, a].mean for (s, a) in sa_pairs], axis=0),
             device=device, dtype=dtype
         )
         prev_vars = torch.as_tensor(
-            np.vstack([self.params[self._z_to_sa(z)[0], self._z_to_sa(z)[1]].var for z in range(N)]),
+            np.stack([self.params[s, a].var for (s, a) in sa_pairs], axis=0),
             device=device, dtype=dtype
         )
-        
-        mean = prev_means.clone()
-        var = prev_vars.clone()
 
         # vectorized low-mass mask + observed-dim mask
         mass_ok = (weights_z >= min_mass)[:, None]          # (N,1) boolean
@@ -461,7 +461,11 @@ class MixedEmissionModel:
         self.lane_name = lane_name
         self.lane_idx = int(self.obs_names.index(lane_name)) # index of lane_pos feature
 
-        self.bin_idx = [i for i, n in enumerate(self.obs_names) if n.endswith(exists_suffix)]
+        self.exists_suffix = exists_suffix  
+        use_exists_bern = bool(getattr(TRAINING_CONFIG, "exists_as_bernoulli", True)) 
+
+        all_exists_idx = [i for i, n in enumerate(self.obs_names) if n.endswith(exists_suffix)]
+        self.bin_idx = all_exists_idx if use_exists_bern else []  
         bin_set = set(self.bin_idx)
 
         # continuous = everything except categorical and binary
@@ -614,7 +618,8 @@ class MixedEmissionModel:
             Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
         """
         logp_gauss, logp_bern, logp_lane = self.loglik_parts_all_states(obs)  
-        logp = logp_gauss +  logp_bern + logp_lane
+        w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
+        logp = logp_gauss + w_bern * logp_bern + logp_lane
         return logp
 
     def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress, verbose):
@@ -680,18 +685,18 @@ class MixedEmissionModel:
             
             # Continuous + mask for gated diagonal Gaussian
             if self.cont_dim > 0:
-                cont_x = x[:, self.cont_idx].detach()
+                cont_x = x[:, self.cont_idx].detach().cpu().numpy()  
                 cont_obs_seqs.append(cont_x)
 
                 if self._cont_rel_gate:
                     m = torch.ones((x.shape[0], self.cont_dim), device=device, dtype=dtype)
                     for local_j, ex_idx in self._cont_rel_gate:
                         m[:, local_j] = (x[:, ex_idx] > 0.5).to(dtype=dtype)
-                    cont_mask_seqs.append(m)
+                    cont_mask_seqs.append(m.detach().cpu().numpy())
                 else:
                     cont_mask_seqs.append(None)
             else:
-                cont_obs_seqs.append(torch.empty((x.shape[0], 0), device=device, dtype=dtype))
+                cont_obs_seqs.append(np.zeros((x.shape[0], 0), dtype=np.float64))
                 cont_mask_seqs.append(None)
 
         # Gaussian update (continuous, diagonal, gated)
@@ -699,7 +704,7 @@ class MixedEmissionModel:
             obs_seqs=cont_obs_seqs,
             gamma_seqs=gamma_cont_seqs,
             mask_seqs=cont_mask_seqs,
-            use_progress=use_progress,
+            use_progress=False,
             verbose=verbose,
         )
         
