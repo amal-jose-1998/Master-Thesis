@@ -26,7 +26,7 @@ class DBNStates:
 # Define the DBN states
 DBN_STATES = DBNStates(
     driving_style=("style_0", "style_1", "style_2"),
-    action=("dummy",)
+    action=("action_0", "action_1", "action_2",)
     )
 
 # =============================================================================
@@ -45,7 +45,7 @@ META_COLS: List[str] = [
 EGO_FEATURES: List[str] = [
     "vx", "vy",
     "ax", "ay",
-    "lane_pos",
+    "lane_pos", "lc",
 ]
 
 # -----------------------------
@@ -116,20 +116,38 @@ BASELINE_FEATURE_COLS: List[str] = (
 # -----------------------------
 """
 Discrete features are handled by non-Gaussian emission components:
-  - lane_pos: categorical distribution
+  - lane_pos: categorical distribution (K=5)
+      coding: {0,1,2,3,4} (ignore/mask -1 if present)
+  - lc: categorical distribution (K=3; left/none/right)
+      coding: {-1, 0, +1} (we will map internally to {0,1,2})
   - *_exists: independent Bernoulli distributions
 
 Continuous features are modeled by a multivariate Gaussian per latent state.
 Only continuous features should be z-score normalized.
 """
-
-DISCRETE_FEATURES: List[str] = [
+# Categorical (multinomial) discrete features
+CATEGORICAL_FEATURES: List[str] = [
     "lane_pos",
-    "front_exists", "rear_exists",
-    "left_front_exists", "left_side_exists", "left_rear_exists",      
-    "right_front_exists", "right_side_exists", "right_rear_exists",   
+    "lc",
 ]
 
+# Number of categories for each categorical feature
+CATEGORICAL_FEATURE_SIZES = {
+    "lane_pos": 5,
+    "lc": 3,
+}
+
+# Binary discrete features (modeled with independent Bernoulli emissions)
+BERNOULLI_FEATURES: List[str] = [
+    "front_exists", "rear_exists",
+    "left_front_exists", "left_side_exists", "left_rear_exists",
+    "right_front_exists", "right_side_exists", "right_rear_exists",
+]
+
+# All discrete features (categorical + Bernoulli)
+DISCRETE_FEATURES: List[str] = CATEGORICAL_FEATURES + BERNOULLI_FEATURES
+
+# Everything else is continuous
 CONTINUOUS_FEATURES: List[str] = [f for f in BASELINE_FEATURE_COLS if f not in DISCRETE_FEATURES]
 
 # =============================================================================
@@ -218,17 +236,17 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = 10
+    max_highd_recordings: Optional[int] = None
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "exp1: demo1 uniform"
+    wandb_run_name: Optional[str] = "Experiment 1: sticky"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
     dtype: Literal["float32", "float64"] = "float64"
 
-    cpd_init: Literal["uniform", "random", "sticky"] = "uniform"
+    cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123
