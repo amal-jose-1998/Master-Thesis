@@ -426,6 +426,30 @@ def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y", up
     df["lane_pos"] = lane_pos
     return df
 
+def add_lane_change_feature(df, lane_col="lane_id"):
+    """
+    Add single ternary lane-change feature:
+        lc ∈ {-1, 0, +1}
+          -1 : left lane change
+           0 : no lane change
+          +1 : right lane change
+    """
+    if lane_col not in df.columns:
+        df["lc"] = 0
+        return df
+
+    df = df.sort_values(["recording_id", "vehicle_id", "frame"], kind="mergesort")
+
+    lane = df[lane_col].to_numpy(dtype=np.float64)
+    dlane = np.diff(lane, prepend=lane[0])
+
+    lc = np.sign(dlane).astype(np.int64)
+    lc[dlane == 0] = 0  # explicit
+
+    df["lc"] = lc
+    return df
+
+
 # ---------------------------------------------------------------------
 # Context features
 # ---------------------------------------------------------------------
@@ -796,6 +820,7 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
         
         df = add_direction_aware_context_features(df)
         df = add_lane_position_feature(df, y_col="y_center")
+        df = add_lane_change_feature(df)
 
         dfs.append(df)
 
