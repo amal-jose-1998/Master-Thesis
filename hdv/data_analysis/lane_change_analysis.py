@@ -42,6 +42,116 @@ def count_lane_changes(lane_id):
         return 0
     return int(np.sum(lane_id[1:] != lane_id[:-1]))
 
+def lane_change_ternary(lane_id):
+    """
+    Per-frame ternary lane-change signal:
+        lc[t] ∈ {-1, 0, +1}
+    using sign(lane_id[t] - lane_id[t-1]), with lc[0] = 0.
+    """
+    if lane_id is None:
+        return np.zeros((0,), dtype=np.int64)
+
+    lane_id = np.asarray(lane_id, dtype=np.int64)
+    if lane_id.size <= 1:
+        return np.zeros_like(lane_id, dtype=np.int64)
+
+    dlane = np.diff(lane_id, prepend=lane_id[0])
+    lc = np.sign(dlane).astype(np.int64)
+    lc[dlane == 0] = 0
+    return lc
+
+
+def compute_lane_change_ternary_sequences(trajs, lane_key="lane_id"):
+    """
+    Return list of lc arrays (one per trajectory).
+    """
+    out = []
+    for tr in trajs:
+        lane = _as_1d_int(tr.get(lane_key, None))
+        if lane is None:
+            lane = _as_1d_int(tr.get("laneId", None))
+        if lane is None or lane.size == 0:
+            continue
+        out.append(lane_change_ternary(lane))
+    return out
+
+
+def _save_bar_counts(counts_dict, out_path, title, xlabel, ylabel="count"):
+    """
+    Save a simple bar plot for discrete counts dict like {-1: n, 0: n, +1: n}.
+    """
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    keys = [-1, 0, 1]
+    vals = [int(counts_dict.get(k, 0)) for k in keys]
+    labels = ["-1 (left)", "0 (none)", "+1 (right)"]
+
+    plt.figure()
+    plt.bar(labels, vals, edgecolor="black", alpha=0.8)
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+
+
+def save_lane_change_ternary_plots(out_dir, trajs, lane_key="lane_id", bins=40):
+    """
+    Save plots for ternary per-frame lane change signal lc ∈ {-1,0,+1}.
+
+    Outputs:
+      - lc_value_counts_overall.png  (bar: left/none/right over all frames)
+      - lc_nonzero_fraction_hist.png (hist: fraction of frames with lc != 0 per trajectory)
+      - lanechange_ternary_summary.json
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    lc_seqs = compute_lane_change_ternary_sequences(trajs, lane_key=lane_key)
+    if not lc_seqs:
+        return
+
+    # overall counts across all frames
+    all_lc = np.concatenate(lc_seqs, axis=0)
+    uniq, cnt = np.unique(all_lc, return_counts=True)
+    counts = {int(k): int(v) for k, v in zip(uniq, cnt)}
+
+    _save_bar_counts(
+        counts,
+        out_dir / "lc_value_counts_overall.png",
+        title="Lane-change ternary values across all frames",
+        xlabel="lc value",
+        ylabel="frame count",
+    )
+
+    # per-trajectory "how often lane changes happen" as a fraction of frames
+    frac = []
+    for lc in lc_seqs:
+        if lc.size == 0:
+            continue
+        frac.append(float(np.mean(lc != 0)))
+    frac = np.asarray(frac, dtype=float)
+
+    _save_hist(
+        frac,
+        out_dir / "lc_nonzero_fraction_hist.png",
+        title="Fraction of frames with lane change (lc != 0)",
+        xlabel="fraction per trajectory",
+        bins=bins,
+    )
+
+    summary = {
+        "total_trajectories": int(len(lc_seqs)),
+        "overall_counts": {str(k): int(v) for k, v in sorted(counts.items())},
+        "nonzero_fraction": {
+            "mean": float(np.mean(frac)) if frac.size else None,
+            "median": float(np.median(frac)) if frac.size else None,
+            "p90": float(np.quantile(frac, 0.90)) if frac.size else None,
+        },
+    }
+    (out_dir / "lanechange_ternary_summary.json").write_text(json.dumps(summary, indent=2))
 
 def _as_1d_int(x):
     """

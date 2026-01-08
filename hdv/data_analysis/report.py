@@ -42,7 +42,11 @@ from kinematic_summary import (
     plot_signal_by_direction,
     plot_signal_by_class,
 )
-from lane_change_analysis import save_lane_change_plots, validate_lane_changes_against_meta
+from lane_change_analysis import (
+    save_lane_change_plots,
+    save_lane_change_ternary_plots,  
+    validate_lane_changes_against_meta,
+)
 from lane_change_context import (
     LaneChangeContextConfig,
     compute_lane_change_context,
@@ -418,6 +422,7 @@ def run_report(tracks_dir, out_dir, pattern="*_tracks.csv", max_files=None, show
         tr["ay"] = tr.get("yAcceleration")
 
     save_lane_change_plots(out_dir=out_dir / "lane_change", trajs=trajs, lane_key="lane_id")
+    save_lane_change_ternary_plots(out_dir=out_dir / "lane_change", trajs=trajs, lane_key="lane_id")  
     validate_lane_changes_against_meta(
         out_dir=out_dir / "lane_change",
         trajs=trajs,
