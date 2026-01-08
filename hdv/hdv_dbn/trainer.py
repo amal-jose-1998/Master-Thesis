@@ -11,13 +11,11 @@ import torch
 from sklearn.cluster import MiniBatchKMeans
 from tqdm.auto import tqdm
 import time
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 from .model import HDVDBN
 from .emissions import MixedEmissionModel, GaussianParams
 from .config import TRAINING_CONFIG
+from .utils.wandb_logger import WandbLogger
 
 # -----------------------------------------------------------------------------
 # Numerical stability constants
@@ -240,6 +238,8 @@ class HDVTrainer:
         self.scaler_mean = None  # shape (obs_dim,)
         self.scaler_std = None   # shape (obs_dim,)
 
+        self.verbose = int(getattr(TRAINING_CONFIG, "verbose", 1))
+
     # ------------------------------------------------------------------
     # EM training loop
     # ------------------------------------------------------------------
@@ -263,7 +263,6 @@ class HDVTrainer:
               - "val_loglik":   list of total val log-likelihood per iteration (empty if no val)
         """
         num_iters = TRAINING_CONFIG.em_num_iters
-        verbose = TRAINING_CONFIG.verbose
         use_progress = TRAINING_CONFIG.use_progress
         patience = getattr(TRAINING_CONFIG, "early_stop_patience", 3)
         min_delta = getattr(TRAINING_CONFIG, "early_stop_min_delta_per_obs", 1e-4)
@@ -272,24 +271,23 @@ class HDVTrainer:
 
         # Precompute number of observations (total timesteps)
         train_num_obs = int(sum(seq.shape[0] for seq in train_obs_seqs))
-        if verbose:
+        if self.verbose:
             print(f"Train sequences: {len(train_obs_seqs)}  |  Train total timesteps: {train_num_obs}")
         val_num_obs = None
         if val_obs_seqs is not None:
             val_num_obs = int(sum(seq.shape[0] for seq in val_obs_seqs))
-            if verbose:
+            if self.verbose:
                 print(f"Validation sequences: {len(val_obs_seqs)}  |  Val total timesteps: {val_num_obs}")
 
         history = {"train_loglik": [], "val_loglik": []}
 
-        # k-means initialisation of emission parameters
-        self._init_emissions_kmeans(train_obs_seqs)
+        # Initialisation of emission parameters
+        self._init_emissions(train_obs_seqs)
         self.emissions.to_device(device=self.device, dtype=self.dtype)
         
         prev_criterion = None 
-        prev_train_ll_full = None  # for EM monotonicity check
 
-        if verbose:
+        if self.verbose:
             print("\n==================== EM TRAINING START ====================\n")
             print(f"Device: {self.device} dtype={self.dtype}")
             print(f"Number of style states:  {self.S}")
@@ -302,69 +300,53 @@ class HDVTrainer:
 
         for it in range(num_iters):
             iter_start = time.perf_counter()
-            if verbose:
+            if self.verbose:
                 print(f"\n--------------- EM ITERATION {it+1} ----------------")
 
             # ----------------------
             # E-step on training data
             # ----------------------
-            if verbose:
+            if self.verbose:
                 print("E-step (train):")
-            gamma_all, xi_all, train_ll = self._e_step(
-                obs_seqs=train_obs_seqs,
-                use_progress=use_progress,
-                verbose=verbose,
-                it=it,
-            )
+            gamma_all, xi_all, train_ll, obs_used = self._e_step(
+                                                        obs_seqs=train_obs_seqs,
+                                                        use_progress=use_progress,
+                                                        verbose=self.verbose,
+                                                        it=it,
+                                                    )
             train_ll_per_obs = train_ll / max(train_num_obs, 1)
+
+            # -----------------------------------------------------------
+            # Trajectory-level diagnostics (from posteriors)
+            # -----------------------------------------------------------
+            switch_rates_train = self._expected_switch_rates_per_traj(gamma_all, xi_all)
+            run_lengths_train, runlen_median_per_traj = self._run_lengths_from_gamma_argmax(gamma_all)
+            ent_all_train, ent_mean_per_traj = self._posterior_entropy_from_gamma(gamma_all)
+            sem_feat_names, sem_means, sem_stds = self._posterior_weighted_key_feature_stats(obs_used, gamma_all)
+
 
             # ----------------------
             # M-step: update pi_z, A_zz
             # ----------------------
-            if verbose:
+            if self.verbose:
                 print("M-step: updating π_z and A_zz...")
             delta_pi, delta_A, A_prev, A_new = self._m_step_transitions(
-                gamma_all=gamma_all,
-                xi_all=xi_all,
-                verbose=verbose,
-            )
+                                                    gamma_all=gamma_all,
+                                                    xi_all=xi_all,
+                                                    verbose=self.verbose,
+                                                )
             
             # ----------------------
             # M-step: update emission parameters
             # ----------------------
-            if verbose:
+            if self.verbose:
                 print("M-step: Updating emission parameters...")
             state_w, total_mass, state_frac = self._m_step_emissions(
-                train_obs_seqs=train_obs_seqs,
-                gamma_all=gamma_all,
-                use_progress=use_progress,
-                verbose=verbose,
-            )
-
-            # ----------------------
-            # EM monotonicity check (FULL log-likelihood)
-            # ----------------------
-            delta_ll = 0
-            train_ll_after = 0
-            #train_ll_after = self._total_loglik_on_dataset(
-            #    obs_seqs=train_obs_seqs,
-            #    use_progress=use_progress,
-            #    desc=f"Monotonicity LL (train, iter {it+1})",
-            #)
-
-            #if prev_train_ll_full is not None:
-            #    delta_ll = train_ll_after - prev_train_ll_full
-            #    if verbose:
-            #        print(f"EM monotonicity check: ΔLL = {delta_ll:.6e}")
-            #    if delta_ll < -1e-6:
-            #        print(
-            #            "  WARNING: EM monotonicity violated! "
-            #            f"(ΔLL = {delta_ll:.3e})"
-            #        )
-            #else:
-            #    delta_ll = np.nan
-
-            #prev_train_ll_full = train_ll_after
+                                                    train_obs_seqs=train_obs_seqs,
+                                                    gamma_all=gamma_all,
+                                                    use_progress=use_progress,
+                                                    verbose=self.verbose,
+                                                )
             
             # ----------------------
             # Compute validation log-likelihood (if available)
@@ -373,17 +355,17 @@ class HDVTrainer:
             if val_obs_seqs is None:
                 val_ll = 0.0
                 criterion_for_stop = train_ll_per_obs
-                if verbose:
+                if self.verbose:
                     print("No validation set provided; using train per-obs LL as criterion.")
             else:
-                if verbose:
+                if self.verbose:
                     print("Validation E-step:")
                 val_ll = self._total_loglik_on_dataset(
                             obs_seqs=val_obs_seqs,
                             use_progress=use_progress,
                             desc=f"E-step val (iter {it+1})",
                         )
-                if verbose:
+                if self.verbose:
                     print(f"  Total val loglik: {val_ll:.3f}")
                 # Scale-invariant criterion: average loglik per timestep
                 criterion_for_stop = val_ll / max(val_num_obs, 1)
@@ -396,9 +378,10 @@ class HDVTrainer:
                 history["val_loglik"].append(val_ll)
             
             if not np.isfinite(criterion_for_stop):
-                if verbose:
+                if self.verbose:
                     print("WARNING: Non-finite stopping criterion; skipping early stopping check this iteration.")
-                self._log_wandb_iteration(
+                WandbLogger.log_iteration(
+                    trainer=self,
                     wandb_run=wandb_run,
                     it=it,
                     iter_start=iter_start,
@@ -416,8 +399,12 @@ class HDVTrainer:
                     val_obs_seqs=val_obs_seqs,
                     A_prev=A_prev,
                     A_new=A_new,
-                    delta_ll=delta_ll,
-                    train_ll_after=train_ll_after
+                    switch_rates_train=switch_rates_train,
+                    run_lengths_train=run_lengths_train,
+                    runlen_median_per_traj=runlen_median_per_traj,
+                    ent_all_train=ent_all_train, 
+                    ent_mean_per_traj=ent_mean_per_traj,
+                    sem_feat_names=sem_feat_names, sem_means=sem_means, sem_stds=sem_stds,
                 )
                 continue
 
@@ -426,7 +413,7 @@ class HDVTrainer:
             else:
                 improvement = criterion_for_stop - prev_criterion
 
-            if verbose:
+            if self.verbose:
                 if val_obs_seqs is not None:
                     print(f"  Criterion (val per-obs): {criterion_for_stop:.6f}")
                 else:
@@ -440,7 +427,7 @@ class HDVTrainer:
                     bad_epochs = 0
 
                 if bad_epochs >= patience and delta_A < delta_A_thresh:
-                    if verbose:
+                    if self.verbose:
                         print("\n*** Early stopping triggered (plateau + stable transitions) ***")
                     break
             prev_criterion = criterion_for_stop
@@ -448,11 +435,12 @@ class HDVTrainer:
             # ----------------------
             # WandB logging
             # ----------------------
-            self._log_wandb_iteration(
+            WandbLogger.log_iteration(
+                trainer=self,
                 wandb_run=wandb_run,
                 it=it,
                 iter_start=iter_start,
-                total_train_loglik=train_ll,                           
+                total_train_loglik=train_ll,
                 total_val_loglik=val_ll,
                 improvement=improvement,
                 criterion_for_stop=criterion_for_stop,
@@ -460,17 +448,21 @@ class HDVTrainer:
                 train_num_obs=train_num_obs,
                 delta_pi=delta_pi,
                 delta_A=delta_A,
-                state_weights_flat=state_w,                            
-                total_responsibility_mass=total_mass,                  
-                state_weights_frac=state_frac,                         
+                state_weights_flat=state_w,
+                total_responsibility_mass=total_mass,
+                state_weights_frac=state_frac,
                 val_obs_seqs=val_obs_seqs,
                 A_prev=A_prev,
                 A_new=A_new,
-                delta_ll=delta_ll,
-                train_ll_after=train_ll_after
+                switch_rates_train=switch_rates_train,
+                run_lengths_train=run_lengths_train,
+                runlen_median_per_traj=runlen_median_per_traj,
+                ent_all_train=ent_all_train, 
+                ent_mean_per_traj=ent_mean_per_traj,
+                sem_feat_names=sem_feat_names, sem_means=sem_means, sem_stds=sem_stds,
             )
-            
-        if verbose:
+
+        if self.verbose:
             print("\n===================== EM TRAINING END =====================")
         return history
 
@@ -513,9 +505,11 @@ class HDVTrainer:
             Each element has shape (N, N) on GPU.
         total_loglik : float
             Sum of log-likelihoods across all sequences (Python float).
+        obs_used 
         """
         gamma_all = []   
         xi_all = []       
+        obs_used = []
         total_loglik = 0.0
 
         iterator = enumerate(obs_seqs)
@@ -541,6 +535,7 @@ class HDVTrainer:
 
                 gamma_all.append(gamma)     
                 xi_all.append(xi_sum)       
+                obs_used.append(obs)
 
                 ll_i = float(loglik.detach().cpu().item())
                 total_loglik += ll_i
@@ -551,7 +546,118 @@ class HDVTrainer:
         if verbose:
             print(f"  Total train loglik: {total_loglik:.3f}")
 
-        return gamma_all, xi_all, total_loglik
+        return gamma_all, xi_all, total_loglik, obs_used
+    
+    def _expected_switch_rates_per_traj(self, gamma_all, xi_all):
+        """
+        Compute per-trajectory *expected* switch rates from posteriors.
+        For a trajectory of length T, expected switch rate is:
+            1 - (sum_t sum_k xi_t(k,k)) / (T-1)
+
+        We only store xi summed over time (xi_sum), so:
+            diag_mass = trace(xi_sum)
+            expected_switch_rate = 1 - diag_mass/(T-1)
+        """
+        rates = []
+        for gamma, xi_sum in zip(gamma_all, xi_all):
+            T = int(gamma.shape[0])
+            if T <= 1:
+                rates.append(np.nan)
+                continue
+            diag_mass = float(torch.diagonal(xi_sum, 0).sum().detach().cpu().item())
+            denom = float(T - 1)
+            r = 1.0 - (diag_mass / max(denom, 1.0))
+            if not np.isfinite(r):
+                r = np.nan
+            else:
+                r = float(np.clip(r, 0.0, 1.0))
+            rates.append(r)
+        return np.asarray(rates, dtype=np.float64)
+
+    def _run_lengths_from_gamma_argmax(self, gamma_all):
+        """
+        Compute run-lengths (segment durations) from hard labels:
+            z_hat[t] = argmax_k gamma[t,k]
+
+        Returns
+        run_lengths : np.ndarray, shape (num_segments,)
+            Lengths of contiguous segments across all trajectories.
+        per_traj_median : np.ndarray, shape (num_traj,)
+            Median run length within each trajectory (NaN if T==0).
+        """
+        all_runs = []
+        traj_medians = []
+
+        for gamma in gamma_all:
+            T = int(gamma.shape[0])
+            if T <= 0:
+                traj_medians.append(np.nan)
+                continue
+
+            # hard path from marginals
+            z_hat = torch.argmax(gamma, dim=1).detach().cpu().numpy().astype(np.int64)
+
+            # compute contiguous run lengths
+            runs = []
+            cur = 1
+            for t in range(1, T):
+                if z_hat[t] == z_hat[t - 1]:
+                    cur += 1
+                else:
+                    runs.append(cur)
+                    cur = 1
+            runs.append(cur)
+
+            runs_np = np.asarray(runs, dtype=np.int64)
+            all_runs.append(runs_np)
+            traj_medians.append(float(np.median(runs_np)) if runs_np.size > 0 else np.nan)
+
+        if len(all_runs) == 0:
+            run_lengths = np.asarray([], dtype=np.int64)
+        else:
+            run_lengths = np.concatenate(all_runs, axis=0)
+
+        return run_lengths.astype(np.int64), np.asarray(traj_medians, dtype=np.float64)
+    
+    def _posterior_entropy_from_gamma(self, gamma_all):
+        """
+        Compute normalized posterior entropy from gamma per timestep.
+
+        Returns
+        -------
+        ent_all : np.ndarray, shape (sum_T,)
+            Normalized entropies pooled over all timesteps in all trajectories. In [0,1].
+        ent_mean_per_traj : np.ndarray, shape (num_traj,)
+            Mean normalized entropy per trajectory (NaN if T==0).
+        """
+        K = int(self.num_states)
+        logK = float(np.log(max(K, 2)))  # avoid divide-by-zero; K>=2 in practice
+
+        ent_list = []
+        ent_mean_traj = []
+
+        for gamma in gamma_all:
+            T = int(gamma.shape[0])
+            if T <= 0:
+                ent_mean_traj.append(np.nan)
+                continue
+
+            # gamma: (T,K). Ensure numerical stability.
+            g = gamma.detach().cpu().numpy().astype(np.float64)
+            g = np.clip(g, 1e-15, 1.0)
+            g = g / g.sum(axis=1, keepdims=True)
+
+            # H_t = -sum_k g*log(g)  -> (T,)
+            H = -np.sum(g * np.log(g), axis=1)
+
+            # normalized entropy in [0,1]
+            Hn = H / logK
+            ent_list.append(Hn)
+            ent_mean_traj.append(float(np.mean(Hn)))
+
+        ent_all = np.concatenate(ent_list, axis=0) if len(ent_list) else np.asarray([], dtype=np.float64)
+        return ent_all.astype(np.float64), np.asarray(ent_mean_traj, dtype=np.float64)
+
 
     def _total_loglik_on_dataset(self, obs_seqs, use_progress, desc):
         """
@@ -663,247 +769,9 @@ class HDVTrainer:
         return state_weights_flat, total_mass, state_frac
 
     # ------------------------------------------------------------------
-    # WandB logging helper
+    # emissions init, save, load 
     # ------------------------------------------------------------------
-    def _log_wandb_iteration(self, wandb_run, it, iter_start, total_train_loglik, total_val_loglik, improvement, criterion_for_stop, val_num_obs, train_num_obs, 
-                             delta_pi, delta_A, state_weights_flat, total_responsibility_mass, state_weights_frac, val_obs_seqs, A_prev, A_new, delta_ll, train_ll_after):
-        """
-        Log per-iteration metrics to Weights & Biases.
-
-        Parameters
-        wandb_run : wandb.sdk.wandb_run.Run | None
-            WandB run object.
-        it : int
-            EM iteration index (0-based).
-        iter_start : float
-            Start time (perf_counter) of this EM iteration.
-        total_train_loglik : float
-            Total train log-likelihood for this iteration.
-        total_val_loglik : float
-            Total validation log-likelihood (np.nan if no validation).
-        improvement : float
-            Improvement in early-stop criterion (average log-likelihood per timestep) vs previous iteration.
-        criterion_for_stop : float
-            Early-stopping criterion value used in this EM iteration. Defined as the average log-likelihood per timestep, computed on the
-            validation set if available, otherwise on the training set.
-        val_num_obs : int | None
-            Total number of timesteps in the validation dataset. 
-        train_num_obs : int
-            Total number of timesteps in the training dataset. 
-        delta_pi, delta_A : float
-            Transition parameter deltas.
-        state_weights_flat : np.ndarray
-            Responsibility mass per state.
-        total_responsibility_mass : float
-            Sum of responsibilities (diagnostic).
-        state_weights_frac : np.ndarray
-            Responsibility fractions per state.
-        val_obs_seqs : list[np.ndarray] | None
-            Validation set (used only to decide what to log).
-        A_prev, A_new : np.ndarray | None
-            Previous and updated A matrices for delta plotting.
-        """
-        if wandb_run is None:
-            return
-
-        import wandb
-
-        iter_time = time.perf_counter() - iter_start
-
-        # convert tensors to numpy for logging + plotting
-        pi_np = self.pi_z.detach().cpu().numpy()
-        A_np = self.A_zz.detach().cpu().numpy()  
-
-        # Emission stats
-        g_means, g_vars = self.emissions.gauss.to_arrays()  # (S,A,cont_dim), (S,A,cont_dim)
-        cont_dim = int(self.emissions.cont_dim)
-        means_2d = g_means.reshape(self.num_states, cont_dim)
-        vars_2d  = g_vars.reshape(self.num_states, cont_dim)
-        cov_traces = vars_2d.sum(axis=1) # "trace" analogue for diagonal covariance is sum of variances
-
-        cov_logdets = np.sum(np.log(vars_2d + 1e-15), axis=1)
-
-        mean_norms = np.linalg.norm(means_2d, axis=1)
-
-        # π diagnostics
-        pi_entropy = float(-np.sum(pi_np * np.log(pi_np + 1e-15))) # Shannon entropy
-        pi_max = float(pi_np.max())
-        pi_min = float(pi_np.min())
-
-        metrics = {
-            "em_iter": it + 1,
-            "time/iter_seconds": iter_time, # Iteration index and wall-clock time per EM iteration.
-            "train/loglik": total_train_loglik, # Sum of log-likelihood over all training trajectories for that EM iteration.
-            "train/delta_pi": float(delta_pi), # L1 change in initial state distribution
-            "train/delta_A": float(delta_A), # Mean absolute difference between old and new transition matrices
-            "train/log_delta_A": float(np.log10(delta_A + 1e-15)),
-            "emissions/total_responsibility_mass": total_responsibility_mass, # Sum of γ over all trajectories, time steps, and states; ie. total number of time steps across all sequences
-            "emissions/cov_logdet_mean": float(np.mean(cov_logdets)),
-            "emissions/cov_logdet_std": float(np.std(cov_logdets)),
-            "pi/entropy": pi_entropy,
-            "pi/max": pi_max,
-            "pi/min": pi_min
-        }
-        metrics["em/monotonicity_delta_ll"] = delta_ll
-
-        metrics["early_stop/criterion"] = criterion_for_stop
-        metrics["early_stop/source"] = "val" if val_obs_seqs is not None else "train"
-        metrics["early_stop/improvement_per_obs"] = float(improvement) if np.isfinite(improvement) else np.nan
-        # Here "observation" refers to a single timestep in a trajectory.
-        metrics["train/loglik_per_obs"] = total_train_loglik / max(train_num_obs, 1)
-        metrics["train/loglik_after_m"] = float(train_ll_after)  
-        metrics["train/loglik_after_m_per_obs"] = float(train_ll_after) / max(train_num_obs, 1)  
-
-        if val_obs_seqs is not None:
-            metrics["val/loglik"] = total_val_loglik # Sum of log-likelihood on the validation set
-            metrics["val/loglik_per_obs"] = (total_val_loglik / max(val_num_obs, 1))
-        else:
-            metrics["val/loglik"] = np.nan
-
-        # -----------------------------
-        # Bernoulli parameter summary  
-        # -----------------------------
-        if getattr(self.emissions, "bin_dim", 0) > 0 and getattr(self.emissions, "bern_p", None) is not None:
-            bern_p = np.asarray(self.emissions.bern_p, dtype=np.float64)  # (N,B)
-            bern_mean_per_state = bern_p.mean(axis=1)                     # (N,)
-            metrics["bern/mean_overall"] = float(bern_p.mean())           
-            metrics["bern/mean_per_state_std"] = float(bern_mean_per_state.std())  
-
-        # -----------------------------
-        # Lane categorical summary  
-        # -----------------------------
-        lane_p = getattr(self.emissions, "lane_p", None)
-        if lane_p is not None:
-            lane_p = np.asarray(lane_p, dtype=np.float64)  # (N, K)
-            lane_p = np.clip(lane_p, 1e-15, 1.0)           # safety
-            lane_p = lane_p / lane_p.sum(axis=1, keepdims=True)
-
-            lane_entropy = -np.sum(lane_p * np.log(lane_p), axis=1)  # (N,)
-            lane_pmax = lane_p.max(axis=1)
-            lane_pmin = lane_p.min(axis=1)
-
-            metrics["lane/entropy_mean"] = float(lane_entropy.mean())  
-            metrics["lane/entropy_std"]  = float(lane_entropy.std())   
-            metrics["lane/p_max_mean"]   = float(lane_pmax.mean())     
-            metrics["lane/p_min_mean"]   = float(lane_pmin.mean())     
-
-        try:
-
-            # π bar plot
-            fig_pi, ax_pi = plt.subplots()
-            ax_pi.bar(np.arange(self.num_states), pi_np)
-            ax_pi.set_title("π_z distribution")
-            ax_pi.set_xlabel("joint state z")
-            ax_pi.set_ylabel("probability")
-            metrics["pi/plot"] = wandb.Image(fig_pi) # Bar plot: π_z as a function of state index z.
-            plt.close(fig_pi)
-
-            # A_zz heatmap
-            fig_A, ax_A = plt.subplots()
-            im = ax_A.imshow(A_np, aspect="auto")
-            ax_A.set_title("Transition matrix A_zz")
-            ax_A.set_xlabel("z'")
-            ax_A.set_ylabel("z")
-            fig_A.colorbar(im, ax=ax_A)
-            metrics["A/heatmap"] = wandb.Image(fig_A) # Image of the transition matrix A_zz, row = current state, column = next state.
-            plt.close(fig_A)
-
-            # A_zz diagonal (stay probabilities)
-            diag_A = np.diag(A_np)
-            fig_diag, ax_diag = plt.subplots()
-            ax_diag.plot(np.arange(self.num_states), diag_A, marker="o")
-            ax_diag.set_title("A_zz diagonal: P(Z_{t+1}=z | Z_t=z)")
-            ax_diag.set_xlabel("joint state z")
-            ax_diag.set_ylabel("stay probability")
-            metrics["A/diag_plot"] = wandb.Image(fig_diag)
-            plt.close(fig_diag)
-
-            # ΔA heatmap (change in transition matrix)
-            if A_prev is not None and A_new is not None:
-                A_diff = A_new - A_prev
-                if np.any(A_diff != 0.0):
-                    fig_dA, ax_dA = plt.subplots()
-                    vmax = np.max(np.abs(A_diff))
-                    if vmax == 0:
-                        vmax = 1.0
-                    im_dA = ax_dA.imshow(A_diff, aspect="auto", vmin=-vmax, vmax=vmax)
-                    ax_dA.set_title("ΔA_zz = A_new - A_prev")
-                    ax_dA.set_xlabel("z'")
-                    ax_dA.set_ylabel("z")
-                    fig_dA.colorbar(im_dA, ax=ax_dA)
-                    metrics["A/delta_heatmap"] = wandb.Image(fig_dA)
-                    plt.close(fig_dA)
-
-            # responsibility mass per state
-            fig_w, ax_w = plt.subplots()
-            ax_w.bar(np.arange(self.num_states), state_weights_flat)
-            ax_w.set_title("State responsibility mass")
-            ax_w.set_xlabel("joint state z")
-            ax_w.set_ylabel("total γ mass")
-            metrics["emissions/state_responsibility_mass_plot"] = wandb.Image(fig_w)
-            plt.close(fig_w)
-
-            # responsibility fraction per state 
-            fig_wf, ax_wf = plt.subplots()
-            ax_wf.bar(np.arange(self.num_states), state_weights_frac)
-            ax_wf.set_title("State responsibility fraction")
-            ax_wf.set_xlabel("joint state z")
-            ax_wf.set_ylabel("fraction of total γ")
-            metrics["emissions/state_responsibility_frac_plot"] = wandb.Image(fig_wf)
-            plt.close(fig_wf)
-
-            # mean norms per state 
-            fig_mn, ax_mn = plt.subplots()
-            ax_mn.plot(np.arange(self.num_states), mean_norms, marker="o")
-            ax_mn.set_title("Emission mean norms ||μ_z||")
-            ax_mn.set_xlabel("joint state z")
-            ax_mn.set_ylabel("L2 norm")
-            metrics["emissions/mean_norms_plot"] = wandb.Image(fig_mn)
-            plt.close(fig_mn)
-
-            # covariance trace per state 
-            fig_ct, ax_ct = plt.subplots()
-            ax_ct.plot(np.arange(self.num_states), cov_traces, marker="o")
-            ax_ct.set_title("Diagonal variance sum per state Σ_d var_zd") 
-            ax_ct.set_xlabel("joint state z")
-            ax_ct.set_ylabel("sum of variances") 
-            metrics["emissions/var_sum_plot"] = wandb.Image(fig_ct)  
-            plt.close(fig_ct)
-
-            # Bernoulli mean per state  
-            if getattr(self.emissions, "bin_dim", 0) > 0 and getattr(self.emissions, "bern_p", None) is not None:
-                bern_p = np.asarray(self.emissions.bern_p, dtype=np.float64)
-                bern_mean_per_state = bern_p.mean(axis=1)
-
-                fig_bp, ax_bp = plt.subplots()
-                ax_bp.plot(np.arange(self.num_states), bern_mean_per_state, marker="o")
-                ax_bp.set_title("Bernoulli exists: mean p(exists) per state")
-                ax_bp.set_xlabel("joint state z")
-                ax_bp.set_ylabel("mean bern_p over exists dims")
-                metrics["bern/mean_per_state_plot"] = wandb.Image(fig_bp)  
-                plt.close(fig_bp)
-
-            # Lane categorical heatmap 
-            lane_p = getattr(self.emissions, "lane_p", None)
-            if lane_p is not None:
-                lane_p = np.asarray(lane_p, dtype=np.float64)
-                fig_lp, ax_lp = plt.subplots()
-                im = ax_lp.imshow(lane_p, aspect="auto")
-                ax_lp.set_title("Lane categorical p(lane_pos | z)")
-                ax_lp.set_xlabel("lane_pos category")
-                ax_lp.set_ylabel("joint state z")
-                fig_lp.colorbar(im, ax=ax_lp)
-                metrics["lane/heatmap"] = wandb.Image(fig_lp) 
-                plt.close(fig_lp)
-        except Exception:
-            pass
-
-        wandb_run.log(metrics)
-
-    # ------------------------------------------------------------------
-    # k-means init, save, load 
-    # ------------------------------------------------------------------
-    def _init_emissions_kmeans(self, train_obs_seqs):
+    def _init_emissions(self, train_obs_seqs):
         """
         Initialise MixedEmissionModel parameters using MiniBatchKMeans on continuous dims.
         - Gaussian part: KMeans on continuous dimensions only.
@@ -1198,3 +1066,127 @@ class HDVTrainer:
 
         print(f"[HDVTrainer] Loaded model parameters from {path}")
         return trainer
+    
+    def _posterior_weighted_key_feature_stats(self, obs_used, gamma_all):
+        """
+        Compute posterior-weighted mean ± std per state for a small set of derived key features (semantics).
+        Features:
+        - speed_mag = sqrt(vx^2 + vy^2)  (if vx,vy exist)
+        - acc_mag   = sqrt(ax^2 + ay^2)  (if ax,ay exist)
+        - For selected neighbor prefixes p:
+                p_dx  conditioned on p_exists=1
+                p_dvx conditioned on p_exists=1
+
+        Returns
+        feat_names : list[str]
+        means : np.ndarray, shape (K, F)
+        stds  : np.ndarray, shape (K, F)
+        """
+        K = int(self.num_states)
+
+        # indices in obs vector
+        name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
+
+        def idx(name: str):
+            return name_to_idx.get(name, None)
+
+        # ego indices
+        i_vx, i_vy = idx("vx"), idx("vy")
+        i_ax, i_ay = idx("ax"), idx("ay")
+
+        compute_speed = (i_vx is not None and i_vy is not None)
+        compute_acc   = (i_ax is not None and i_ay is not None)
+
+        neighbor_prefixes = ["front", "left_front", "right_front"]#, "left_side", "right_side"]
+
+        # Build list of (label, exists_idx, value_idx) entries we will compute
+        # Each entry corresponds to one plotted feature column.
+        feat_specs = []
+
+        if compute_speed:
+            feat_specs.append(("speed_mag", None, None))  
+        if compute_acc:
+            feat_specs.append(("acc_mag", None, None))    
+
+        # Neighbor features: dx and dvx conditioned on exists=1
+        for p in neighbor_prefixes:
+            i_e = idx(f"{p}_exists")
+            i_dx = idx(f"{p}_dx")
+            i_dvx = idx(f"{p}_dvx")
+
+            if i_e is None:
+                continue  # cannot condition without exists
+
+            if i_dx is not None:
+                feat_specs.append((f"{p}_dx | {p}_exists=1", i_e, i_dx))
+            if i_dvx is not None:
+                feat_specs.append((f"{p}_dvx | {p}_exists=1", i_e, i_dvx))
+
+        feat_names = [fs[0] for fs in feat_specs]
+        F = len(feat_names)
+
+        means = np.full((K, F), np.nan, dtype=np.float64)
+        stds  = np.full((K, F), np.nan, dtype=np.float64)
+
+        sum_w   = np.zeros((K, F), dtype=np.float64)
+        sum_wx  = np.zeros((K, F), dtype=np.float64)
+        sum_wx2 = np.zeros((K, F), dtype=np.float64)
+
+        for obs, gamma in zip(obs_used, gamma_all):
+            x = np.asarray(obs, dtype=np.float64)  # (T, D)
+            g = gamma.detach().cpu().numpy().astype(np.float64)  # (T, K)
+
+            # defensive normalization
+            g = np.clip(g, 1e-15, 1.0)
+            g = g / g.sum(axis=1, keepdims=True)
+
+            # Precompute ego derived vectors once per trajectory (if needed)
+            v = None
+            a = None
+            if compute_speed:
+                v = np.sqrt(x[:, i_vx] ** 2 + x[:, i_vy] ** 2)  # (T,)
+            if compute_acc:
+                a = np.sqrt(x[:, i_ax] ** 2 + x[:, i_ay] ** 2)   # (T,)
+
+            # Iterate columns and accumulate posterior-weighted moments
+            for col, (label, i_e, i_val) in enumerate(feat_specs):
+                if label == "speed_mag":
+                    val = v
+                    mask = None  # no conditioning
+                elif label == "acc_mag":
+                    val = a
+                    mask = None
+                else:
+                    # conditioned neighbor feature
+                    # mask: exists == 1
+                    mask = (x[:, i_e] >= 0.5).astype(np.float64)
+                    val = x[:, i_val]
+
+                if val is None:
+                    continue
+
+                for k in range(K):
+                    w = g[:, k]
+                    if mask is not None:
+                        w = w * mask
+                    sw = w.sum()
+                    if sw <= 0.0:
+                        continue
+                    sum_w[k, col]   += sw
+                    sum_wx[k, col]  += (w * val).sum()
+                    sum_wx2[k, col] += (w * val * val).sum()
+
+        # finalize mean/std
+        for k in range(K):
+            for f in range(F):
+                sw = sum_w[k, f]
+                if sw > 1e-12:
+                    mu = sum_wx[k, f] / sw
+                    ex2 = sum_wx2[k, f] / sw
+                    var = ex2 - mu * mu
+                    if var < 0.0:
+                        var = 0.0
+                    means[k, f] = mu
+                    stds[k, f] = np.sqrt(var)
+
+        return feat_names, means, stds
