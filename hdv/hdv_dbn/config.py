@@ -236,13 +236,14 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "Experiment 1: sticky"
+    wandb_run_name: Optional[str] = "Experiment 1: uniform"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
     dtype: Literal["float32", "float64"] = "float64"
+    use_torch_compile: bool = True
 
-    cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
+    cpd_init: Literal["uniform", "random", "sticky"] = "uniform"
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123

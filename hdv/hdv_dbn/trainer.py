@@ -258,6 +258,8 @@ def forward_backward_torch(pi_s0, pi_a0_given_s0, A_s, A_a, logB_s_a):
 
     return gamma, xi_s_sum, xi_a_sum, loglik
 
+if TRAINING_CONFIG.use_torch_compile:
+    forward_backward_torch = torch.compile(forward_backward_torch, mode="reduce-overhead", dynamic=True)
 # =============================================================================
 # Trainer
 # =============================================================================
@@ -428,7 +430,7 @@ class HDVTrainer:
                 _, sem_means_raw, sem_stds_raw = self._posterior_weighted_key_feature_stats(obs_used_raw, gamma_all)
 
             # ----------------------
-            # M-step: update pi_z, A_zz
+            # M-step: update pi_s0, pi_a0|s0, A_s, A_a
             # ----------------------
             if self.verbose:
                 print("M-step: updating pi_s0, pi_a0|s0, A_s, A_a...")
@@ -632,6 +634,10 @@ class HDVTrainer:
 
         with torch.no_grad():
             for i, obs in iterator:
+                if i == 0:
+                    t0 = time.time()
+                    print("Calling forward_backward_torch first time...")
+
                 if obs is None or obs.shape[0] == 0:
                     continue
 
@@ -642,6 +648,9 @@ class HDVTrainer:
                 gamma_s_a, xi_s_sum, xi_a_sum, loglik = forward_backward_torch(
                                                                         self.pi_s0, self.pi_a0_given_s0, self.A_s, self.A_a, logB_s_a
                                                                     )
+                if i == 0:
+                    print(f"First FB call took {time.time() - t0:.2f}s")
+                
                 if torch.isnan(loglik):
                     if verbose >= 2:
                         print(f"  Seq {i:03d}: loglik is NaN, skipping.")
