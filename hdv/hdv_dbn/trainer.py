@@ -202,17 +202,15 @@ class HDVTrainer:
           * update Mixed emissions (Gaussian + Bernoulli + categorical lane_pos) using gamma
     """
 
-    def __init__(self, obs_names, lane_num_categories):
+    def __init__(self, obs_names):
         """
         Parameters
         obs_names : list[str]
             Names of observation features (for MixedEmissionModel).
-        lane_num_categories : int
-            Number of categorical lane_pos categories (valid {0,1,2,3,4}; invalid -1 is ignored).
         """
         self.hdv_dbn = HDVDBN()
         self.obs_names = list(obs_names)
-        self.emissions = MixedEmissionModel(obs_names=self.obs_names, lane_num_categories=lane_num_categories)
+        self.emissions = MixedEmissionModel(obs_names=self.obs_names)
 
         self.S = self.hdv_dbn.num_style
         self.A = self.hdv_dbn.num_action
@@ -308,12 +306,13 @@ class HDVTrainer:
             # ----------------------
             if self.verbose:
                 print("E-step (train):")
-            gamma_all, xi_all, train_ll, obs_used = self._e_step(
-                                                        obs_seqs=train_obs_seqs,
-                                                        use_progress=use_progress,
-                                                        verbose=self.verbose,
-                                                        it=it,
-                                                    )
+            gamma_all, xi_joint_all, xi_S_all, xi_a_all, train_ll, obs_used, obs_used_raw = self._e_step(
+                                                                                            obs_seqs=train_obs_seqs,
+                                                                                            use_progress=use_progress,
+                                                                                            verbose=self.verbose,
+                                                                                            it=it,
+                                                                                            obs_seqs_raw=train_obs_seqs_raw,
+                                                                                        )
             train_ll_per_obs = train_ll / max(train_num_obs, 1)
 
             # -----------------------------------------------------------
@@ -322,8 +321,12 @@ class HDVTrainer:
             switch_rates_train = self._expected_switch_rates_per_traj(gamma_all, xi_all)
             run_lengths_train, runlen_median_per_traj = self._run_lengths_from_gamma_argmax(gamma_all)
             ent_all_train, ent_mean_per_traj = self._posterior_entropy_from_gamma(gamma_all)
+            # Semantics (scaled-space) for relative comparisons
             sem_feat_names, sem_means, sem_stds = self._posterior_weighted_key_feature_stats(obs_used, gamma_all)
-
+            # Semantics (raw-space) for physical interpretation (meters, m/s, etc.)
+            sem_means_raw, sem_stds_raw = None, None
+            if obs_used_raw is not None:
+                _, sem_means_raw, sem_stds_raw = self._posterior_weighted_key_feature_stats(obs_used_raw, gamma_all)
 
             # ----------------------
             # M-step: update pi_z, A_zz
@@ -405,6 +408,7 @@ class HDVTrainer:
                     ent_all_train=ent_all_train, 
                     ent_mean_per_traj=ent_mean_per_traj,
                     sem_feat_names=sem_feat_names, sem_means=sem_means, sem_stds=sem_stds,
+                    sem_means_raw=sem_means_raw, sem_stds_raw=sem_stds_raw,
                 )
                 continue
 
@@ -460,6 +464,7 @@ class HDVTrainer:
                 ent_all_train=ent_all_train, 
                 ent_mean_per_traj=ent_mean_per_traj,
                 sem_feat_names=sem_feat_names, sem_means=sem_means, sem_stds=sem_stds,
+                sem_means_raw=sem_means_raw, sem_stds_raw=sem_stds_raw,
             )
 
         if self.verbose:

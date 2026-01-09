@@ -22,7 +22,7 @@ class WandbLogger:
     def log_iteration(trainer, wandb_run, it, iter_start, total_train_loglik, total_val_loglik, improvement,
         criterion_for_stop, val_num_obs, train_num_obs, delta_pi, delta_A, state_weights_flat, total_responsibility_mass,
         state_weights_frac, val_obs_seqs, A_prev, A_new, switch_rates_train, run_lengths_train, runlen_median_per_traj,
-        ent_all_train, ent_mean_per_traj, sem_feat_names=None, sem_means=None, sem_stds=None):
+        ent_all_train, ent_mean_per_traj, sem_feat_names=None, sem_means=None, sem_stds=None, sem_means_raw=None, sem_stds_raw=None):
         """
         Log per-iteration metrics to Weights & Biases.
 
@@ -264,11 +264,18 @@ class WandbLogger:
 
             # Posterior-weighted key feature semantics (derived features)
             if sem_means is not None and sem_stds is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
-                figs = plot_key_feature_per_feature(sem_means, sem_stds, sem_feat_names, title_prefix="Posterior-weighted")
+                figs = plot_key_feature_per_feature(sem_means, sem_stds, sem_feat_names, title_prefix="Posterior-weighted (scaled)")
                 for fname, fig in figs.items():
                     # safe key for W&B
                     key = fname.replace(" ", "_").replace("|", "").replace("=", "").replace("__", "_")
-                    metrics[f"semantics/{key}"] = wandb.Image(fig)
+                    metrics[f"semantics_scaled/{key}"] = wandb.Image(fig)
+                    WandbLogger._safe_close(fig)
+            # Raw (physical-unit) semantics
+            if sem_means_raw is not None and sem_stds_raw is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
+                figs = plot_key_feature_per_feature(sem_means_raw, sem_stds_raw, sem_feat_names, title_prefix="Posterior-weighted (raw)")
+                for fname, fig in figs.items():
+                    key = fname.replace(" ", "_").replace("|", "").replace("=", "").replace("__", "_")
+                    metrics[f"semantics_raw/{key}"] = wandb.Image(fig)
                     WandbLogger._safe_close(fig)
 
         except Exception as e:
