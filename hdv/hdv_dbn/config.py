@@ -9,10 +9,6 @@ class DBNStates:
     """
     Container for the discrete latent state spaces used by the model.
 
-    The implementation uses a *joint* latent state:
-        z = (driving_style, action)
-    which is flattened into a single HMM/DBN-equivalent state index internally.
-    
     Attributes
     driving_style : Tuple[str, ...]
         Names of discrete driving style states (e.g., conservative/normal/aggressive).
@@ -223,7 +219,7 @@ class TrainingConfig:
 
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
-    early_stop_delta_A_thresh: float = 1e-5
+    early_stop_delta_A_thresh: float = 1e-3
 
     verbose: int = 1
     use_progress: bool = True

@@ -13,6 +13,7 @@ Pipeline
 from pathlib import Path
 import sys
 import re
+import numpy as np
 
 from .datasets import (
     load_highd_folder,
@@ -134,8 +135,7 @@ def main():
     )
 
     obs_dim = len(feature_cols)
-    lane_K = 5 # valid {0,1,2,3,4}, ignore -1
-    trainer = HDVTrainer(obs_names=feature_cols, lane_num_categories=lane_K)
+    trainer = HDVTrainer(obs_names=feature_cols)
     # Store scalers for saving later (trainer.save will handle dict vs arrays after our patch below)
     if USE_CLASSWISE_SCALING:
         trainer.scaler_mean = {k: v[0] for k, v in scaler_to_store.items()}
@@ -143,9 +143,12 @@ def main():
     else:
         trainer.scaler_mean, trainer.scaler_std = scaler_to_store
 
-    # Convert TrajectorySequence objects -> raw numpy observation sequences
+    # Convert TrajectorySequence objects -> numpy observation sequences
+    # Training uses SCALED sequences; we also keep RAW sequences for physical-unit semantic logging.
     train_obs_seqs = [seq.obs for seq in train_seqs_scaled]
-    val_obs_seqs   = [seq.obs for seq in val_seqs_scaled] if len(val_seqs_scaled) > 0 else None
+    train_obs_seqs_raw = [seq.obs for seq in train_seqs]              # raw (unscaled)
+    val_obs_seqs = [seq.obs for seq in val_seqs_scaled] if len(val_seqs_scaled) > 0 else None
+    val_obs_seqs_raw = [seq.obs for seq in val_seqs] if len(val_seqs) > 0  else None
 
     wandb_run = None
     if TRAINING_CONFIG.use_wandb and wandb is not None:
@@ -167,12 +170,14 @@ def main():
         )
 
     try:
-        # Run EM training.
+        # Run EM training. 
         history = trainer.em_train(
-                train_obs_seqs=train_obs_seqs,
-                val_obs_seqs=val_obs_seqs,
-                wandb_run=wandb_run
-            )
+            train_obs_seqs=train_obs_seqs,
+            val_obs_seqs=val_obs_seqs,
+            wandb_run=wandb_run,
+            train_obs_seqs_raw=train_obs_seqs_raw,
+            val_obs_seqs_raw=val_obs_seqs_raw,
+        )
 
         # -----------------------------
         # Save model with config-based name

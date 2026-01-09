@@ -21,7 +21,7 @@ class WandbLogger:
     @staticmethod
     def log_iteration(trainer, wandb_run, it, iter_start, total_train_loglik, total_val_loglik, improvement,
         criterion_for_stop, val_num_obs, train_num_obs, delta_pi, delta_A, state_weights_flat, total_responsibility_mass,
-        state_weights_frac, val_obs_seqs, A_prev, A_new, switch_rates_train, run_lengths_train, runlen_median_per_traj,
+        state_weights_frac, val_obs_seqs, A_prev, A_new, run_lengths_train, runlen_median_per_traj,
         ent_all_train, ent_mean_per_traj, sem_feat_names=None, sem_means=None, sem_stds=None, sem_means_raw=None, sem_stds_raw=None):
         """
         Log per-iteration metrics to Weights & Biases.
@@ -107,19 +107,6 @@ class WandbLogger:
             "early_stop/source": "val" if val_obs_seqs is not None else "train",
             "early_stop/improvement_per_obs": float(improvement) if np.isfinite(improvement) else np.nan,          
         }
-
-        # Trajectory switch-rate stats
-        sr = np.asarray(switch_rates_train, dtype=np.float64).ravel()
-        sr = sr[np.isfinite(sr)]  # drop NaN/inf (e.g., T<=1)
-        metrics["traj/num_traj_used_for_switch_rate"] = int(sr.size)
-        if sr.size > 0:
-            metrics["traj/switch_rate_mean"] = float(np.mean(sr))
-            metrics["traj/switch_rate_median"] = float(np.median(sr))
-            metrics["traj/switch_rate_p95"] = float(np.quantile(sr, 0.95))
-        else:
-            metrics["traj/switch_rate_mean"] = np.nan
-            metrics["traj/switch_rate_median"] = np.nan
-            metrics["traj/switch_rate_p95"] = np.nan
 
         # Run-length (state duration) summaries
         rl = np.asarray(run_lengths_train).ravel()
@@ -239,15 +226,6 @@ class WandbLogger:
                 fig = plot_lane_heatmap(lane_p)
                 metrics["lane/heatmap"] = wandb.Image(fig)
                 WandbLogger._safe_close(fig)
-            
-            # Switch-rate distribution (per trajectory)
-            fig = plot_switch_rate_distribution(
-                switch_rates_train,
-                title="Switch rate per trajectory (expected)",
-                xlabel="1 - diag(xi_sum)/(T-1)",
-            )
-            metrics["traj/switch_rate_dist"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
 
             # Run-length distribution (segment durations)
             fig = plot_run_length_distribution(

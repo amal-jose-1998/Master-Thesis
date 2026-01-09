@@ -1,10 +1,4 @@
-"""
-EM training loop for the HDV DBN with Mixed emissions (Gaussian + discrete).
-
-Design choice:
-- Transition structure (pi_z, A_zz) is initialised once from pgmpy CPDs on CPU, then
-  updated by EM and stored on GPU for repeated inference.
-"""
+"""EM training loop for the HDV DBN with Mixed emissions (Gaussian + discrete)."""
 
 import numpy as np
 import torch
@@ -25,181 +19,281 @@ EPSILON = 1e-6
 # =============================================================================
 # Transition matrix builder 
 # =============================================================================
-def build_joint_transition_matrix(hdv_dbn):
+def build_structured_transition_params(hdv_dbn):
     """
-    Build a joint HMM transition representation over the combined latent state:
-        Z_t = (Style_t, Action_t)
-    This collapses the DBN into an HMM over joint states z, enabling standard
-    forward–backward inference.
-
-    Joint initial distribution: pi_z(s, a) = P(Style_0=s) * P(Action_0=a | Style_0=s)
-
-    Joint transition: A_zz[(s,a),(s',a')] = P(Style_{t+1}=s' | Style_t=s) *
-                             P(Action_{t+1}=a' | Action_t=a, Style_{t+1}=s')
+    Extract structured transition parameters from the pgmpy DBN CPDs.
+    We represent:
+        pi_s0[s]              = P(s_0 = s)
+        pi_a0_given_s0[s,a]  = P(a_0 = a | s_0 = s)
+        A_s[s_prev, s]       = P(s_t = s | s_{t-1} = s_prev)
+        A_a[s, a_prev, a]    = P(a_t = a | a_{t-1} = a_prev, s_t = s)
 
     Parameters
     hdv_dbn : HDVDBN
         DBN model with CPDs for Style and Action at time 0 and 1.
 
     Returns
-    pi_z : np.ndarray
-        Joint initial distribution. Shape (N,), N = S*A.
-    A_zz : np.ndarray
-        Joint transition matrix. Shape (N, N).
+    pi_s0 : np.ndarray, shape (S,)
+    pi_a0_given_s0 : np.ndarray, shape (S, A)
+    A_s : np.ndarray, shape (S, S)
+    A_a : np.ndarray, shape (S, A, A)
+        Interpreted as A_a[s_cur, a_prev, a_cur].
     """
     S = int(hdv_dbn.num_style)
     A = int(hdv_dbn.num_action)
-    N = S * A
 
-    # Extract CPDs
     cpd_style0 = hdv_dbn.model.get_cpds(("Style", 0))
     cpd_action0 = hdv_dbn.model.get_cpds(("Action", 0))
     cpd_style1 = hdv_dbn.model.get_cpds(("Style", 1))
     cpd_action1 = hdv_dbn.model.get_cpds(("Action", 1))
 
-    # -------------------------
-    # initial joint pi(z) = P(Style_0, Action_0) = P(Style_0) P(Action_0 | Style_0)
-    # -------------------------
-    P_style0 = np.asarray(cpd_style0.values, dtype=float).reshape(S)      # (S,)
-    P_action0_given_style0 = np.asarray(cpd_action0.values, dtype=float) # (A, S)
-
-    pi_sa = (P_action0_given_style0 * P_style0[None, :]).T   # (S, A)
-    pi_z = pi_sa.reshape(N)                                   # (N,)
-
-    pi_sum = float(pi_z.sum())
-    if not np.isfinite(pi_sum) or pi_sum <= 0.0:
-        pi_z = np.full((N,), 1.0 / N, dtype=float)
+    # -----------------------------
+    # pi_s0
+    # -----------------------------
+    pi_s0 = np.asarray(cpd_style0.values, dtype=float).reshape(S)  # (S,)
+    pi_s0_sum = float(pi_s0.sum())
+    if not np.isfinite(pi_s0_sum) or pi_s0_sum <= 0.0:
+        pi_s0 = np.full((S,), 1.0 / S, dtype=float)
     else:
-        pi_z = pi_z / pi_sum
-            
-    # -------------------------
-    # transition A_zz' = P(Z_{t+1} = z' | Z_t = z)
-    # -------------------------
-    # From CPDs:
-    #   P(Style_{t+1} | Style_t)
-    #   P(Action_{t+1} | Action_t, Style_t, Style_{t+1})
-    P_style1_given_style0 = np.asarray(cpd_style1.values, dtype=float).reshape(S, S) # (S, S): rows=new, cols=old
-    P_action1_given_action0_style1 = np.asarray(cpd_action1.values, dtype=float).reshape(A, A * S) # (A, A*S)
+        pi_s0 = pi_s0 / pi_s0_sum
 
-    A_zz = np.zeros((N, N), dtype=float)
-    for s in range(S):
-        for a in range(A):
-            z = s * A + a # index for current state
-            for s_next in range(S):
-                p_s = P_style1_given_style0[s_next, s]
-                for a_next in range(A):
-                    z_next = s_next * A + a_next # flat index for next state.
-                    col = a * S + s_next  # Column for (Action_0=a, Style_1=s_next)
-                    p_a = P_action1_given_action0_style1[a_next, col] 
-                    A_zz[z, z_next] = p_s * p_a
+    # -----------------------------
+    # pi_a0_given_s0
+    # cpd_action0.values is typically (A, S) = P(a0 | s0) with rows=a, cols=s
+    # We transpose to (S, A).
+    # -----------------------------
+    P_a0_given_s0 = np.asarray(cpd_action0.values, dtype=float).reshape(A, S).T  # (S,A)
+    # normalize per S
+    row = P_a0_given_s0.sum(axis=1, keepdims=True)
+    row[row <= 0.0] = 1.0
+    pi_a0_given_s0 = P_a0_given_s0 / row
 
-    # normalize rows (each row must sum to 1.)  
-    # A[z,z′]=P(Z_t+1​=z′∣Z_t​=z)
-    row_sums = A_zz.sum(axis=1, keepdims=True)
-    zero_rows = (row_sums == 0) # Avoid division by zero: if a row is all zeros, keep it uniform instead of NaN
-    row_sums[zero_rows] = 1.0
-    A_zz = A_zz / row_sums
+    # -----------------------------
+    # A_s
+    # cpd_style1.values is (S_new, S_old). Convert to (S_old, S_new) and normalize rows.
+    # -----------------------------
+    P_snew_given_sold = np.asarray(cpd_style1.values, dtype=float).reshape(S, S)  # rows=new, cols=old
+    A_s = P_snew_given_sold.T  # (s_old, s_new) => (s_prev, s)
+    row = A_s.sum(axis=1, keepdims=True)
+    row[row <= 0.0] = 1.0
+    A_s = A_s / row
 
-    return pi_z, A_zz
+    # -----------------------------
+    # A_a
+    # CPD: P(Action_1 | Action_0, Style_1)
+    #
+    # We reshape to vals[a_cur, a_prev, s_cur] and then fill:
+    #   A_a[s_cur, a_prev, a_cur] = vals[a_cur, a_prev, s_cur]
+    # (then normalize over a_cur per (s_cur, a_prev)).
+    # -----------------------------
+    vals = np.asarray(cpd_action1.values, dtype=float)
+    # pgmpy may provide (A_cur, A_prev*S) or already multi-dim; handle both robustly
+    if vals.ndim == 2:
+        # (A_cur, A_prev*S) -> (A_cur, A_prev, S)
+        vals = vals.reshape(A, A, S)
+    elif vals.ndim == 3:
+        # expected (A_cur, A_prev, S)
+        if vals.shape != (A, A, S):
+            vals = vals.reshape(A, A, S)
+    else:
+        # very unexpected; last-resort reshape
+        vals = vals.reshape(A, A, S)
+
+    A_a = np.zeros((S, A, A), dtype=float)  # (s_cur, a_prev, a_cur)
+    for s_cur in range(S):
+        for a_prev in range(A):
+            probs = vals[:, a_prev, s_cur]  # (A_cur,)
+            psum = float(probs.sum())
+            if not np.isfinite(psum) or psum <= 0.0:
+                A_a[s_cur, a_prev, :] = 1.0 / A
+            else:
+                A_a[s_cur, a_prev, :] = probs / psum
+
+    return pi_s0, pi_a0_given_s0, A_s, A_a
 
 # =============================================================================
 # Torch forward-backward 
 # =============================================================================
-def forward_backward_torch(pi_z, A_zz, logB):
+def forward_backward_torch(pi_s0, pi_a0_given_s0, A_s, A_a, logB_s_a):
     """
-    Forward–backward in log-domain using Torch.
-    This computes (for one sequence):
-      gamma[t,z] = P(Z_t=z | O_0:T-1)                  shape (T,N)
-      xi_sum[z,z'] = sum_t P(Z_t=z, Z_{t+1}=z' | O)    shape (N,N)
-      loglik = log p(O_0:T-1)                          scalar
+    Structured forward–backward in log-domain for z_t = (s_t, a_t), using factorized transitions:
+        P(s_t | s_{t-1}) = A_s[s_prev, s]
+        P(a_t | a_{t-1}, s_t) = A_a[s, a_prev, a]
+    Emissions are provided over the joint state:
+        logB_s_a[t, s, a] = log p(o_t | s_t=s, a_t=a)
 
     Parameters
-    pi_z : torch.Tensor
-        Initial distribution over joint states, shape (N,).
-    A_zz : torch.Tensor
-        Transition matrix, shape (N,N).
-    logB : torch.Tensor
-        Emission log-likelihoods, shape (T,N).
+    pi_s0 : torch.Tensor
+        Initial style distribution, shape (S,). P(s_0 = s).
+    pi_a0_given_s0 : torch.Tensor
+        Initial action distribution given style, shape (S, A). P(a_0 = a | s_0 = s).
+    A_s : torch.Tensor
+        Style transition matrix, shape (S, S). Row-stochastic over s given s_prev.
+        A_s[s_prev, s] = P(s_t = s | s_{t-1} = s_prev).
+    A_a : torch.Tensor
+        Action transition matrix, shape (S, A, A). Row-stochastic over a given (s, a_prev).
+        A_a[s, a_prev, a] = P(a_t = a | a_{t-1} = a_prev, s_t = s).
+    logB_s_a : torch.Tensor
+        Emission log-likelihoods, shape (T, S, A).
+        logB_s_a[t, s, a] = log p(o_t | s_t=s, a_t=a).
 
     Returns
-    gamma : torch.Tensor
-        Posterior marginals, shape (T,N).
-    xi_sum : torch.Tensor
-        Expected transition counts summed over time, shape (N,N).
+    gamma_s_a : torch.Tensor
+        Posterior marginal over joint states, shape (T, S, A).
+        gamma_s_a[t, s, a] = P(s_t=s, a_t=a | O).
+    xi_s_sum : torch.Tensor
+        Expected style transition counts summed over time, shape (S, S).
+        xi_s_sum[s_prev, s] = sum_t P(s_t=s_prev, s_{t+1}=s | O).
+    xi_a_sum : torch.Tensor
+        Expected action transition counts summed over time, shape (S, A, A).
+        xi_a_sum[s, a_prev, a] = sum_t P(s_{t+1}=s, a_t=a_prev, a_{t+1}=a | O).
     loglik : torch.Tensor
-        Scalar log-likelihood of the sequence.
+        Log-likelihood of the observation sequence. Scalar.
+        loglik = log p(O_0:T-1).
     """
-    # N = number of latent joint states z = (Style, Action).
-    # T = number of time steps in the observation sequence (trajectory).
-    T, N = logB.shape
-    if T == 0:  
-        gamma = torch.empty((0, N), device=logB.device, dtype=logB.dtype)  
-        xi_sum = torch.zeros((N, N), device=logB.device, dtype=logB.dtype)  
-        loglik = torch.tensor(0.0, device=logB.device, dtype=logB.dtype) 
-        return gamma, xi_sum, loglik  
-    
-    device = logB.device
-    dtype = logB.dtype
+    T, S, A = logB_s_a.shape
+    device = logB_s_a.device
+    dtype = logB_s_a.dtype
 
-    log_pi = torch.log(pi_z + EPSILON)         # (N,)
-    logA = torch.log(A_zz + EPSILON)           # (N,N)
+    if T == 0:
+        gamma = torch.empty((0, S, A), device=device, dtype=dtype)
+        xi_s_sum = torch.zeros((S, S), device=device, dtype=dtype)
+        xi_a_sum = torch.zeros((S, A, A), device=device, dtype=dtype)
+        loglik = torch.tensor(0.0, device=device, dtype=dtype)
+        return gamma, xi_s_sum, xi_a_sum, loglik
 
-    # ----- forward -----
-    alpha = torch.empty((T, N), device=device, dtype=dtype)
+    log_pi_s0 = torch.log(pi_s0 + EPSILON)                      # (S,)
+    log_pi_a0_given_s0 = torch.log(pi_a0_given_s0 + EPSILON)    # (S,A)
+    logAs = torch.log(A_s + EPSILON)                            # (S_prev,S_cur)
+    logAa = torch.log(A_a + EPSILON)                            # (S_cur,A_prev,A_cur)
+
+    # Helpful pre-permute:
+    # For forward: need logAa indexed as (S_cur, A_prev, A_cur) already OK.
+    # For xi vectorization: need (A_prev, S_cur, A_cur)
+    logAa_ap_s_a = logAa.permute(1, 0, 2)                       # (A_prev, S_cur, A_cur)
+    # For forward style addition: use logAs^T so we can broadcast (S_cur,S_prev,...)
+    logAs_T = logAs.transpose(0, 1)                             # (S_cur,S_prev)
+
+    # ------------------------------------------------------------------
+    # Forward pass 
+    # ------------------------------------------------------------------
+    # alpha[t,s,a] normalized by c[t]
+    alpha = torch.empty((T, S, A), device=device, dtype=dtype)
     c = torch.empty((T,), device=device, dtype=dtype)
 
-    alpha[0] = log_pi + logB[0]
-    c[0] = torch.logsumexp(alpha[0], dim=0)
-    alpha[0] = alpha[0] - c[0]
+    # t=0
+    alpha0 = log_pi_s0[:, None] + log_pi_a0_given_s0 + logB_s_a[0] # (S,A)
+    c[0] = torch.logsumexp(alpha0.reshape(-1), dim=0)
+    alpha[0] = alpha0 - c[0]
 
+    # forward recursion
     for t in range(1, T):
-        tmp = alpha[t - 1][:, None] + logA           # (N,N)
-        alpha[t] = torch.logsumexp(tmp, dim=0) + logB[t]
-        c[t] = torch.logsumexp(alpha[t], dim=0)
-        alpha[t] = alpha[t] - c[t]
+        prev = alpha[t - 1]  # (S_prev,A_prev)
+
+        # tmp = prev + logAa for all s_cur:
+        # prev[None, S_prev, A_prev, 1] + logAa[S_cur, 1, A_prev, A_cur]
+        tmp = prev[None, :, :, None] + logAa[:, None, :, :]     # (S_cur, S_prev, A_prev, A_cur)
+        m = torch.logsumexp(tmp, dim=2)     # sum over a_prev -> (S_cur, S_prev, A_cur)
+
+        tmp2 = m + logAs_T[:, :, None]                # add style -> (S_cur, S_prev, A_cur)
+        next_alpha = torch.logsumexp(tmp2, dim=1)     # sum over s_prev -> (S_cur, A_cur)
+
+        a = next_alpha + logB_s_a[t]                  # (S,A)
+        c[t] = torch.logsumexp(a.reshape(-1), dim=0)
+        alpha[t] = a - c[t]
 
     loglik = c.sum()
 
-    # ----- backward -----
-    beta = torch.zeros((T, N), device=device, dtype=dtype)
+    # ------------------------------------------------------------------
+    # Backward pass 
+    # ------------------------------------------------------------------
+    beta = torch.zeros((T, S, A), device=device, dtype=dtype)
     beta[T - 1] = 0.0
 
     for t in range(T - 2, -1, -1):
-        tmp = logA + logB[t + 1][None, :] + beta[t + 1][None, :]
-        beta[t] = torch.logsumexp(tmp, dim=1) - c[t + 1]
+        nb = logB_s_a[t + 1] + beta[t + 1]         # (S_cur, A_cur)
 
-    # ----- gamma -----
+        # h[s_cur, a_prev] = logsumexp_{a_cur}( logAa[s_cur,a_prev,a_cur] + nb[s_cur,a_cur] )
+        h = torch.logsumexp(logAa + nb[:, None, :], dim=2)           # (S_cur, A_prev)
+
+        # beta[t, s_prev, a_prev] = logsumexp_{s_cur}( logAs[s_prev,s_cur] + h[s_cur,a_prev] ) - c[t+1]
+        # Build (A_prev, S_prev, S_cur): logAs[None,S_prev,S_cur] + h.T[:,None,S_cur]
+        tmp = logAs[None, :, :] + h.transpose(0, 1)[:, None, :]      # (A_prev, S_prev, S_cur)
+        bt = torch.logsumexp(tmp, dim=2).transpose(0, 1)             # (S_prev, A_prev)
+
+        beta[t] = bt - c[t + 1]
+
+    # ------------------------------------------------------------------
+    # Gamma
+    # ------------------------------------------------------------------
     log_gamma = alpha + beta
-    log_gamma = log_gamma - torch.logsumexp(log_gamma, dim=1, keepdim=True)
-    gamma = torch.exp(log_gamma)
+    log_gamma = log_gamma - torch.logsumexp(log_gamma.reshape(T, -1), dim=1).view(T, 1, 1)
+    gamma = torch.exp(log_gamma)                                     # (T,S,A)
 
-    # ----- xi_sum -----
+    # ------------------------------------------------------------------
+    # Xi sums
+    # ------------------------------------------------------------------
+    xi_s_sum = torch.zeros((S, S), device=device, dtype=dtype)
+    xi_a_sum = torch.zeros((S, A, A), device=device, dtype=dtype)
+
     if T > 1:
-        tmp = (
-            alpha[:-1, :, None]          # (T-1, N, 1)
-            + logA[None, :, :]           # (1,   N, N)
-            + logB[1:, None, :]          # (T-1, 1, N)
-            + beta[1:, None, :]          # (T-1, 1, N)
-        )                                # -> (T-1, N, N)
+        for t in range(T - 1):
+            nb = logB_s_a[t + 1] + beta[t + 1]        # (S_cur, A_cur)
 
-        tmp = tmp - torch.logsumexp(tmp.reshape(T - 1, -1), dim=1).view(T - 1, 1, 1)
-        xi_sum = torch.exp(tmp).sum(dim=0)  # (N, N)
-    else:
-        xi_sum = torch.zeros((N, N), device=device, dtype=dtype)
+            # log_xi: (S_prev, A_prev, S_cur, A_cur)
+            log_xi = (
+                alpha[t][:, :, None, None]                           # (S, A, 1, 1)
+                + logAs[:, None, :, None]                            # (S, 1, S, 1)
+                + logAa_ap_s_a[None, :, :, :]                        # (1, A, S, A)
+                + nb[None, None, :, :]                               # (1, 1, S, A)
+            )
 
-    return gamma, xi_sum, loglik
+            # normalize
+            Z = torch.logsumexp(log_xi.reshape(-1), dim=0)
+            xi = torch.exp(log_xi - Z)                               # (S,A,S,A)
+
+            # accumulate structured counts
+            xi_s_sum += xi.sum(dim=(1, 3))          # sum over a_prev,a_cur -> (s_prev,s_cur)
+            xi_a_sum += xi.sum(dim=0).permute(1, 0, 2)  # sum over s_prev -> (A_prev,s_cur,A_cur) => permute -> (s_cur,A_prev,A_cur)
+
+    return gamma, xi_s_sum, xi_a_sum, loglik
 
 # =============================================================================
 # Trainer
 # =============================================================================
 class HDVTrainer:
     """
-    Trainer for the joint (Style, Action) HMM-equivalent model with Mixed emissions.
-    This class runs EM:
-      - E-step: forward–backward per trajectory to compute gamma and xi_sum
-      - M-step:
-          * update pi_z and A_zz from expected counts
-          * update Mixed emissions (Gaussian + Bernoulli + categorical lane_pos) using gamma
+    Trainer for the structured DBN with factorized transitions and Mixed emissions.
+    Latent state at time t is a pair:
+        z_t = (s_t, a_t)
+    where:
+        s_t ∈ {0..S-1}  (driving style / regime)
+        a_t ∈ {0..A-1}  (maneuver / action)
+
+    Transition factorization:
+        p(s_t | s_{t-1}) = A_s[s_prev, s]
+        p(a_t | a_{t-1}, s_t) = A_a[s, a_prev, a]
+
+    Initial distribution:
+        p(s_0) = pi_s0[s]
+        p(a_0 | s_0) = pi_a0_given_s0[s, a]
+
+    Emissions (MixedEmissionModel), conditionally independent given z_t:
+        - Diagonal Gaussian over continuous features
+        - Independent Bernoulli over binary features
+        - Categorical over lane_pos (K=5) and lc (K=3)
+
+    EM procedure:
+    - E-step: structured forward–backward per trajectory to compute
+            gamma_t(s,a) = p(s_t=s, a_t=a | O)
+            xi sums:
+            xi_s_sum[s_prev, s]  = Σ_t p(s_t=s_prev, s_{t+1}=s | O)
+            xi_a_sum[s, a_prev, a] = Σ_t p(s_{t+1}=s, a_t=a_prev, a_{t+1}=a | O)
+        (A joint xi over z is also optionally accumulated for diagnostics only.)
+
+    - M-step:
+            pi_s0, pi_a0_given_s0, A_s, A_a updated from the expected counts above
+            emission parameters updated from gamma (responsibilities)
     """
 
     def __init__(self, obs_names):
@@ -216,8 +310,8 @@ class HDVTrainer:
         self.A = self.hdv_dbn.num_action
         self.num_states = self.S * self.A
 
-        # Build pi_z, A_zz once (CPU) then move to GPU
-        pi_np, A_np = build_joint_transition_matrix(self.hdv_dbn)
+        pi_s0_np, pi_a0_given_s0_np, As_np, Aa_np = build_structured_transition_params(self.hdv_dbn)
+
 
         self.device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
         if self.device.type == "cuda" and not torch.cuda.is_available():
@@ -227,8 +321,10 @@ class HDVTrainer:
         dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
         self.dtype = torch.float32 if dtype_str == "float32" else torch.float64
 
-        self.pi_z = torch.as_tensor(pi_np, device=self.device, dtype=self.dtype)
-        self.A_zz = torch.as_tensor(A_np, device=self.device, dtype=self.dtype)
+        self.pi_s0 = torch.as_tensor(pi_s0_np, device=self.device, dtype=self.dtype)            # (S,)
+        self.pi_a0_given_s0 = torch.as_tensor(pi_a0_given_s0_np, device=self.device, dtype=self.dtype)  # (S,A)
+        self.A_s = torch.as_tensor(As_np, device=self.device, dtype=self.dtype)               # (S,S)
+        self.A_a = torch.as_tensor(Aa_np, device=self.device, dtype=self.dtype)               # (S,A,A)
 
         # move emissions to GPU + build caches
         self.emissions.to_device(device=self.device, dtype=self.dtype)
@@ -241,7 +337,7 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     # EM training loop
     # ------------------------------------------------------------------
-    def em_train(self, train_obs_seqs, val_obs_seqs=None, wandb_run=None):
+    def em_train(self, train_obs_seqs, val_obs_seqs=None, wandb_run=None, train_obs_seqs_raw=None, val_obs_seqs_raw=None,):
         """
         Train the model using EM.
 
@@ -253,6 +349,10 @@ class HDVTrainer:
             is computed each EM iteration and used for early stopping.
         wandb_run : wandb.sdk.wandb_run.Run | None
             Optional Weights & Biases run object for logging.
+        train_obs_seqs_raw : list[np.ndarray] | None
+            Raw trajectories. Each sequence has shape (T_n, obs_dim).
+        val_obs_seqs_raw : list[np.ndarray] | None
+            Raw trajectories. 
         
         Returns
         history : dict
@@ -306,7 +406,7 @@ class HDVTrainer:
             # ----------------------
             if self.verbose:
                 print("E-step (train):")
-            gamma_all, xi_joint_all, xi_S_all, xi_a_all, train_ll, obs_used, obs_used_raw = self._e_step(
+            gamma_all, xi_s_all, xi_a_all, train_ll, obs_used, obs_used_raw = self._e_step(
                                                                                             obs_seqs=train_obs_seqs,
                                                                                             use_progress=use_progress,
                                                                                             verbose=self.verbose,
@@ -318,7 +418,6 @@ class HDVTrainer:
             # -----------------------------------------------------------
             # Trajectory-level diagnostics (from posteriors)
             # -----------------------------------------------------------
-            switch_rates_train = self._expected_switch_rates_per_traj(gamma_all, xi_all)
             run_lengths_train, runlen_median_per_traj = self._run_lengths_from_gamma_argmax(gamma_all)
             ent_all_train, ent_mean_per_traj = self._posterior_entropy_from_gamma(gamma_all)
             # Semantics (scaled-space) for relative comparisons
@@ -332,13 +431,13 @@ class HDVTrainer:
             # M-step: update pi_z, A_zz
             # ----------------------
             if self.verbose:
-                print("M-step: updating π_z and A_zz...")
+                print("M-step: updating pi_s0, pi_a0|s0, A_s, A_a...")
             delta_pi, delta_A, A_prev, A_new = self._m_step_transitions(
                                                     gamma_all=gamma_all,
-                                                    xi_all=xi_all,
+                                                    xi_s_all=xi_s_all,
+                                                    xi_a_all=xi_a_all,
                                                     verbose=self.verbose,
                                                 )
-            
             # ----------------------
             # M-step: update emission parameters
             # ----------------------
@@ -402,7 +501,6 @@ class HDVTrainer:
                     val_obs_seqs=val_obs_seqs,
                     A_prev=A_prev,
                     A_new=A_new,
-                    switch_rates_train=switch_rates_train,
                     run_lengths_train=run_lengths_train,
                     runlen_median_per_traj=runlen_median_per_traj,
                     ent_all_train=ent_all_train, 
@@ -458,7 +556,6 @@ class HDVTrainer:
                 val_obs_seqs=val_obs_seqs,
                 A_prev=A_prev,
                 A_new=A_new,
-                switch_rates_train=switch_rates_train,
                 run_lengths_train=run_lengths_train,
                 runlen_median_per_traj=runlen_median_per_traj,
                 ent_all_train=ent_all_train, 
@@ -489,7 +586,7 @@ class HDVTrainer:
         """
         return self.emissions.loglik_all_states(obs)
 
-    def _e_step(self, obs_seqs, use_progress, verbose, it):
+    def _e_step(self, obs_seqs, use_progress, verbose, it, obs_seqs_raw=None):
         """
         Run forward–backward on all sequences (training set) and collect posteriors.
         
@@ -502,45 +599,63 @@ class HDVTrainer:
             Verbosity level.
         it : int
             EM iteration index (0-based), only used for tqdm labels.
+        obs_seqs_raw : list[np.ndarray]
+            List of raw sequences, each of shape (T_n, obs_dim).
 
         Returns
         gamma_all : list[torch.Tensor]
-            Each element has shape (T_n, N) on GPU.
-        xi_all : list[torch.Tensor]
-            Each element has shape (N, N) on GPU.
+            Each element shape (T_n, N) where N=S*A (flattened joint), on self.device. This is kept for emission updates.
+        xi_s_all : list[torch.Tensor]
+            Each element shape (S, S), expected style transition counts.
+        xi_a_all : list[torch.Tensor]
+            Each element shape (S, A, A), expected action transition counts conditioned on next style.
         total_loglik : float
             Sum of log-likelihoods across all sequences (Python float).
-        obs_used 
+        obs_used : list[np.ndarray]
+            Sequences that were actually used (non-empty, finite ll).
+        obs_used_raw : list[np.ndarray] | None
+            Raw sequences aligned with obs_used, if provided.
         """
-        gamma_all = []   
-        xi_all = []       
+        if obs_seqs_raw is not None and len(obs_seqs_raw) != len(obs_seqs):
+            raise ValueError("obs_seqs_raw must align with obs_seqs (same length/order).")
+
+        gamma_all = []
+        xi_s_all = []
+        xi_a_all = []
         obs_used = []
+        obs_used_raw = [] if (obs_seqs_raw is not None) else None
         total_loglik = 0.0
 
         iterator = enumerate(obs_seqs)
         if use_progress:
-            iterator = tqdm(
-                iterator,
-                total=len(obs_seqs),
-                desc=f"E-step train (iter {it+1})",
-                leave=False,
-            )
+            iterator = tqdm(iterator, total=len(obs_seqs), desc=f"E-step train (iter {it+1})", leave=False,)
 
         with torch.no_grad():
             for i, obs in iterator:
                 if obs is None or obs.shape[0] == 0:
                     continue
-                logB = self._compute_logB_for_sequence(obs) # Compute emission log-likelihoods logB[t,z] = log p(o_t | z)
-                gamma, xi_sum, loglik = forward_backward_torch(self.pi_z, self.A_zz, logB)
 
+                # emissions are joint-indexed: (T, N). Reshape to (T, S, A) for structured FB.
+                logB_flat = self._compute_logB_for_sequence(obs)  # (T, N); Compute emission log-likelihoods logB[t,z] = log p(o_t | z)
+                T = int(logB_flat.shape[0])
+                logB_s_a = logB_flat.view(T, int(self.S), int(self.A))  # (T,S,A)
+                gamma_s_a, xi_s_sum, xi_a_sum, loglik = forward_backward_torch(
+                                                                        self.pi_s0, self.pi_a0_given_s0, self.A_s, self.A_a, logB_s_a
+                                                                    )
                 if torch.isnan(loglik):
                     if verbose >= 2:
                         print(f"  Seq {i:03d}: loglik is NaN, skipping.")
                     continue
 
-                gamma_all.append(gamma)     
-                xi_all.append(xi_sum)       
+                gamma_flat = gamma_s_a.reshape(T, int(self.num_states))  # (T,N)
+
+                gamma_all.append(gamma_flat)
+                xi_s_all.append(xi_s_sum)
+                xi_a_all.append(xi_a_sum)      
+
                 obs_used.append(obs)
+                if obs_used_raw is not None:
+                    obs_used_raw.append(obs_seqs_raw[i])
 
                 ll_i = float(loglik.detach().cpu().item())
                 total_loglik += ll_i
@@ -551,33 +666,7 @@ class HDVTrainer:
         if verbose:
             print(f"  Total train loglik: {total_loglik:.3f}")
 
-        return gamma_all, xi_all, total_loglik, obs_used
-    
-    def _expected_switch_rates_per_traj(self, gamma_all, xi_all):
-        """
-        Compute per-trajectory *expected* switch rates from posteriors.
-        For a trajectory of length T, expected switch rate is:
-            1 - (sum_t sum_k xi_t(k,k)) / (T-1)
-
-        We only store xi summed over time (xi_sum), so:
-            diag_mass = trace(xi_sum)
-            expected_switch_rate = 1 - diag_mass/(T-1)
-        """
-        rates = []
-        for gamma, xi_sum in zip(gamma_all, xi_all):
-            T = int(gamma.shape[0])
-            if T <= 1:
-                rates.append(np.nan)
-                continue
-            diag_mass = float(torch.diagonal(xi_sum, 0).sum().detach().cpu().item())
-            denom = float(T - 1)
-            r = 1.0 - (diag_mass / max(denom, 1.0))
-            if not np.isfinite(r):
-                r = np.nan
-            else:
-                r = float(np.clip(r, 0.0, 1.0))
-            rates.append(r)
-        return np.asarray(rates, dtype=np.float64)
+        return gamma_all, xi_s_all, xi_a_all, total_loglik, obs_used, obs_used_raw
 
     def _run_lengths_from_gamma_argmax(self, gamma_all):
         """
@@ -666,7 +755,7 @@ class HDVTrainer:
 
     def _total_loglik_on_dataset(self, obs_seqs, use_progress, desc):
         """
-        Compute total log-likelihood over a dataset (train/val/test) without storing gamma/xi.
+        Compute total log-likelihood over a dataset (train/val/test) without storing posteriors.
         This is used for validation scoring and avoids keeping unnecessary tensors in memory.
 
         Parameters
@@ -688,63 +777,116 @@ class HDVTrainer:
 
         with torch.no_grad():
             for _, obs in iterator:
-                logB = self._compute_logB_for_sequence(obs)
-                _, _, ll = forward_backward_torch(self.pi_z, self.A_zz, logB)  
+                logB_flat = self._compute_logB_for_sequence(obs)  # (T,N)
+                T = int(logB_flat.shape[0])
+                logB_s_a = logB_flat.view(T, int(self.S), int(self.A))
+                _, _, _, ll = forward_backward_torch(
+                                    self.pi_s0, self.pi_a0_given_s0, self.A_s, self.A_a, logB_s_a
+                                )
                 total_ll += float(ll.detach().cpu().item())
         return total_ll
     
     # ------------------------------------------------------------------
-    # M-step helpers: π_z, A_zz, emissions
+    # M-step helpers: π, A, emissions
     # ------------------------------------------------------------------
-    def _m_step_transitions(self, gamma_all, xi_all, verbose):
+    def _m_step_transitions(self, gamma_all, xi_s_all, xi_a_all, verbose):
         """
-        Update pi_z and A_zz from posterior expectations.
+        M-step for structured transitions.
+        Learns:
+            pi_s[s]                ∝ sum_seq gamma_seq[t=0, s, :]
+            pi_a0_given_s0[s,a]    ∝ sum_seq gamma_seq[t=0, s, a]
+            A_s[s_prev, s]         ∝ sum_seq xi_s_sum_seq[s_prev, s]
+            A_a[s, a_prev, a]      ∝ sum_seq xi_a_sum_seq[s, a_prev, a]
 
         Parameters
         gamma_all : list[torch.Tensor]
-            Posterior marginals per sequence, each shape (T_n, N).
-        xi_all : list[torch.Tensor]
-            Expected transition counts per sequence, each shape (N, N).
+            Each element shape (T_n, N=S*A), flattened.
+        xi_s_all : list[torch.Tensor]
+            Each element shape (S, S). style transition counts.
+        xi_a_all : list[torch.Tensor]
+            Each element shape (S, A, A). action transition counts conditioned on next style.
         verbose : int
             Verbosity level.
 
         Returns
         delta_pi : float
-            L1 change in initial distribution (sum absolute difference).
+            L1 change in (pi_s, pi_a0_given_s0) concatenated.
         delta_A : float
-            Mean absolute change in A_zz.
-        A_prev : np.ndarray
-            Previous transition matrix on CPU (for diagnostics/plots).
-        A_new : np.ndarray
-            Updated transition matrix on CPU (for diagnostics/plots).
+            Mean absolute change across (A_s and A_a) entries.
+        A_prev : dict[str, np.ndarray]
+            Previous transitions (CPU) for diagnostics/plots.
+        A_new : dict[str, np.ndarray]
+            Updated transitions (CPU) for diagnostics/plots.
         """
-        pi_prev = self.pi_z.detach().cpu().numpy().copy()
-        A_prev = self.A_zz.detach().cpu().numpy().copy()
+        # snapshots for deltas/diagnostics
+        prev = {
+            "pi_s0": self.pi_s0.detach().cpu().numpy().copy(),
+            "pi_a0_given_s0": self.pi_a0_given_s0.detach().cpu().numpy().copy(),
+            "A_s": self.A_s.detach().cpu().numpy().copy(),
+            "A_a": self.A_a.detach().cpu().numpy().copy(),
+        }
 
-        # pi_z update
-        pi_new = torch.zeros_like(self.pi_z)
-        for gamma in gamma_all:
-            pi_new += gamma[0]
-        pi_new = pi_new / (pi_new.sum() + EPSILON)
+        S = int(self.S)
+        A = int(self.A)
 
-        # A_zz update
-        A_new = torch.zeros_like(self.A_zz)
-        for xi_sum in xi_all:
-            A_new += xi_sum
-        row_sums = A_new.sum(dim=1, keepdim=True)
-        A_new = A_new / (row_sums + EPSILON)
+        # update pi_s and pi_a0_given_s0 from gamma[t=0]
+        pi_s0_new = torch.zeros((S,), device=self.device, dtype=self.dtype)
+        pi_a0_given_s0_new = torch.zeros((S, A), device=self.device, dtype=self.dtype)
+        for gamma_flat in gamma_all:
+            if gamma_flat.shape[0] <= 0:
+                continue
+            g0 = gamma_flat[0].view(S, A)  # (S,A)
+            pi_s0_new += g0.sum(dim=1)       # (S,)
+            pi_a0_given_s0_new += g0                 # (S,A)
+        
+        # normalize
+        pi_s0_new = pi_s0_new / (pi_s0_new.sum() + EPSILON)
+        row = pi_a0_given_s0_new.sum(dim=1, keepdim=True)
+        pi_a0_given_s0_new = pi_a0_given_s0_new / (row + EPSILON)
 
-        self.pi_z = pi_new
-        self.A_zz = A_new
+        # update A_s
+        As_counts = torch.zeros((S, S), device=self.device, dtype=self.dtype)
+        for xi_s in xi_s_all:
+            As_counts += xi_s
+        As_new = As_counts / (As_counts.sum(dim=1, keepdim=True) + EPSILON)
 
-        delta_pi = float(np.abs(self.pi_z.detach().cpu().numpy() - pi_prev).sum())
-        delta_A = float(np.abs(self.A_zz.detach().cpu().numpy() - A_prev).mean())
+        # update A_a
+        Aa_counts = torch.zeros((S, A, A), device=self.device, dtype=self.dtype)
+        for xi_a in xi_a_all:
+            Aa_counts += xi_a
+        Aa_new = Aa_counts / (Aa_counts.sum(dim=2, keepdim=True) + EPSILON)
+
+        # write back
+        self.pi_s0 = pi_s0_new
+        self.pi_a0_given_s0 = pi_a0_given_s0_new
+        self.A_s = As_new
+        self.A_a = Aa_new
+
+        # deltas
+        pi_cat_prev = np.concatenate([prev["pi_s0"].ravel(), prev["pi_a0_given_s0"].ravel()], axis=0)
+        pi_cat_new = np.concatenate(
+            [self.pi_s0.detach().cpu().numpy().ravel(), self.pi_a0_given_s0.detach().cpu().numpy().ravel()],
+            axis=0,
+        )
+        delta_pi = float(np.abs(pi_cat_new - pi_cat_prev).sum())
+
+        dAs = np.abs(self.A_s.detach().cpu().numpy() - prev["A_s"]).mean()
+        dAa = np.abs(self.A_a.detach().cpu().numpy() - prev["A_a"]).mean()
+        delta_A = float(0.5 * (dAs + dAa))
 
         if verbose:
-            print(f"  Δπ_z (sum abs diff): {delta_pi:.6e}")
-            print(f"  ΔA_zz (mean abs diff): {delta_A:.6e}")
+            print(f"  Δpi (pi_S + pi_a0|S0) L1: {delta_pi:.6e}")
+            print(f"  ΔA_S mean abs: {float(dAs):.6e}")
+            print(f"  ΔA_a mean abs: {float(dAa):.6e}")
+            print(f"  ΔA (avg): {delta_A:.6e}")
+        
+        A_prev = {"A_s": prev["A_s"], "A_a": prev["A_a"]}
+        A_new = {
+            "A_s": self.A_s.detach().cpu().numpy().copy(),
+            "A_a": self.A_a.detach().cpu().numpy().copy(),
+        }
 
-        return delta_pi, delta_A, A_prev, self.A_zz.detach().cpu().numpy().copy()
+        return delta_pi, delta_A, A_prev, A_new
     
     def _m_step_emissions(self, train_obs_seqs, gamma_all, use_progress, verbose):
         """
@@ -866,6 +1008,25 @@ class HDVTrainer:
         # lane_pos init must ignore invalid lane_pos == -1 (or any out-of-range)
         lane_raw = X_all[:, self.emissions.lane_idx]
         lane_int = np.rint(lane_raw).astype(int)
+
+        if hasattr(self.emissions, "lc_idx") and self.emissions.lc_idx is not None:
+            lc_raw = X_all[:, self.emissions.lc_idx]
+            lc_int = np.rint(lc_raw).astype(int)
+
+            # map {-1,0,1} -> {0,1,2}
+            lc_mapped = lc_int + 1
+
+            valid_lc = (lc_mapped >= 0) & (lc_mapped < self.emissions.lc_K)
+            if np.any(valid_lc):
+                lc_valid = lc_mapped[valid_lc]
+                counts = np.bincount(lc_valid, minlength=self.emissions.lc_K).astype(np.float64)
+            else:
+                counts = np.ones((self.emissions.lc_K,), dtype=np.float64)
+
+            alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
+            p_lc = (counts + alpha) / (counts.sum() + alpha * self.emissions.lc_K)
+            self.emissions.lc_p = np.tile(p_lc[None, :], (K, 1))
+
         valid = (lane_int >= 0) & (lane_int < self.emissions.lane_K)
         if np.any(valid):
             lane_valid = lane_int[valid] 
@@ -885,12 +1046,8 @@ class HDVTrainer:
 
     def save(self, path):
         """
-        Save the learned joint transition parameters, Mixed emissions, and feature scaler to a .npz file.
-        Saves:
-          - Joint transitions: pi_z, A_zz
-          - Emissions: MixedEmissionModel.to_arrays() (stored under em__*)
-          - Scaler: global or classwise
-
+        Save the learned structured transition parameters, Mixed emissions, and feature scaler to a .npz file.
+        
         Parameters
         path : str or Path
             Target file path (e.g. 'models/dbn_highd.npz').
@@ -899,38 +1056,59 @@ class HDVTrainer:
         # -----------------------------
         # Transitions
         # -----------------------------
-        if self.pi_z is None or self.A_zz is None:
-            raise ValueError("Cannot save: transitions (pi_z/A_zz) are not initialized.")
+        # Validate structured transitions exist
+        required = ("pi_s0", "pi_a0_given_s0", "A_s", "A_a")
+        missing = [k for k in required if not hasattr(self, k) or getattr(self, k) is None]
+        if missing:
+            raise ValueError(f"Cannot save: missing structured transitions {missing}.")
 
-        pi_np = self.pi_z.detach().cpu().numpy()
-        A_np = self.A_zz.detach().cpu().numpy()
+        pi_s0_np = self.pi_s0.detach().cpu().numpy()
+        pi_a0_given_s0_np = self.pi_a0_given_s0.detach().cpu().numpy()
+        A_s_np = self.A_s.detach().cpu().numpy()
+        A_a_np = self.A_a.detach().cpu().numpy()
 
-        if pi_np.ndim != 1:
-            raise ValueError(f"pi_z must be 1D, got shape {pi_np.shape}")
-        if A_np.ndim != 2 or A_np.shape[0] != A_np.shape[1]:
-            raise ValueError(f"A_zz must be square 2D, got shape {A_np.shape}")
-        if A_np.shape[0] != pi_np.shape[0]:
-            raise ValueError(f"pi_z length {pi_np.shape[0]} does not match A_zz size {A_np.shape[0]}")
+        # basic shape checks
+        S = int(self.S)
+        A = int(self.A)
+        if pi_s0_np.shape != (S,):
+            raise ValueError(f"pi_S must have shape {(S,)}, got {pi_s0_np.shape}")
+        if pi_a0_given_s0_np.shape != (S, A):
+            raise ValueError(f"pi_a0_given_S0 must have shape {(S, A)}, got {pi_a0_given_s0_np.shape}")
+        if A_s_np.shape != (S, S):
+            raise ValueError(f"A_s must have shape {(S, S)}, got {A_s_np.shape}")
+        if A_a_np.shape != (S, A, A):
+            raise ValueError(f"A_a must have shape {(S, A, A)}, got {A_a_np.shape}")
 
         payload = {
-            "pi_z": pi_np,
-            "A_zz": A_np,
+            "S": np.array([S], dtype=np.int64),
+            "A": np.array([A], dtype=np.int64),
+
+            # structured transitions
+            "pi_s0": pi_s0_np,
+            "pi_a0_given_s0": pi_a0_given_s0_np,
+            "A_s": A_s_np,
+            "A_a": A_a_np,
         }
 
-        # -----------------------------
-        # Meta needed to reconstruct trainer
+       # -----------------------------
+        # Meta needed to reconstruct trainer/emissions
         # -----------------------------
         payload["obs_names"] = np.array(self.obs_names, dtype=object)
-        payload["lane_num_categories"] = np.array([int(getattr(self.emissions, "lane_K", 0))], dtype=np.int64)
+        lane_K = int(getattr(self.emissions, "lane_K", 0))
+        payload["lane_num_categories"] = np.array([lane_K], dtype=np.int64)
         if int(payload["lane_num_categories"][0]) <= 0:
             raise ValueError("lane_num_categories is invalid (<=0). Emissions may not be initialized correctly.")
+        lc_K = int(getattr(self.emissions, "lc_K", 0)) if hasattr(self.emissions, "lc_K") else 0
+        payload["lc_num_categories"] = np.array([lc_K], dtype=np.int64)
 
         # -----------------------------
-        # Emissions (strict keys)
+        # Emissions 
         # -----------------------------
         required = {
             "obs_names",
             "lane_K",
+            "lc_K",
+            "lc_p",
             "cont_idx",
             "bin_idx",
             "lane_idx",
@@ -983,7 +1161,7 @@ class HDVTrainer:
         """
         Load a trained HDVTrainer instance from a .npz file and restore Mixed emissions.
         Restores:
-          - Joint transition parameters (pi_z, A_zz)
+          - pi_s0, pi_a0_given_s0, A_s, A_a
           - Mixed emission parameters (Gaussian + Bernoulli + categorical lane_pos)
           - Feature scaling parameters (global or classwise)
 
@@ -993,7 +1171,7 @@ class HDVTrainer:
 
         Returns
         HDVTrainer
-            A trainer instance with pi_z, A_zz and emission parameters restored.
+            Trainer instance with restored parameters.
         """
         path = str(path)
         data = np.load(path, allow_pickle=True)
@@ -1004,22 +1182,34 @@ class HDVTrainer:
         if "obs_names" not in data.files or "lane_num_categories" not in data.files:  
             raise ValueError(
                 "Saved model is missing 'obs_names' or 'lane_num_categories'. "
-                "Re-save the model with the updated save() implementation."
+                "Re-save the model."
             )  
 
         obs_names = [str(x) for x in list(data["obs_names"])]  
-        lane_K = int(np.asarray(data["lane_num_categories"]).ravel()[0])  
+        lane_K = int(np.asarray(data["lane_num_categories"]).ravel()[0])
+        lc_K = int(np.asarray(data["lc_num_categories"]).ravel()[0]) if "lc_num_categories" in data.files else None
 
-        trainer = cls(obs_names=obs_names, lane_num_categories=lane_K)  
+        trainer = cls(obs_names=obs_names)
 
         # ------------------------------------------------------------------
         # Restore transitions
         # ------------------------------------------------------------------
-        if "pi_z" not in data.files or "A_zz" not in data.files:
-            raise ValueError("Checkpoint is missing 'pi_z' or 'A_zz'.")
 
-        trainer.pi_z = torch.as_tensor(data["pi_z"], device=trainer.device, dtype=trainer.dtype)
-        trainer.A_zz = torch.as_tensor(data["A_zz"], device=trainer.device, dtype=trainer.dtype)
+        if "pi_s0" in data.files and "A_s" in data.files and "A_a" in data.files and "pi_a0_given_s0" in data.files:
+            trainer.pi_s0 = torch.as_tensor(data["pi_s0"], device=trainer.device, dtype=trainer.dtype)
+            trainer.pi_a0_given_s0 = torch.as_tensor(data["pi_a0_given_s0"], device=trainer.device, dtype=trainer.dtype)
+            trainer.A_s = torch.as_tensor(data["A_s"], device=trainer.device, dtype=trainer.dtype)
+            trainer.A_a = torch.as_tensor(data["A_a"], device=trainer.device, dtype=trainer.dtype)
+
+            # ensure num_states consistent 
+            trainer.S = int(trainer.hdv_dbn.num_style)
+            trainer.A = int(trainer.hdv_dbn.num_action)
+            trainer.num_states = trainer.S * trainer.A
+
+        else:
+            raise ValueError(
+                "Checkpoint is missing transitions. Expected pi_s0, pi_a0_given_s0, A_s and A_a"
+            )
 
         # ------------------------------------------------------------------
         # Restore emissions (MixedEmissionModel)
@@ -1029,18 +1219,8 @@ class HDVTrainer:
             if k.startswith("em__"):
                 em_payload[k[len("em__"):]] = data[k]
 
-        # Minimal required keys for the mixed model
-        required_base = {"obs_names", "lane_K", "cont_idx", "bin_idx", "lane_idx", "gauss_means", "bern_p", "lane_p"}  
-        missing_base = [k for k in sorted(required_base) if k not in em_payload]
-        if missing_base:
-            raise ValueError(
-                f"Checkpoint is missing emission keys: {missing_base}. "
-                "Re-save the model using the updated save() implementation."
-            )
-
-        # require at least one of vars/covs
-        if ("gauss_vars" not in em_payload) and ("gauss_covs" not in em_payload):
-            raise ValueError("Checkpoint must contain either 'gauss_vars' (new) or 'gauss_covs' (legacy).")  
+        if not em_payload:
+            raise ValueError("Checkpoint contains no emission payload (no keys starting with 'em__').")
 
         trainer.emissions.from_arrays(em_payload)
         trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)

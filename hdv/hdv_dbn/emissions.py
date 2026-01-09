@@ -4,7 +4,7 @@ Mixed emission model for an HMM / DBN-equivalent formulation with joint latent s
 Observation vector o_t is partitioned into:
   (1) Continuous features  o_t[cont]  -> Diagonal Gaussian per state (with optional gating masks)
   (2) Binary features      o_t[bin_d] -> Independent Bernoulli per state (e.g., *_exists)
-  (3) Categorical feature  o_t[cat_c] -> Categorical per state (e.g., lane_pos)
+  (3) Categorical features  o_t[cat_c] -> Categorical per state (e.g., lane_pos, lc)
 
 Likelihood factorization (conditional independence given z):
   Factorization (conditional independence given z):
@@ -19,7 +19,7 @@ import torch
 from dataclasses import dataclass
 from tqdm.auto import tqdm
 
-from .config import DBN_STATES, TRAINING_CONFIG
+from .config import DBN_STATES, TRAINING_CONFIG, CATEGORICAL_FEATURE_SIZES
 
 # ---------------------------------------------------------------------
 # Numerical stability
@@ -428,23 +428,23 @@ class MixedEmissionModel:
       - to_arrays / from_arrays for checkpointing
     """
 
-    def __init__(self, obs_names, lane_num_categories, lane_name="lane_pos", exists_suffix="_exists"):
+    def __init__(self, obs_names, lane_name="lane_pos", lc_name = "lc", exists_suffix="_exists"):
         """
         Initialize the mixed emission model.
 
         Parameters
         obs_names : Sequence[str]
             List of observation feature names, in order.
-        lane_num_categories : int
-            Number of categories for the lane_pos categorical feature.
         lane_name : str
             Name of the categorical lane position feature.
+        lc_name : str
+            Name of the categorical lane change feature.
         exists_suffix : str
             Suffix for binary existence mask features.
 
         Raises
         ValueError
-            If lane_name is not found in obs_names.
+            If lane_name or lc_name is not found in obs_names.
         """
         self.obs_names = list(obs_names)
         self.obs_dim = len(self.obs_names) 
@@ -459,7 +459,12 @@ class MixedEmissionModel:
             raise ValueError(f"Categorical feature '{lane_name}' not found in obs_names.")
 
         self.lane_name = lane_name
-        self.lane_idx = int(self.obs_names.index(lane_name)) # index of lane_pos feature
+        self.lane_idx = int(self.obs_names.index(lane_name))  # lane_pos index
+
+        self.lc_name = lc_name
+        if self.lc_name not in self.obs_names:
+            raise ValueError(f"Categorical feature '{self.lc_name}' not found in obs_names.")
+        self.lc_idx = int(self.obs_names.index(self.lc_name))
 
         self.exists_suffix = exists_suffix  
         use_exists_bern = bool(getattr(TRAINING_CONFIG, "exists_as_bernoulli", True)) 
@@ -469,8 +474,11 @@ class MixedEmissionModel:
         bin_set = set(self.bin_idx)
 
         # continuous = everything except categorical and binary
-        self.cont_idx = [i for i in range(self.obs_dim) if i != self.lane_idx and i not in bin_set]
-
+        self.cont_idx = [
+                            i for i in range(self.obs_dim)
+                            if (i != self.lane_idx) and (i != self.lc_idx) and (i not in bin_set)
+                        ]
+        
         # Gating map for neighbor-relative continuous features 
         # Any continuous feature ending with _dx/_dy/_dvx/_dvy will be gated by its corresponding *_exists
         rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")
@@ -489,27 +497,32 @@ class MixedEmissionModel:
         # store dimensions
         self.cont_dim = len(self.cont_idx)
         self.bin_dim = len(self.bin_idx)
-        self.lane_K = int(lane_num_categories)
+        self.lane_K = int(CATEGORICAL_FEATURE_SIZES.get("lane_pos", 5)) # lane_pos has 5 categories (0,1,2,3,4)
         if self.lane_K < 2:
             raise ValueError("lane_num_categories must be >= 2")
+        self.lc_K = int(CATEGORICAL_FEATURE_SIZES.get("lc", 3)) # lc has 3 categories (-1,0,+1 mapped to 0,1,2)
 
         # components
         self.gauss = GaussianEmissionModel(obs_dim=self.cont_dim)
 
         # initialize discrete parameters
         self.bern_p = np.full((self.num_states, self.bin_dim), 0.5, dtype=np.float64) # shape (N, bin_dim) all 0.5
-        self.lane_p = np.full((self.num_states, self.lane_K), 1.0 / self.lane_K, dtype=np.float64) # shape (N, K) uniform 1/K
+        self.lane_p = np.full((self.num_states, self.lane_K), 1.0 / self.lane_K, dtype=np.float64) # shape (N, lane_K) uniform 1/lane_K
+        self.lc_p   = np.full((self.num_states, self.lc_K),   1.0 / self.lc_K,   dtype=np.float64) # shape (N, lc_K) uniform 1/lc_K
+
 
         # setup torch caches for discrete distributions
         self._device = torch.device("cpu")
         self._dtype = torch.float32
         self._bern_p_t = None     # (N,B), where B = bin_dim and N = num_states
         self._lane_logp_t = None  # (N,K), where K = lane_K and N = num_states
+        self._lc_logp_t = None    # (N,K), where K = lc_K and N = num_states
 
     def invalidate_cache(self):
         """Invalidate Torch caches. They will be rebuilt on next use."""
         self._bern_p_t = None
         self._lane_logp_t = None
+        self._lc_logp_t = None 
         self.gauss.invalidate_cache()
 
     def to_device(self, device, dtype):
@@ -531,21 +544,24 @@ class MixedEmissionModel:
         else:
             self._bern_p_t = None
 
-        lane_p_t = torch.as_tensor(self.lane_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0)
+        lane_p_t = torch.as_tensor(self.lane_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0 - EPSILON)
         self._lane_logp_t = torch.log(lane_p_t)
+        lc_p_t = torch.as_tensor(self.lc_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0 - EPSILON)
+        self._lc_logp_t = torch.log(lc_p_t)
 
     def loglik_parts_all_states(self, obs): 
         """
         Compute emission log-likelihood parts for one trajectory, for all states:
           - Gaussian part (continuous dims) -> (T, N)
-          - Bernoulli part (binary dims)    -> (T, N)   [already summed over bin features]
-          - Lane categorical part           -> (T, N)   [0 for invalid lane frames]
+          - Bernoulli part (binary dims)    -> (T, N)   
+          - Categorical part                -> (T, N)   
 
         Returns
-        (logp_gauss, logp_bern, logp_lane) each torch.Tensor of shape (T, N).
+        (logp_gauss, logp_bern, logp_lane, logp_lc) each torch.Tensor of shape (T, N).
         """ 
         if (
             self._lane_logp_t is None
+            or self._lc_logp_t is None
             or (self.bin_dim > 0 and self._bern_p_t is None)
             or self.gauss._means_t is None
             or self.gauss._inv_var_t is None
@@ -601,7 +617,20 @@ class MixedEmissionModel:
             logp_lane_valid = self._lane_logp_t[:, lane_valid]  # (N,Tv)
             logp_lane[valid] = logp_lane_valid.T                # (Tv,N)
 
-        return logp_gauss, logp_bern, logp_lane
+        # (4) Lane-change categorical part (0 for invalid frames)
+        logp_lc = torch.zeros_like(logp_gauss)
+        lc_col = x[:, self.lc_idx]  # (T,)
+        lc_col = torch.where(torch.isfinite(lc_col), lc_col, torch.tensor(-99.0, device=x.device, dtype=x.dtype))
+        lc_raw = lc_col.round().to(torch.long)  # expected values: -1, 0, +1
+        # map {-1,0,+1} -> {0,1,2}
+        lc_mapped = lc_raw + 1
+        valid_lc = (lc_mapped >= 0) & (lc_mapped < self.lc_K)
+        if valid_lc.any():
+            lc_valid = lc_mapped[valid_lc]             # (Tv,)
+            logp_lc_valid = self._lc_logp_t[:, lc_valid]  # (N,Tv)
+            logp_lc[valid_lc] = logp_lc_valid.T        # (Tv,N)
+
+        return logp_gauss, logp_bern, logp_lane, logp_lc
 
     def loglik_all_states(self, obs):
         """
@@ -617,9 +646,9 @@ class MixedEmissionModel:
         logB : torch.Tensor
             Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
         """
-        logp_gauss, logp_bern, logp_lane = self.loglik_parts_all_states(obs)  
+        logp_gauss, logp_bern, logp_lane, logp_lc = self.loglik_parts_all_states(obs)  
         w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
-        logp = logp_gauss + w_bern * logp_bern + logp_lane
+        logp = logp_gauss + w_bern * logp_bern + logp_lane + logp_lc
         return logp
 
     def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress, verbose):
@@ -651,6 +680,7 @@ class MixedEmissionModel:
         # allocate accumulators
         sum_bin = torch.zeros((N, self.bin_dim), device=device, dtype=dtype) if self.bin_dim > 0 else None # for Bernoulli MLE
         lane_counts = torch.zeros((N, self.lane_K), device=device, dtype=dtype) # for categorical MLE
+        lc_counts   = torch.zeros((N, self.lc_K),   device=device, dtype=dtype)
 
         cont_obs_seqs = []
         cont_mask_seqs = []
@@ -671,17 +701,28 @@ class MixedEmissionModel:
                 xb = (x[:, self.bin_idx] > 0.5).to(dtype=dtype)
                 sum_bin += g.T @ xb                      # (N,B)
 
-            # Categorical update (ignore invalid lane_pos == -1)
+            # Categorical update for lane_pos (ignore invalid lane_pos == -1)
             lane_col = x[:, self.lane_idx]
             lane_col = torch.where(torch.isfinite(lane_col), lane_col, torch.tensor(-1.0, device=x.device, dtype=x.dtype))
             lane_raw = lane_col.round().to(torch.long)
             valid = (lane_raw >= 0) & (lane_raw < self.lane_K)
-
             if valid.any():
                 lane_valid = lane_raw[valid]                               # (Tv,)
                 g_valid = g[valid]                                         # (Tv,N)
                 lane_oh = torch.nn.functional.one_hot(lane_valid, num_classes=self.lane_K).to(dtype=dtype)    # (Tv,K)
                 lane_counts += g_valid.T @ lane_oh                          # (N,K)
+            
+            # Categorical update for lc (ignore invalid / NaNs)
+            lc_col = x[:, self.lc_idx]
+            lc_col = torch.where(torch.isfinite(lc_col), lc_col, torch.tensor(-99.0, device=x.device, dtype=x.dtype))
+            lc_raw = lc_col.round().to(torch.long)      # {-1,0,+1}
+            lc_mapped = lc_raw + 1                      # -> {0,1,2}
+            valid_lc = (lc_mapped >= 0) & (lc_mapped < self.lc_K)
+            if valid_lc.any():
+                lc_valid = lc_mapped[valid_lc]  # (Tv,)
+                g_valid = g[valid_lc]           # (Tv,N)
+                lc_oh = torch.nn.functional.one_hot(lc_valid, num_classes=self.lc_K).to(dtype=dtype)  # (Tv,K)
+                lc_counts += g_valid.T @ lc_oh
             
             # Continuous + mask for gated diagonal Gaussian
             if self.cont_dim > 0:
@@ -721,6 +762,9 @@ class MixedEmissionModel:
         lane_p = (lane_counts + alpha)
         lane_p = lane_p / (lane_p.sum(dim=1, keepdim=True) + EPSILON)
         self.lane_p = lane_p.detach().cpu().numpy()
+        lc_p = (lc_counts + alpha)
+        lc_p = lc_p / (lc_p.sum(dim=1, keepdim=True) + EPSILON)
+        self.lc_p = lc_p.detach().cpu().numpy()
 
         self.invalidate_cache()
         return weights_np
@@ -748,14 +792,18 @@ class MixedEmissionModel:
             obs_names=np.array(self.obs_names, dtype=object),
             lane_name=np.array([self.lane_name], dtype=object),
             lane_K=np.array([self.lane_K], dtype=np.int64),
+            lc_name=np.array([self.lc_name], dtype=object),
+            lc_K=np.array([self.lc_K], dtype=np.int64),
             cont_idx=np.array(self.cont_idx, dtype=np.int64),
             bin_idx=np.array(self.bin_idx, dtype=np.int64),
             lane_idx=np.array([self.lane_idx], dtype=np.int64),
+            lc_idx=np.array([self.lc_idx], dtype=np.int64),
             gauss_means=g_means,
             gauss_vars=g_vars,
             gauss_covs=g_covs,
             bern_p=np.asarray(self.bern_p, dtype=np.float64),
             lane_p=np.asarray(self.lane_p, dtype=np.float64),
+            lc_p=np.asarray(self.lc_p, dtype=np.float64),
         )
 
     def from_arrays(self, payload):
@@ -776,9 +824,13 @@ class MixedEmissionModel:
         self.lane_name = str(np.asarray(payload.get("lane_name", np.array(["lane_pos"], dtype=object))).reshape(-1)[0])
         self.lane_K = int(np.asarray(payload["lane_K"]).reshape(-1)[0])
 
+        self.lc_name = str(np.asarray(payload.get("lc_name", np.array(["lc"], dtype=object))).reshape(-1)[0])
+        self.lc_K = int(np.asarray(payload.get("lc_K", np.array([3], dtype=np.int64))).reshape(-1)[0])
+        
         self.cont_idx = list(np.asarray(payload["cont_idx"], dtype=np.int64).tolist())
         self.bin_idx = list(np.asarray(payload["bin_idx"], dtype=np.int64).tolist())
         self.lane_idx = int(np.asarray(payload["lane_idx"]).reshape(-1)[0])
+        self.lc_idx = int(np.asarray(payload.get("lc_idx", np.array([self.obs_names.index("lc")], dtype=np.int64))).reshape(-1)[0])
 
         self.cont_dim = len(self.cont_idx)
         self.bin_dim = len(self.bin_idx)
@@ -807,6 +859,16 @@ class MixedEmissionModel:
         self.gauss.from_arrays(g_means, g_second)
 
         self.bern_p = np.asarray(payload["bern_p"], dtype=np.float64)
+        
         self.lane_p = np.asarray(payload["lane_p"], dtype=np.float64)
+        if self.lane_p.shape != (self.num_states, self.lane_K):
+            raise ValueError(f"lane_p has shape {self.lane_p.shape}, expected {(self.num_states, self.lane_K)}")
+        
+        self.lc_p = np.asarray(
+            payload.get("lc_p", np.full((self.num_states, self.lc_K), 1.0 / self.lc_K)),
+            dtype=np.float64,
+        )
+        if self.lc_p.shape != (self.num_states, self.lc_K):
+            raise ValueError(f"lc_p has shape {self.lc_p.shape}, expected {(self.num_states, self.lc_K)}")
 
         self.invalidate_cache()
