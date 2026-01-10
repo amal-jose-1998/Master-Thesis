@@ -212,7 +212,7 @@ def joint_grid_from_flat(values_flat, S, A):
     Returns
     grid : np.ndarray, shape (S, A)
     """
-    v = np.asarray(values_flat, dtype=np.float64).ravel()
+    v = np.asarray(values_flat).ravel()  
     if v.size != S * A:
         raise ValueError(f"Expected values_flat of length {S*A}, got {v.size}")
     return v.reshape(S, A)
