@@ -144,3 +144,67 @@ def add_direction_aware_context_features(df):
             out[f"{prefix}_dy"] *= out["dir_sign"]
 
     return out
+
+
+def add_front_thw_ttc_from_tracks(df, ttc_clip=30.0):
+    """
+    Map highD-provided thw/ttc columns (tracks.csv) to our standard names:
+        front_thw, front_ttc
+
+    Rationale:
+      - highD thw/ttc are typically defined w.r.t. the preceding vehicle (same-lane leader).
+      - keep values finite (training/emissions do not use NaN masks).
+      - clip TTC to avoid extreme values dominating scaling.
+    """
+    out = df
+
+    # if these columns don't exist (older caches / different preprocessing), default to 0.0
+    if "thw" in out.columns:
+        out["front_thw"] = out["thw"].astype(np.float64).fillna(0.0)
+    else:
+        out["front_thw"] = 0.0
+
+    if "ttc" in out.columns:
+        ttc = out["ttc"].astype(np.float64).fillna(0.0).to_numpy()
+        ttc = np.clip(ttc, 0.0, float(ttc_clip))
+        out["front_ttc"] = ttc
+    else:
+        out["front_ttc"] = 0.0
+
+    return out
+
+
+def add_ego_speed_and_jerk(df):
+    """
+    Add:
+      - speed  = sqrt(vx^2 + vy^2)
+      - jerk_x = ax[t] - ax[t-1] computed groupwise per (recording_id, vehicle_id)
+
+    Always finite; first frame of each vehicle -> jerk_x = 0.0.
+    """
+    out = df
+
+    # speed
+    if ("vx" in out.columns) and ("vy" in out.columns):
+        vx = out["vx"].to_numpy(dtype=np.float64)
+        vy = out["vy"].to_numpy(dtype=np.float64)
+        out["speed"] = np.sqrt(vx * vx + vy * vy)
+    else:
+       out["speed"] = 0.0
+
+    # jerk_x (groupwise)
+    if "ax" in out.columns:
+        out = out.sort_values(["recording_id", "vehicle_id", "frame"], kind="mergesort")
+        ax = out["ax"].to_numpy(dtype=np.float64)
+        rec = out["recording_id"].to_numpy()
+        vid = out["vehicle_id"].to_numpy()
+
+        same = (rec == np.roll(rec, 1)) & (vid == np.roll(vid, 1))
+        jerk = np.zeros_like(ax)
+        idx = np.where(same)[0]
+        jerk[idx] = ax[idx] - ax[idx - 1]
+        out["jerk_x"] = jerk
+    else:
+        out["jerk_x"] = 0.0
+
+    return out
