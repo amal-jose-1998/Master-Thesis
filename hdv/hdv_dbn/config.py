@@ -241,7 +241,6 @@ class TrainingConfig:
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
     dtype: Literal["float32", "float64"] = "float64"
-    use_torch_compile: bool = True
 
     cpd_init: Literal["uniform", "random", "sticky"] = "uniform"
     cpd_alpha: float = 1.0
