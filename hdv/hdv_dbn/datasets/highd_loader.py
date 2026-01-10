@@ -23,7 +23,11 @@ except ImportError:
 
 from .highd.io import HIGHD_COL_MAP, _read_recording_bundle
 from .highd.normalise import normalize_vehicle_centric
-from .highd.neighbours import add_direction_aware_context_features
+from .highd.neighbours import (
+    add_direction_aware_context_features,
+    add_front_thw_ttc_from_tracks,
+    add_ego_speed_and_jerk,
+)
 from .highd.lanes import add_lane_position_feature, add_lane_change_feature
 from .highd.sequences import df_to_sequences, train_val_test_split, prune_columns
 from .highd.scaling import (
@@ -32,6 +36,27 @@ from .highd.scaling import (
     scale_sequences,
     scale_sequences_classwise,
 )
+
+def assert_required_columns_present(df, feature_cols, meta_cols, context="highD loader"):
+    """Hard check that all required columns exist in the dataframe."""
+    required = list(feature_cols) + list(meta_cols)
+    missing = [c for c in required if c not in df.columns]
+
+    if missing:
+        raise RuntimeError(
+            f"[{context}] Missing required columns in dataframe:\n"
+            f"{missing}\n\n"
+            f"Available columns ({len(df.columns)}):\n"
+            f"{list(df.columns)}"
+        )
+    
+def warn_all_zero_columns(df, feature_cols, tol=1e-12):
+    bad = []
+    for c in feature_cols:
+        if df[c].dtype.kind in "fi" and abs(df[c]).sum() < tol:
+            bad.append(c)
+    if bad:
+        print(f"[WARN] All-zero feature columns detected: {bad}")
 
 # ---------------------------------------------------------------------
 # Main loader: load all recordings with meta and normalization
@@ -147,6 +172,8 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
         df = add_direction_aware_context_features(df)
         df = add_lane_position_feature(df, y_col="y_center")
         df = add_lane_change_feature(df, lane_col="lane_id", dir_sign_col="dir_sign")
+        df = add_front_thw_ttc_from_tracks(df)
+        df = add_ego_speed_and_jerk(df)
         
         dfs.append(df)
 
@@ -170,7 +197,13 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
     if "lc" in df_all.columns:
         df_all["lc"] = df_all["lc"].astype(int)
 
-    float_base = ["x", "y", "x_center", "y_center", "vx", "vy", "ax", "ay"]
+    float_base = [
+        "x", "y", "x_center", "y_center",
+        "vx", "vy", "ax", "ay",
+        "speed", "jerk_x",
+        "front_thw", "front_ttc",
+        "thw", "ttc",
+    ]
     float_rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")  
     float_cols = []
 
@@ -197,6 +230,14 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
         meta_cols=META_COLS,                 
         keep_extra=[],                       
     )
+
+    assert_required_columns_present(
+        df_all,
+        feature_cols=BASELINE_FEATURE_COLS,
+        meta_cols=META_COLS,
+        context="load_highd_folder",
+    )
+    warn_all_zero_columns(df_all, feature_cols=BASELINE_FEATURE_COLS)
 
     # Save cache for future calls only for full dataset
     if max_recordings is None:

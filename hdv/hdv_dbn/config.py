@@ -42,6 +42,7 @@ EGO_FEATURES: List[str] = [
     "vx", "vy",
     "ax", "ay",
     "lane_pos", "lc",
+    "speed", "jerk_x",
 ]
 
 # -----------------------------
@@ -51,6 +52,7 @@ FRONT_FEATURES: List[str] = [
     "front_exists",
     "front_dx", "front_dy",
     "front_dvx", "front_dvy",
+    "front_thw", "front_ttc",
 ]
 
 REAR_FEATURES: List[str] = [
@@ -214,8 +216,10 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 100
 
-    exists_as_bernoulli = True          # E1,E3=True, E2=False
-    bern_weight = 1.0                   # E1=1.0, E3=0.5 or 0.25
+    exists_as_bernoulli: bool = True          # E1,E3=True, E2=False
+    bern_weight: float = 1.0                   # E1=1.0, E3=0.5 or 0.25
+    lane_weight: float = 0.2  
+    lc_weight: float = 1.0
 
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
@@ -232,7 +236,7 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = None
+    max_highd_recordings: Optional[int] = 5
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
@@ -246,6 +250,8 @@ class TrainingConfig:
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123
+
+    
     
 
 TRAINING_CONFIG = TrainingConfig()

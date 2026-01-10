@@ -646,9 +646,11 @@ class MixedEmissionModel:
         logB : torch.Tensor
             Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
         """
-        logp_gauss, logp_bern, logp_lane, logp_lc = self.loglik_parts_all_states(obs)  
+        logp_gauss, logp_bern, logp_lane, logp_lc = self.loglik_parts_all_states(obs) 
         w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
-        logp = logp_gauss + w_bern * logp_bern + logp_lane + logp_lc
+        w_lane = float(getattr(TRAINING_CONFIG, "lane_weight", 1.0))
+        w_lc   = float(getattr(TRAINING_CONFIG, "lc_weight", 1.0))
+        logp = logp_gauss + w_bern * logp_bern + w_lane * logp_lane + w_lc * logp_lc
         return logp
 
     def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress, verbose):

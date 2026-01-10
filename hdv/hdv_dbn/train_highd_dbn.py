@@ -68,7 +68,6 @@ def build_model_filename(cfg):
         f"seed{int(cfg.seed)}",
     ]
 
-    # Optional: include bernoulli settings if present (keeps filename stable across these toggles)
     if hasattr(cfg, "exists_as_bernoulli"):
         parts.append(f"bern-{int(bool(cfg.exists_as_bernoulli))}")
     if hasattr(cfg, "bern_weight"):
