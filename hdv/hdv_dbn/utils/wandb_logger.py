@@ -123,49 +123,49 @@ class WandbLogger:
 
             "train/loglik": float(total_train_loglik), # Sum of log-likelihood over all training trajectories for that EM iteration.
             "train/loglik_per_obs": float(total_train_loglik) / max(int(train_num_obs), 1),
-            "train/delta_pi": float(delta_pi), # L1 change in initial state distribution
+            #"train/delta_pi": float(delta_pi), # L1 change in initial state distribution
             "train/delta_A": float(delta_A), # Mean absolute difference between old and new transition matrices
-            "train/log_delta_A": float(np.log10(float(delta_A) + 1e-15)),
+            #"train/log_delta_A": float(np.log10(float(delta_A) + 1e-15)),
             
             "pi_s/entropy": pi_s_entropy,
-            "pi_s/max": float(np.max(pi_s0)),
-            "pi_s/min": float(np.min(pi_s0)),
+            #"pi_s/max": float(np.max(pi_s0)),
+            #"pi_s/min": float(np.min(pi_s0)),
 
-            "pi_z/entropy_diagnostic": pi_z_entropy,
-            "pi_z/max": pi_z_max,
-            "pi_z/min": pi_z_min,
+            #"pi_z/entropy_diagnostic": pi_z_entropy,
+            #"pi_z/max": pi_z_max,
+            #"pi_z/min": pi_z_min,
 
-            "emissions/total_responsibility_mass": float(total_responsibility_mass), # Sum of γ over all trajectories, time steps, and states
+            #"emissions/total_responsibility_mass": float(total_responsibility_mass), # Sum of γ over all trajectories, time steps, and states
 
             "early_stop/criterion": float(criterion_for_stop) if np.isfinite(criterion_for_stop) else np.nan,
             "early_stop/source": "val" if val_obs_seqs is not None else "train",
             "early_stop/improvement_per_obs": float(improvement) if np.isfinite(improvement) else np.nan,          
         }
 
-        if vars_2d.shape[1] > 0:
-            cov_logdets = np.sum(np.log(vars_2d + 1e-15), axis=1)
-            metrics["emissions/cov_logdet_mean"] = float(np.mean(cov_logdets))
-            metrics["emissions/cov_logdet_std"] = float(np.std(cov_logdets))
-        else:
-            cov_logdets = np.zeros((trainer.num_states,), dtype=np.float64)
-            metrics["emissions/cov_logdet_mean"] = np.nan
-            metrics["emissions/cov_logdet_std"] = np.nan
+        #if vars_2d.shape[1] > 0:
+        #    cov_logdets = np.sum(np.log(vars_2d + 1e-15), axis=1)
+        #    metrics["emissions/cov_logdet_mean"] = float(np.mean(cov_logdets))
+        #    metrics["emissions/cov_logdet_std"] = float(np.std(cov_logdets))
+        #else:
+        #    cov_logdets = np.zeros((trainer.num_states,), dtype=np.float64)
+        #    metrics["emissions/cov_logdet_mean"] = np.nan
+        #    metrics["emissions/cov_logdet_std"] = np.nan
 
         # Run-length (state duration) summaries
-        rl = np.asarray(run_lengths_train).ravel()
-        rl = rl[np.isfinite(rl)]
-        rl = rl[rl > 0]
-        metrics["traj/num_segments_total"] = int(rl.size)
-        if rl.size > 0:
-            metrics["traj/runlen_median"] = float(np.median(rl))
-            metrics["traj/runlen_p10"] = float(np.quantile(rl, 0.10))
-            metrics["traj/runlen_p90"] = float(np.quantile(rl, 0.90))
-            metrics["traj/runlen_mean"] = float(np.mean(rl))
-        else:
-            metrics["traj/runlen_median"] = np.nan
-            metrics["traj/runlen_p10"] = np.nan
-            metrics["traj/runlen_p90"] = np.nan
-            metrics["traj/runlen_mean"] = np.nan
+        #rl = np.asarray(run_lengths_train).ravel()
+        #rl = rl[np.isfinite(rl)]
+        #rl = rl[rl > 0]
+        #metrics["traj/num_segments_total"] = int(rl.size)
+        #if rl.size > 0:
+        #    metrics["traj/runlen_median"] = float(np.median(rl))
+        #    metrics["traj/runlen_p10"] = float(np.quantile(rl, 0.10))
+        #    metrics["traj/runlen_p90"] = float(np.quantile(rl, 0.90))
+        #    #metrics["traj/runlen_mean"] = float(np.mean(rl))
+        #else:
+        #    metrics["traj/runlen_median"] = np.nan
+        #    metrics["traj/runlen_p10"] = np.nan
+        #    metrics["traj/runlen_p90"] = np.nan
+        #    metrics["traj/runlen_mean"] = np.nan
 
         if val_obs_seqs is not None:
             metrics["val/loglik"] = float(total_val_loglik) # Sum of log-likelihood on the validation set
@@ -174,27 +174,27 @@ class WandbLogger:
             metrics["val/loglik"] = np.nan
 
         # Posterior entropy summaries
-        e = np.asarray(ent_all_train, dtype=np.float64).ravel()
-        e = e[np.isfinite(e)]
-        metrics["traj/entropy_num_timesteps"] = int(e.size)
-        if e.size > 0:
-            metrics["traj/entropy_mean"] = float(np.mean(e))
-            metrics["traj/entropy_median"] = float(np.median(e))
-            metrics["traj/entropy_p95"] = float(np.quantile(e, 0.95))
-        else:
-            metrics["traj/entropy_mean"] = np.nan
-            metrics["traj/entropy_median"] = np.nan
-            metrics["traj/entropy_p95"] = np.nan
+        #e = np.asarray(ent_all_train, dtype=np.float64).ravel()
+        #e = e[np.isfinite(e)]
+        #metrics["traj/entropy_num_timesteps"] = int(e.size)
+        #if e.size > 0:
+        #    metrics["traj/entropy_mean"] = float(np.mean(e))
+        #    metrics["traj/entropy_median"] = float(np.median(e))
+        #    metrics["traj/entropy_p95"] = float(np.quantile(e, 0.95))
+        #else:
+        #    metrics["traj/entropy_mean"] = np.nan
+        #    metrics["traj/entropy_median"] = np.nan
+        #    metrics["traj/entropy_p95"] = np.nan
 
-        mt = np.asarray(runlen_median_per_traj).ravel()
-        mt = mt[np.isfinite(mt)]
-        metrics["traj/runlen_median_per_traj_mean"] = float(np.mean(mt)) if mt.size > 0 else np.nan
-        metrics["traj/runlen_median_per_traj_p10"] = float(np.quantile(mt, 0.10)) if mt.size > 0 else np.nan
+        #mt = np.asarray(runlen_median_per_traj).ravel()
+        #mt = mt[np.isfinite(mt)]
+        #metrics["traj/runlen_median_per_traj_mean"] = float(np.mean(mt)) if mt.size > 0 else np.nan
+        #metrics["traj/runlen_median_per_traj_p10"] = float(np.quantile(mt, 0.10)) if mt.size > 0 else np.nan
 
-        et = np.asarray(ent_mean_per_traj, dtype=np.float64).ravel()
-        et = et[np.isfinite(et)]
-        metrics["traj/entropy_mean_per_traj_mean"] = float(np.mean(et)) if et.size > 0 else np.nan
-        metrics["traj/entropy_mean_per_traj_p10"]  = float(np.quantile(et, 0.10)) if et.size > 0 else np.nan
+        #et = np.asarray(ent_mean_per_traj, dtype=np.float64).ravel()
+        #et = et[np.isfinite(et)]
+        #metrics["traj/entropy_mean_per_traj_mean"] = float(np.mean(et)) if et.size > 0 else np.nan
+        #metrics["traj/entropy_mean_per_traj_p10"]  = float(np.quantile(et, 0.10)) if et.size > 0 else np.nan
 
         # Bernoulli/Lane scalar summaries 
         bern_mean_per_state = None
@@ -205,7 +205,7 @@ class WandbLogger:
             bern_p = np.asarray(bern_p, dtype=np.float64)
             bern_mean_overall = bern_p.mean()          # (N,B)
             bern_mean_per_state = bern_p.mean(axis=1)  # (N,)
-            metrics["bern/mean_overall"] = float(bern_mean_overall)
+        #    metrics["bern/mean_overall"] = float(bern_mean_overall)
 
         lane_p = getattr(trainer.emissions, "lane_p", None)
         if lane_p is not None:
@@ -215,10 +215,10 @@ class WandbLogger:
             lane_entropy = -np.sum(lp * np.log(lp), axis=1) # (N,)
             lp_max = lp.max(axis=1)
             lp_min = lp.min(axis=1)
-            metrics["lane/entropy_mean"] = float(np.mean(lane_entropy))
-            metrics["lane/entropy_std"]  = float(np.std(lane_entropy))   
-            metrics["lane/p_max_mean"]   = float(np.mean(lp_max))     
-            metrics["lane/p_min_mean"]   = float(np.mean(lp_min)) 
+        #    metrics["lane/entropy_mean"] = float(np.mean(lane_entropy))
+        #    metrics["lane/entropy_std"]  = float(np.std(lane_entropy))   
+        #    metrics["lane/p_max_mean"]   = float(np.mean(lp_max))     
+        #    metrics["lane/p_min_mean"]   = float(np.mean(lp_min)) 
 
         lc_p = getattr(trainer.emissions, "lc_p", None)
         if lc_p is not None:
@@ -226,10 +226,10 @@ class WandbLogger:
             lcp = np.clip(lcp, 1e-15, 1.0)
             lcp = lcp / lcp.sum(axis=1, keepdims=True)
             lc_entropy = -np.sum(lcp * np.log(lcp), axis=1)  # (N,)
-            metrics["lc/entropy_mean"] = float(np.mean(lc_entropy))
-            metrics["lc/entropy_std"]  = float(np.std(lc_entropy))
-            metrics["lc/p_max_mean"]   = float(np.mean(lcp.max(axis=1)))
-            metrics["lc/p_min_mean"]   = float(np.mean(lcp.min(axis=1)))
+        #    metrics["lc/entropy_mean"] = float(np.mean(lc_entropy))
+        #    metrics["lc/entropy_std"]  = float(np.std(lc_entropy))
+        #    metrics["lc/p_max_mean"]   = float(np.mean(lcp.max(axis=1)))
+        #    metrics["lc/p_min_mean"]   = float(np.mean(lcp.min(axis=1)))
 
         # Figures 
         try:
@@ -280,13 +280,13 @@ class WandbLogger:
             metrics["emissions/state_frac_sa_grid"] = wandb.Image(fig)
             WandbLogger._safe_close(fig)
 
-            fig = plot_joint_index_grid(
-                S=int(trainer.S),
-                A=int(trainer.A),
-                title="Joint state index z = s*A + a (Style × Action)",
-            )
-            metrics["debug/joint_index_grid"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
+            #fig = plot_joint_index_grid(
+            #    S=int(trainer.S),
+            #    A=int(trainer.A),
+            #    title="Joint state index z = s*A + a (Style × Action)",
+            #)
+            #metrics["debug/joint_index_grid"] = wandb.Image(fig)
+            #WandbLogger._safe_close(fig)
 
             # Structured deltas 
             if isinstance(A_prev, dict) and isinstance(A_new, dict) and ("A_s" in A_prev) and ("A_s" in A_new):
@@ -341,25 +341,40 @@ class WandbLogger:
             metrics["traj/runlen_dist"] = wandb.Image(fig)
             WandbLogger._safe_close(fig)
 
-            fig = plot_entropy_distribution(ent_all_train)
-            metrics["traj/entropy_dist"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
+            #fig = plot_entropy_distribution(ent_all_train)
+            #metrics["traj/entropy_dist"] = wandb.Image(fig)
+            #WandbLogger._safe_close(fig)
 
             # Posterior-weighted key feature semantics (derived features)
-            if sem_means is not None and sem_stds is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
-                figs = plot_key_feature_per_feature(sem_means, sem_stds, sem_feat_names, title_prefix="Posterior-weighted (scaled)")
-                for fname, fig in figs.items():
-                    key = fname.replace(" ", "_").replace("|", "").replace("=", "").replace("__", "_")
-                    metrics[f"semantics_scaled/{key}"] = wandb.Image(fig)
-                    WandbLogger._safe_close(fig)
+            #if sem_means is not None and sem_stds is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
+            #    figs = plot_key_feature_per_feature(sem_means, sem_stds, sem_feat_names, title_prefix="Posterior-weighted (scaled)")
+            #    for fname, fig in figs.items():
+            #        key = fname.replace(" ", "_").replace("|", "").replace("=", "").replace("__", "_")
+            #        metrics[f"semantics_scaled/{key}"] = wandb.Image(fig)
+            #        WandbLogger._safe_close(fig)
 
             # Raw (physical-unit) semantics
             if sem_means_raw is not None and sem_stds_raw is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
-                figs = plot_key_feature_per_feature(sem_means_raw, sem_stds_raw, sem_feat_names, title_prefix="Posterior-weighted (raw)")
-                for fname, fig in figs.items():
-                    key = fname.replace(" ", "_").replace("|", "").replace("=", "").replace("__", "_")
-                    metrics[f"semantics_raw/{key}"] = wandb.Image(fig)
+                fig = plot_semantics_heatmap(sem_means_raw, sem_feat_names, title="Semantics heatmap (raw means)")
+                metrics["semantics_raw/heatmap_means"] = wandb.Image(fig)
+                WandbLogger._safe_close(fig)
+
+                figs = plot_semantics_by_style(
+                    sem_means_raw,
+                    sem_feat_names,
+                    S=int(trainer.S),
+                    A=int(trainer.A),
+                    title_prefix="Semantics (raw)",
+                )
+                for k, fig in figs.items():
+                    metrics[f"semantics_raw/by_style/{k}"] = wandb.Image(fig)
                     WandbLogger._safe_close(fig)
+                
+                #figs = plot_key_feature_per_feature(sem_means_raw, sem_stds_raw, sem_feat_names, title_prefix="Posterior-weighted (raw)")
+                #for fname, fig in figs.items():
+                #    key = fname.replace(" ", "_").replace("|", "").replace("=", "").replace("__", "_")
+                #    metrics[f"semantics_raw/{key}"] = wandb.Image(fig)
+                #    WandbLogger._safe_close(fig)
             
             # LC categorical heatmap p(lc | z)
             if lc_p is not None:

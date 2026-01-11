@@ -311,3 +311,67 @@ def plot_lc_heatmap(lc_p):
     ax.set_xticklabels(["left(-1)", "none(0)", "right(+1)"])
     fig.colorbar(im, ax=ax)
     return fig
+
+
+def plot_semantics_heatmap(means, feat_names, title="Semantics heatmap (means)"):
+    """
+    Heatmap of posterior-weighted semantic means.
+    Rows: joint state z
+    Cols: semantic feature
+    """
+    M = np.asarray(means, dtype=np.float64)
+    fig_w = max(8.0, 0.45 * M.shape[1])   # expand width with #features
+    fig_h = max(4.0, 0.35 * M.shape[0])   # expand height with #states
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+    im = ax.imshow(M, aspect="auto")
+    ax.set_title(title)
+    ax.set_xlabel("semantic feature")
+    ax.set_ylabel("joint state z")
+
+    ax.set_xticks(np.arange(len(feat_names)))
+    ax.set_xticklabels([str(f) for f in feat_names], rotation=60, ha="right", fontsize=7)
+    ax.set_yticks(np.arange(M.shape[0]))
+    ax.tick_params(axis="y", labelsize=8)
+
+    fig.colorbar(im, ax=ax)
+    fig.tight_layout()
+    return fig
+
+
+def plot_semantics_by_style(means, feat_names, S, A, title_prefix="Semantics heatmap"):
+    """
+    Plot semantics heatmaps split by style.
+    For each style s, rows = action a, cols = semantic features.
+    Returns dict: {"style_0": fig0, ...}
+    """
+    M = np.asarray(means, dtype=np.float64)
+    K, F = M.shape
+    assert K == S * A, "Expected K = S * A"
+
+    figs = {}
+    for s in range(S):
+        rows = []
+        for a in range(A):
+            z = s * A + a
+            rows.append(M[z])
+        grid = np.vstack(rows)  # (A, F)
+
+        fig_w = max(8.0, 0.45 * F)
+        fig_h = max(3.0, 0.35 * A)
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+        im = ax.imshow(grid, aspect="auto")
+        ax.set_title(f"{title_prefix} (style s={s})")
+        ax.set_xlabel("semantic feature")
+        ax.set_ylabel("action a")
+
+        ax.set_xticks(np.arange(F))
+        ax.set_xticklabels(feat_names, rotation=60, ha="right", fontsize=7)
+        ax.set_yticks(np.arange(A))
+
+        fig.colorbar(im, ax=ax)
+        fig.tight_layout()
+        figs[f"style_{s}"] = fig
+
+    return figs
