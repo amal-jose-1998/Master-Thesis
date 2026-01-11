@@ -216,14 +216,19 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 100
 
-    exists_as_bernoulli: bool = True          # E1,E3=True, E2=False
-    bern_weight: float = 1.0                   # E1=1.0, E3=0.5 or 0.25
-    lane_weight: float = 0.2  
-    lc_weight: float = 1.0
+    bern_weight: float = 1.0                   # E1=1.0, E3=0.5 or 0.25, E4=1
+    lane_weight: float = 0.2                   # E4=0.2
+    lc_weight: float = 1.0                     # E4=1
 
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
     early_stop_delta_A_thresh: float = 1e-3
+
+    # Transition MAP priors (Dirichlet + stickiness)
+    alpha_A_s: float = 0.1   # smoothing for style rows
+    kappa_A_s: float = 25.0  # extra self-transition mass for style (stickier)
+    alpha_A_a: float = 0.1   # smoothing for action rows
+    kappa_A_a: float = 3.0   # extra self-transition mass for action (less sticky than style)
 
     verbose: int = 1
     use_progress: bool = True
@@ -236,7 +241,7 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = 5
+    max_highd_recordings: Optional[int] = 3
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"

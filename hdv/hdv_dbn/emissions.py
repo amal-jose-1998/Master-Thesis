@@ -466,22 +466,25 @@ class MixedEmissionModel:
             raise ValueError(f"Categorical feature '{self.lc_name}' not found in obs_names.")
         self.lc_idx = int(self.obs_names.index(self.lc_name))
 
-        self.exists_suffix = exists_suffix  
-        use_exists_bern = bool(getattr(TRAINING_CONFIG, "exists_as_bernoulli", True)) 
+        self.exists_suffix = exists_suffix
 
+        # All feature indices that end with the exists suffix
         all_exists_idx = [i for i, n in enumerate(self.obs_names) if n.endswith(exists_suffix)]
-        self.bin_idx = all_exists_idx if use_exists_bern else []  
-        bin_set = set(self.bin_idx)
 
-        # continuous = everything except categorical and binary
+        # Always model *_exists as Bernoulli. Don't treat existence masks as Gaussians.
+        self.bin_idx = all_exists_idx
+
+        # Exclude *_exists columns from the continuous feature set so they are not accidentally modeled by the Gaussian component.
+        exists_set = set(all_exists_idx)
+        # continuous = everything except categorical and any *_exists features
         self.cont_idx = [
-                            i for i in range(self.obs_dim)
-                            if (i != self.lane_idx) and (i != self.lc_idx) and (i not in bin_set)
-                        ]
+            i for i in range(self.obs_dim)
+            if (i != self.lane_idx) and (i != self.lc_idx) and (i not in exists_set)
+        ]
         
         # Gating map for neighbor-relative continuous features 
-        # Any continuous feature ending with _dx/_dy/_dvx/_dvy will be gated by its corresponding *_exists
-        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")
+        # Any continuous feature ending with _dx/_dy/_dvx/_dvy/_thw/_ttc will be gated by its corresponding *_exists
+        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy", "_thw", "_ttc")
         name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
         self._cont_rel_gate = []  # list of (cont_local_idx, exists_global_idx)
         for local_j, global_j in enumerate(self.cont_idx):

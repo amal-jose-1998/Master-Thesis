@@ -846,17 +846,34 @@ class HDVTrainer:
         row = pi_a0_given_s0_new.sum(dim=1, keepdim=True)
         pi_a0_given_s0_new = pi_a0_given_s0_new / (row + EPSILON)
 
-        # update A_s
+        # update A_s (MAP with sticky Dirichlet prior)
         As_counts = torch.zeros((S, S), device=self.device, dtype=self.dtype)
         for xi_s in xi_s_all:
             As_counts += xi_s
-        As_new = As_counts / (As_counts.sum(dim=1, keepdim=True) + EPSILON)
+        alpha_s = float(getattr(TRAINING_CONFIG, "alpha_A_s", 0.1))
+        kappa_s = float(getattr(TRAINING_CONFIG, "kappa_A_s", 25.0))  # sticky (slow)
+        prior_s = torch.full((S, S), alpha_s, device=self.device, dtype=self.dtype)
+        prior_s[torch.arange(S), torch.arange(S)] += kappa_s
+        As_map = As_counts + prior_s
+        As_new = As_map / (As_map.sum(dim=1, keepdim=True) + EPSILON)
 
-        # update A_a
+
+        # update A_a (MAP with milder sticky Dirichlet prior)
         Aa_counts = torch.zeros((S, A, A), device=self.device, dtype=self.dtype)
         for xi_a in xi_a_all:
             Aa_counts += xi_a
-        Aa_new = Aa_counts / (Aa_counts.sum(dim=2, keepdim=True) + EPSILON)
+        alpha_a = float(getattr(TRAINING_CONFIG, "alpha_A_a", 0.1))
+        kappa_a = float(getattr(TRAINING_CONFIG, "kappa_A_a", 3.0))   # less sticky (fast)
+        prior_a = torch.full((S, A, A), alpha_a, device=self.device, dtype=self.dtype)
+        prior_a[:, torch.arange(A), torch.arange(A)] += kappa_a
+        Aa_map = Aa_counts + prior_a
+        Aa_new = Aa_map / (Aa_map.sum(dim=2, keepdim=True) + EPSILON)
+
+        with torch.no_grad():
+            rs = 1.0 - (torch.diag(As_counts).sum() / (As_counts.sum() + EPSILON))
+            ra = 1.0 - (torch.diagonal(Aa_counts, dim1=1, dim2=2).sum() / (Aa_counts.sum() + EPSILON))
+            if verbose:
+                print(f"  switch-rate from xi: style={float(rs):.4f}, action={float(ra):.4f}")
 
         # write back
         self.pi_s0 = pi_s0_new
@@ -877,8 +894,8 @@ class HDVTrainer:
         delta_A = float(0.5 * (dAs + dAa))
 
         if verbose:
-            print(f"  Δpi (pi_S + pi_a0|S0) L1: {delta_pi:.6e}")
-            print(f"  ΔA_S mean abs: {float(dAs):.6e}")
+            print(f"  Δpi (pi_s0 + pi_a0|s0) L1: {delta_pi:.6e}")
+            print(f"  ΔA_s mean abs: {float(dAs):.6e}")
             print(f"  ΔA_a mean abs: {float(dAa):.6e}")
             print(f"  ΔA (avg): {delta_A:.6e}")
         
@@ -1257,13 +1274,7 @@ class HDVTrainer:
     def _posterior_weighted_key_feature_stats(self, obs_used, gamma_all):
         """
         Compute posterior-weighted mean ± std per state for a small set of derived key features (semantics).
-        Features:
-        - speed_mag = sqrt(vx^2 + vy^2)  (if vx,vy exist)
-        - acc_mag   = sqrt(ax^2 + ay^2)  (if ax,ay exist)
-        - For selected neighbor prefixes p:
-                p_dx  conditioned on p_exists=1
-                p_dvx conditioned on p_exists=1
-
+    
         Returns
         feat_names : list[str]
         means : np.ndarray, shape (K, F)
@@ -1280,34 +1291,50 @@ class HDVTrainer:
         # ego indices
         i_vx, i_vy = idx("vx"), idx("vy")
         i_ax, i_ay = idx("ax"), idx("ay")
+        compute_speed_mag = (i_vx is not None and i_vy is not None)
+        compute_acc_mag   = (i_ax is not None and i_ay is not None)
 
-        compute_speed = (i_vx is not None and i_vy is not None)
-        compute_acc   = (i_ax is not None and i_ay is not None)
+        # direct ego signals (only if present in obs_names)
+        ego_direct = []
+        for name in ["speed", "jerk_x", "vx", "vy", "ax", "ay"]:
+            if idx(name) is not None:
+                ego_direct.append(name)
 
-        neighbor_prefixes = ["front", "left_front", "right_front"]#, "left_side", "right_side"]
+        # Neighbors: ALL prefixes present in your baseline config
+        neighbor_prefixes = [
+            "front", "rear",
+            "left_front", "left_side", "left_rear",
+            "right_front", "right_side", "right_rear",
+        ]
 
-        # Build list of (label, exists_idx, value_idx) entries we will compute
-        # Each entry corresponds to one plotted feature column.
+        neighbor_suffixes = ["dx", "dy", "dvx", "dvy", "thw", "ttc"]
+
+         # Build list of feature specs:
+        # each spec is (label, exists_idx_or_None, value_idx_or_None, special_type)
+        # where special_type in {None, "ego_speed_mag", "ego_acc_mag", "direct"}
         feat_specs = []
 
-        if compute_speed:
-            feat_specs.append(("speed_mag", None, None))  
-        if compute_acc:
-            feat_specs.append(("acc_mag", None, None))    
+        # Derived ego magnitudes
+        if compute_speed_mag:
+            feat_specs.append(("speed_mag", None, None, "ego_speed_mag"))
+        if compute_acc_mag:
+            feat_specs.append(("acc_mag", None, None, "ego_acc_mag"))
 
-        # Neighbor features: dx and dvx conditioned on exists=1
+        # Direct ego channels
+        for name in ego_direct:
+            feat_specs.append((name, None, idx(name), "direct"))
+
+        # Neighbor conditioned features
         for p in neighbor_prefixes:
             i_e = idx(f"{p}_exists")
-            i_dx = idx(f"{p}_dx")
-            i_dvx = idx(f"{p}_dvx")
-
             if i_e is None:
-                continue  # cannot condition without exists
+                continue  # can't condition without exists
 
-            if i_dx is not None:
-                feat_specs.append((f"{p}_dx | {p}_exists=1", i_e, i_dx))
-            if i_dvx is not None:
-                feat_specs.append((f"{p}_dvx | {p}_exists=1", i_e, i_dvx))
+            for suf in neighbor_suffixes:
+                i_val = idx(f"{p}_{suf}")
+                if i_val is None:
+                    continue
+                feat_specs.append((f"{p}_{suf} | {p}_exists=1", i_e, i_val, None))
 
         feat_names = [fs[0] for fs in feat_specs]
         F = len(feat_names)
@@ -1327,25 +1354,27 @@ class HDVTrainer:
             g = np.clip(g, 1e-15, 1.0)
             g = g / g.sum(axis=1, keepdims=True)
 
-            # Precompute ego derived vectors once per trajectory (if needed)
-            v = None
-            a = None
-            if compute_speed:
-                v = np.sqrt(x[:, i_vx] ** 2 + x[:, i_vy] ** 2)  # (T,)
-            if compute_acc:
-                a = np.sqrt(x[:, i_ax] ** 2 + x[:, i_ay] ** 2)   # (T,)
+            # Precompute derived ego vectors once per trajectory
+            v_mag = None
+            a_mag = None
+            if compute_speed_mag:
+                v_mag = np.sqrt(x[:, i_vx] ** 2 + x[:, i_vy] ** 2)
+            if compute_acc_mag:
+                a_mag = np.sqrt(x[:, i_ax] ** 2 + x[:, i_ay] ** 2)
 
-            # Iterate columns and accumulate posterior-weighted moments
-            for col, (label, i_e, i_val) in enumerate(feat_specs):
-                if label == "speed_mag":
-                    val = v
-                    mask = None  # no conditioning
-                elif label == "acc_mag":
-                    val = a
-                    mask = None
+            # Accumulate posterior-weighted moments
+            for col, (label, i_e, i_val, special) in enumerate(feat_specs):
+                mask = None
+                val = None
+
+                if special == "ego_speed_mag":
+                    val = v_mag
+                elif special == "ego_acc_mag":
+                    val = a_mag
+                elif special == "direct":
+                    val = x[:, i_val]
                 else:
-                    # conditioned neighbor feature
-                    # mask: exists == 1
+                    # neighbor conditioned on exists==1
                     mask = (x[:, i_e] >= 0.5).astype(np.float64)
                     val = x[:, i_val]
 
