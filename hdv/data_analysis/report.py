@@ -298,7 +298,7 @@ def save_lane_pose_debug_plots(df_lane, df_recording_meta, out_dir,
 
         tracks_one = df_lane[
             (df_lane["recording_id"].astype(str) == rec_id) & (df_lane["id"] == vid)
-        ][["id", "frame", "x", "y", "recording_id", "lane_pos"]].copy()
+        ][["id", "frame", "x_center", "y_center", "recording_id", "lane_pos"]].copy()
         tracks_one.sort_values("frame", inplace=True)
 
         rec_meta_one = df_recording_meta[df_recording_meta["recording_id"].astype(str) == rec_id].copy()
@@ -488,7 +488,7 @@ if __name__ == "__main__":
         tracks_dir=TRACKS_DIR,
         out_dir=OUT_DIR,
         pattern="*_tracks.csv",
-        max_files=10,
+        max_files=None,
         show_progress=True,
     )
 
