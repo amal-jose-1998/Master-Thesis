@@ -497,6 +497,12 @@ class MixedEmissionModel:
                         self._cont_rel_gate.append((local_j, int(name_to_idx[ex_name])))
                     break
 
+        # Precompute gating indices for fast, vectorized mask construction.
+        self._gate_cont_local_idx = [j for (j, _) in self._cont_rel_gate]
+        self._gate_exists_global_idx = [ex for (_, ex) in self._cont_rel_gate]
+        self._gate_cont_local_t = None
+        self._gate_exists_global_t = None
+
         # store dimensions
         self.cont_dim = len(self.cont_idx)
         self.bin_dim = len(self.bin_idx)
@@ -526,6 +532,8 @@ class MixedEmissionModel:
         self._bern_p_t = None
         self._lane_logp_t = None
         self._lc_logp_t = None 
+        self._gate_cont_local_t = None
+        self._gate_exists_global_t = None
         self.gauss.invalidate_cache()
 
     def to_device(self, device, dtype):
@@ -541,6 +549,22 @@ class MixedEmissionModel:
         self._device = torch.device(device)
         self._dtype = dtype
         self.gauss.to_device(device=device, dtype=dtype)
+
+        # Materialize gating indices on the current device for fast mask construction.
+        if self._gate_cont_local_idx:
+            self._gate_cont_local_t = torch.as_tensor(
+                self._gate_cont_local_idx,
+                device=self._device,
+                dtype=torch.long,
+            )
+            self._gate_exists_global_t = torch.as_tensor(
+                self._gate_exists_global_idx,
+                device=self._device,
+                dtype=torch.long,
+            )
+        else:
+            self._gate_cont_local_t = None
+            self._gate_exists_global_t = None
 
         if self.bin_dim > 0:
             self._bern_p_t = torch.as_tensor(self.bern_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0 - EPSILON)
@@ -591,10 +615,11 @@ class MixedEmissionModel:
 
         # (1) Gaussian part
         x_cont = x[:, self.cont_idx] if self.cont_dim > 0 else x[:, :0] # (T,cont_dim)
-        if self.cont_dim > 0 and self._cont_rel_gate:
+        if self.cont_dim > 0 and (self._gate_cont_local_t is not None):
+            # Vectorized gating: mask relative continuous dims using their corresponding *_exists flags
             mask_cont = torch.ones((x.shape[0], self.cont_dim), device=x.device, dtype=self._dtype)
-            for local_j, ex_idx in self._cont_rel_gate:
-                mask_cont[:, local_j] = (x[:, ex_idx] > 0.5).to(dtype=self._dtype)
+            mask_cont[:, self._gate_cont_local_t] = (x[:, self._gate_exists_global_t] > 0.5).to(dtype=self._dtype)
+         
         else:
             mask_cont = None
         logp_gauss = self.gauss.loglik_all_states(x_cont, mask=mask_cont)  # (T,N) 
@@ -731,18 +756,17 @@ class MixedEmissionModel:
             
             # Continuous + mask for gated diagonal Gaussian
             if self.cont_dim > 0:
-                cont_x = x[:, self.cont_idx].detach().cpu().numpy()  
+                cont_x = x[:, self.cont_idx]
                 cont_obs_seqs.append(cont_x)
 
-                if self._cont_rel_gate:
+                if self._gate_cont_local_t is not None:
                     m = torch.ones((x.shape[0], self.cont_dim), device=device, dtype=dtype)
-                    for local_j, ex_idx in self._cont_rel_gate:
-                        m[:, local_j] = (x[:, ex_idx] > 0.5).to(dtype=dtype)
-                    cont_mask_seqs.append(m.detach().cpu().numpy())
+                    m[:, self._gate_cont_local_t] = (x[:, self._gate_exists_global_t] > 0.5).to(dtype=dtype)
+                    cont_mask_seqs.append(m)
                 else:
                     cont_mask_seqs.append(None)
             else:
-                cont_obs_seqs.append(np.zeros((x.shape[0], 0), dtype=np.float64))
+                cont_obs_seqs.append(x[:, :0])
                 cont_mask_seqs.append(None)
 
         # Gaussian update (continuous, diagonal, gated)
@@ -841,7 +865,7 @@ class MixedEmissionModel:
         self.bin_dim = len(self.bin_idx)
 
         # rebuild gating map
-        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")
+        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy", "_thw", "_ttc")
         name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
         self._cont_rel_gate = []
         for local_j, global_j in enumerate(self.cont_idx):
@@ -853,6 +877,11 @@ class MixedEmissionModel:
                     if ex_name in name_to_idx:
                         self._cont_rel_gate.append((local_j, int(name_to_idx[ex_name])))
                     break
+        # Rebuild precomputed gating indices after loading.
+        self._gate_cont_local_idx = [j for (j, _) in self._cont_rel_gate]
+        self._gate_exists_global_idx = [ex for (_, ex) in self._cont_rel_gate]
+        self._gate_cont_local_t = None
+        self._gate_exists_global_t = None
 
         self.gauss = GaussianEmissionModel(obs_dim=self.cont_dim)
 
