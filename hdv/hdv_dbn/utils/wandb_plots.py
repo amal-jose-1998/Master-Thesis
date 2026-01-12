@@ -313,65 +313,170 @@ def plot_lc_heatmap(lc_p):
     return fig
 
 
-def plot_semantics_heatmap(means, feat_names, title="Semantics heatmap (means)"):
+#def plot_semantics_heatmap(means, feat_names, title="Semantics heatmap (means)"):
+#    """
+#    Heatmap of posterior-weighted semantic means.
+#    Rows: joint state z
+#    Cols: semantic feature
+#    """
+#    M = np.asarray(means, dtype=np.float64)
+#    fig_w = max(8.0, 0.45 * M.shape[1])   # expand width with #features
+#    fig_h = max(4.0, 0.35 * M.shape[0])   # expand height with #states
+#    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+#
+#    im = ax.imshow(M, aspect="auto")
+#    ax.set_title(title)
+#    ax.set_xlabel("semantic feature")
+#    ax.set_ylabel("joint state z")
+#
+#    ax.set_xticks(np.arange(len(feat_names)))
+#    ax.set_xticklabels([str(f) for f in feat_names], rotation=60, ha="right", fontsize=7)
+#    ax.set_yticks(np.arange(M.shape[0]))
+#    ax.tick_params(axis="y", labelsize=8)
+#
+#    fig.colorbar(im, ax=ax)
+#    fig.tight_layout()
+#    return fig
+
+
+#def plot_semantics_by_style(means, feat_names, S, A, title_prefix="Semantics heatmap"):
+#    """
+#    Plot semantics heatmaps split by style.
+#    For each style s, rows = action a, cols = semantic features.
+#    Returns dict: {"style_0": fig0, ...}
+#    """
+#    M = np.asarray(means, dtype=np.float64)
+#    K, F = M.shape
+#    assert K == S * A, "Expected K = S * A"
+#
+#    figs = {}
+#    for s in range(S):
+#        rows = []
+#        for a in range(A):
+#            z = s * A + a
+#            rows.append(M[z])
+#        grid = np.vstack(rows)  # (A, F)
+#
+#        fig_w = max(8.0, 0.45 * F)
+#        fig_h = max(3.0, 0.35 * A)
+#        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+#
+#        im = ax.imshow(grid, aspect="auto")
+#        ax.set_title(f"{title_prefix} (style s={s})")
+#        ax.set_xlabel("semantic feature")
+#        ax.set_ylabel("action a")
+#
+#        ax.set_xticks(np.arange(F))
+#        ax.set_xticklabels(feat_names, rotation=60, ha="right", fontsize=7)
+#        ax.set_yticks(np.arange(A))
+#
+#        fig.colorbar(im, ax=ax)
+#        fig.tight_layout()
+#        figs[f"style_{s}"] = fig
+#
+#    return figs
+
+def _format_cell(mean, std=None, fmt="{:.2f}", pm="±"):
+    if std is None:
+        try:
+            return fmt.format(float(mean))
+        except Exception:
+            return str(mean)
+    try:
+        return f"{fmt.format(float(mean))}{pm}{fmt.format(float(std))}"
+    except Exception:
+        return str(mean)
+
+
+def plot_semantics_table_by_style(
+    means,
+    feat_names,
+    S,
+    A,
+    stds=None,
+    title_prefix="Semantics (raw) table",
+    max_cols=12,
+    fmt="{:.2f}",
+):
     """
-    Heatmap of posterior-weighted semantic means.
-    Rows: joint state z
-    Cols: semantic feature
-    """
-    M = np.asarray(means, dtype=np.float64)
-    fig_w = max(8.0, 0.45 * M.shape[1])   # expand width with #features
-    fig_h = max(4.0, 0.35 * M.shape[0])   # expand height with #states
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    Render numeric tables (matplotlib table) for semantics.
+    For each style s: rows=action a, cols=features.
+    If many features, split into chunks of max_cols.
 
-    im = ax.imshow(M, aspect="auto")
-    ax.set_title(title)
-    ax.set_xlabel("semantic feature")
-    ax.set_ylabel("joint state z")
+    Parameters
+    ----------
+    means : (K,F) array
+    stds  : (K,F) array or None
+    feat_names : list[str], length F
+    S, A : ints, K == S*A
+    max_cols : int, number of feature columns per figure
+    fmt : format string for mean/std
 
-    ax.set_xticks(np.arange(len(feat_names)))
-    ax.set_xticklabels([str(f) for f in feat_names], rotation=60, ha="right", fontsize=7)
-    ax.set_yticks(np.arange(M.shape[0]))
-    ax.tick_params(axis="y", labelsize=8)
-
-    fig.colorbar(im, ax=ax)
-    fig.tight_layout()
-    return fig
-
-
-def plot_semantics_by_style(means, feat_names, S, A, title_prefix="Semantics heatmap"):
-    """
-    Plot semantics heatmaps split by style.
-    For each style s, rows = action a, cols = semantic features.
-    Returns dict: {"style_0": fig0, ...}
+    Returns
+    -------
+    figs : dict[str, matplotlib.figure.Figure]
+    keys like: "style_0_part_0"
     """
     M = np.asarray(means, dtype=np.float64)
     K, F = M.shape
-    assert K == S * A, "Expected K = S * A"
+    assert K == S * A, f"Expected K=S*A={S*A}, got {K}"
+
+    SD = None
+    if stds is not None:
+        SD = np.asarray(stds, dtype=np.float64)
+        if SD.shape != M.shape:
+            SD = None
+
+    feat_names = [str(x) for x in feat_names]
+    n_parts = int(np.ceil(F / max_cols))
 
     figs = {}
+    row_labels = [f"a={a}" for a in range(A)]
+
     for s in range(S):
-        rows = []
-        for a in range(A):
-            z = s * A + a
-            rows.append(M[z])
-        grid = np.vstack(rows)  # (A, F)
+        # build (A,F) grid for this style
+        grid = np.vstack([M[s * A + a] for a in range(A)])  # (A,F)
+        grid_sd = None
+        if SD is not None:
+            grid_sd = np.vstack([SD[s * A + a] for a in range(A)])  # (A,F)
 
-        fig_w = max(8.0, 0.45 * F)
-        fig_h = max(3.0, 0.35 * A)
-        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+        for p in range(n_parts):
+            j0 = p * max_cols
+            j1 = min(F, (p + 1) * max_cols)
 
-        im = ax.imshow(grid, aspect="auto")
-        ax.set_title(f"{title_prefix} (style s={s})")
-        ax.set_xlabel("semantic feature")
-        ax.set_ylabel("action a")
+            cols = feat_names[j0:j1]
+            cell_text = []
+            for a in range(A):
+                row = []
+                for j in range(j0, j1):
+                    if grid_sd is None:
+                        row.append(_format_cell(grid[a, j], None, fmt=fmt))
+                    else:
+                        row.append(_format_cell(grid[a, j], grid_sd[a, j], fmt=fmt))
+                cell_text.append(row)
 
-        ax.set_xticks(np.arange(F))
-        ax.set_xticklabels(feat_names, rotation=60, ha="right", fontsize=7)
-        ax.set_yticks(np.arange(A))
+            # Figure size scales with column count
+            fig_w = max(8.0, 0.85 * (j1 - j0))
+            fig_h = max(2.6, 0.55 * A + 1.0)
+            fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+            ax.axis("off")
+            title = f"{title_prefix} (style s={s})"
+            if n_parts > 1:
+                title += f"  [features {j0}:{j1}]"
+            ax.set_title(title)
 
-        fig.colorbar(im, ax=ax)
-        fig.tight_layout()
-        figs[f"style_{s}"] = fig
+            tbl = ax.table(
+                cellText=cell_text,
+                rowLabels=row_labels,
+                colLabels=cols,
+                loc="center",
+                cellLoc="center",
+            )
+            tbl.auto_set_font_size(False)
+            tbl.set_fontsize(8)
+            tbl.scale(1.0, 1.35)
+
+            fig.tight_layout()
+            figs[f"style_{s}_part_{p}"] = fig
 
     return figs

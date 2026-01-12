@@ -353,22 +353,32 @@ class WandbLogger:
             #        metrics[f"semantics_scaled/{key}"] = wandb.Image(fig)
             #        WandbLogger._safe_close(fig)
 
-            # Raw (physical-unit) semantics
-            if sem_means_raw is not None and sem_stds_raw is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
-                fig = plot_semantics_heatmap(sem_means_raw, sem_feat_names, title="Semantics heatmap (raw means)")
-                metrics["semantics_raw/heatmap_means"] = wandb.Image(fig)
-                WandbLogger._safe_close(fig)
-
-                figs = plot_semantics_by_style(
+            # Raw (physical-unit) semantics -> log numeric tables (values), split by style
+            if sem_means_raw is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
+                figs = plot_semantics_table_by_style(
                     sem_means_raw,
                     sem_feat_names,
                     S=int(trainer.S),
                     A=int(trainer.A),
-                    title_prefix="Semantics (raw)",
+                    stds=sem_stds_raw,                 # optional: shows mean±std if available
+                    title_prefix="Semantics (raw) table",
+                    max_cols=12,                       # adjust if you want wider/narrower tables
+                    fmt="{:.2f}",                      # change precision here
                 )
                 for k, fig in figs.items():
-                    metrics[f"semantics_raw/by_style/{k}"] = wandb.Image(fig)
+                    metrics[f"semantics_raw/table_by_style/{k}"] = wandb.Image(fig)
                     WandbLogger._safe_close(fig)
+
+                #figs = plot_semantics_by_style(
+                #    sem_means_raw,
+                #    sem_feat_names,
+                #    S=int(trainer.S),
+                #    A=int(trainer.A),
+                #    title_prefix="Semantics (raw)",
+                #)
+                #for k, fig in figs.items():
+                #    metrics[f"semantics_raw/by_style/{k}"] = wandb.Image(fig)
+                #    WandbLogger._safe_close(fig)
                 
                 #figs = plot_key_feature_per_feature(sem_means_raw, sem_stds_raw, sem_feat_names, title_prefix="Posterior-weighted (raw)")
                 #for fname, fig in figs.items():
