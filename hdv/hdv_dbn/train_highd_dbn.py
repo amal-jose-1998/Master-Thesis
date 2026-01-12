@@ -14,6 +14,7 @@ from pathlib import Path
 import sys
 import re
 import numpy as np
+from dataclasses import asdict
 
 from .datasets import (
     load_highd_folder,
@@ -86,8 +87,7 @@ def main():
         if not data_root.exists():
             raise FileNotFoundError(f"Data directory not found: {data_root}")
         
-        cache_path = project_root / "data" / "highd_all_with_meta.feather"
-        df = load_highd_folder(data_root, cache_path=cache_path, force_rebuild=False, max_recordings=TRAINING_CONFIG.max_highd_recordings)
+        df = load_highd_folder(data_root, cache_path=None, force_rebuild=False, max_recordings=TRAINING_CONFIG.max_highd_recordings)
     except Exception as e:
         print(f"[train_highd_dbn] ERROR during initialization: {e}", file=sys.stderr)
         sys.exit(1)
@@ -151,20 +151,38 @@ def main():
     wandb_run = None
     if TRAINING_CONFIG.use_wandb and wandb is not None:
         # Initialise a Weights & Biases run for logging training diagnostics.
+        def _wandb_safe(obj):
+            """Convert objects to W&B-friendly JSON-ish values."""
+            if obj is None:
+                return None
+            if isinstance(obj, (int, float, bool, str)):
+                return obj
+            if isinstance(obj, (list, tuple)):
+                return [_wandb_safe(x) for x in obj]
+            if isinstance(obj, dict):
+                return {str(k): _wandb_safe(v) for k, v in obj.items()}
+            # fallback: string representation
+            return str(obj)
+
         wandb_run = wandb.init(
             project=TRAINING_CONFIG.wandb_project,
             name=TRAINING_CONFIG.wandb_run_name,
-            config={
-                "obs_dim": obs_dim,
-                "num_style": trainer.S,
-                "num_action": trainer.A,
-                "em_num_iters": TRAINING_CONFIG.em_num_iters,
-                "seed": TRAINING_CONFIG.seed,
-                "max_kmeans_samples": TRAINING_CONFIG.max_kmeans_samples,
-                "max_highd_recordings": TRAINING_CONFIG.max_highd_recordings,
-                "cpd_init": TRAINING_CONFIG.cpd_init,  
-                "use_classwise_scaling": TRAINING_CONFIG.use_classwise_scaling, 
-            },
+            config=_wandb_safe({
+                # full training config (dataclass)
+                **asdict(TRAINING_CONFIG),
+
+                # model identity / structure
+                "num_style": int(trainer.S),
+                "num_action": int(trainer.A),
+                "style_names": list(DBN_STATES.driving_style),
+                "action_names": list(DBN_STATES.action),
+
+                # data / features used
+                "obs_dim": int(obs_dim),
+                "feature_cols": list(BASELINE_FEATURE_COLS),
+                "meta_cols": list(META_COLS),
+                "continuous_features": list(CONTINUOUS_FEATURES),
+            }),
         )
 
     try:
