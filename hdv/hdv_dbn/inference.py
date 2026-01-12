@@ -3,75 +3,98 @@ import numpy as np
 
 from .trainer import forward_backward_torch
 
-def infer_posterior(obs, pi_z, A_zz, emissions):
+def infer_posterior_structured(obs, pi_s0, pi_a0_given_s0, A_s, A_a, emissions):
     """
-    Compute posteriors for one trajectory under the joint-state HMM (Style, Action).
+    Structured posterior inference for a trained HDV DBN (test-time).
 
-    For an observation sequence o_0:T-1, this function:
-      1) Computes emission log-likelihoods for all joint states in one vectorised call:
-           logB[t, z] = log p(o_t | Z_t = z)
-         via `emissions.loglik_all_states(obs)`.
-      2) Runs log-domain forward–backward in Torch to obtain:
-           gamma[t, z] = p(Z_t = z | o_0:T-1)
-           loglik      = log p(o_0:T-1)
-      3) Marginalises gamma into separate posteriors over Style_t and Action_t.
+    Latent state is z_t = (s_t, a_t) with factorized transitions:
+      P(s_t | s_{t-1})         = A_s[s_prev, s]
+      P(a_t | a_{t-1}, s_t)    = A_a[s, a_prev, a]
+
+    Emissions are evaluated on the JOINT state z via:
+      logB[t, z] = log p(o_t | s_t, a_t)
+    where MixedEmissionModel already handles:
+      - Gaussian(diag) on continuous dims
+      - Bernoulli on *_exists
+      - Categorical on lane_pos and lc (weighted)
 
     Parameters
-    obs : np.ndarray
-        Observation sequence of shape (T, obs_dim).
-    pi_z : torch.Tensor
-        Initial distribution over joint states.
-        Shape: (N,), where N = S * A.
-    A_zz : torch.Tensor
-        Joint-state transition matrix.
-        Shape: (N, N).
-    emissions : GaussianEmissionModel
-        Trained emission model.
-        Must provide:
-          - num_style 
-          - num_action 
-          - loglik_all_states(obs) 
-
+    pi_s0 : torch.Tensor
+        Initial distribution over styles. Shape (S,).
+    pi_a0_given_s0 : torch.Tensor
+        Initial action distribution given style. Shape (S, A).
+    A_s : torch.Tensor
+        Style transition matrix. Shape (S, S).
+    A_a : torch.Tensor
+        Action transition tensor. Shape (S, A, A) as A_a[s_cur, a_prev, a_cur].
+    emissions : MixedEmissionModel
+        Trained emission model instance with loglik_all_states(obs)->(T, N).
+ 
     Returns
-    gamma : torch.Tensor
-        Joint posterior marginals.
-        Shape: (T, N).
+    gamma_flat : torch.Tensor
+        Joint posterior marginals γ_t(z), shape (T, S*A).
     gamma_style : torch.Tensor
-        Marginal posterior over styles.
-        Shape: (T, S).
+        Marginal posterior γ_t(s), shape (T, S).
     gamma_action : torch.Tensor
-        Marginal posterior over actions.
-        Shape: (T, A).
+        Marginal posterior γ_t(a), shape (T, A).
     loglik : float
-        Log-likelihood of the full observation sequence.
+        Sequence log-likelihood log p(O_1:T).
     """
-    device = pi_z.device
-    dtype = pi_z.dtype
+    # accept NumPy or Torch inputs for transitions
+    if not torch.is_tensor(pi_s0):
+        pi_s0 = torch.as_tensor(pi_s0)
+    if not torch.is_tensor(pi_a0_given_s0):
+        pi_a0_given_s0 = torch.as_tensor(pi_a0_given_s0)
+    if not torch.is_tensor(A_s):
+        A_s = torch.as_tensor(A_s)
+    if not torch.is_tensor(A_a):
+        A_a = torch.as_tensor(A_a)
 
+    # Prefer the emission model's configured device/dtype
+    device = getattr(emissions, "_device", pi_s0.device)
+    dtype = getattr(emissions, "_dtype", pi_s0.dtype)
+    pi_s0 = pi_s0.to(device=device, dtype=dtype)
+    pi_a0_given_s0 = pi_a0_given_s0.to(device=device, dtype=dtype)
+    A_s = A_s.to(device=device, dtype=dtype)
+    A_a = A_a.to(device=device, dtype=dtype)
+ 
     # ------------------------------------------------------------------
-    # Emission likelihoods 
+    # Emission likelihoods: log p(o_t | s_t, a_t)
     # ------------------------------------------------------------------
-    logB = emissions.loglik_all_states(obs) # logB shape: (T, N)
+    if obs is None or getattr(obs, "shape", (0,))[0] == 0:
+        S = int(getattr(emissions, "num_style", 1))
+        A = int(getattr(emissions, "num_action", 1))
+        gamma = torch.empty((0, S * A), device=device, dtype=dtype)
+        return (
+            gamma,
+            torch.empty((0, S), device=device, dtype=dtype),
+            torch.empty((0, A), device=device, dtype=dtype),
+            0.0,
+        )
 
+    logB_flat = emissions.loglik_all_states(obs)  # (T, S*A)
+    T = int(logB_flat.shape[0])
+    S = int(getattr(emissions, "num_style"))
+    A = int(getattr(emissions, "num_action"))
+    logB_s_a = logB_flat.view(T, S, A)            # (T, S, A)
+ 
     # ------------------------------------------------------------------
     # Forward–backward
     # ------------------------------------------------------------------
     with torch.no_grad():
-        gamma, _, loglik_t = forward_backward_torch(pi_z, A_zz, logB) # gamma: (T, N)
-
+        gamma_s_a, _, _, loglik_t = forward_backward_torch(
+            pi_s0=pi_s0,
+            pi_a0_given_s0=pi_a0_given_s0,
+            A_s=A_s,
+            A_a=A_a,
+            logB_s_a=logB_s_a,
+        )
     # ------------------------------------------------------------------
     # Marginalisation
     # ------------------------------------------------------------------
-    S = emissions.num_style
-    A = emissions.num_action
-    T, N = gamma.shape
+    gamma_style = gamma_s_a.sum(dim=2)      # (T, S)
+    gamma_action = gamma_s_a.sum(dim=1)     # (T, A)
+    gamma_flat = gamma_s_a.reshape(T, S * A)
 
-    gamma_style = torch.zeros((T, S), device=device, dtype=dtype)
-    gamma_action = torch.zeros((T, A), device=device, dtype=dtype)
-
-    gamma_sa = gamma.view(T, S, A)          # (T, S, A)
-    gamma_style = gamma_sa.sum(dim=2)       # (T, S)
-    gamma_action = gamma_sa.sum(dim=1)      # (T, A)
-
-    return gamma, gamma_style, gamma_action, float(loglik_t.item())
+    return gamma_flat, gamma_style, gamma_action, float(loglik_t.item())
 

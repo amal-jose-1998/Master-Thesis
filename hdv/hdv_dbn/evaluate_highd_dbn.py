@@ -2,10 +2,10 @@
 Evaluation entry point for the HDV DBN on the highD test set.
 Loads:
   - highD sequences (same feature columns as training)
-  - trained model from models/dbn_highd.npz (including scaler)
+  - trained model from models/<config-based-name>.npz (including scaler)
 Evaluates:
-  - total test log-likelihood
-  - average per-trajectory log-likelihood
+  - average per-timestep log-likelihood 
+  - basic per-trajectory stats 
 """
 from pathlib import Path
 import sys
@@ -13,12 +13,59 @@ import numpy as np
 
 from .datasets import load_highd_folder, df_to_sequences, train_val_test_split
 from .trainer import HDVTrainer
-from .config import TRAINING_CONFIG
-from .inference import infer_posterior
+from .config import (
+    TRAINING_CONFIG,
+    BASELINE_FEATURE_COLS,
+    META_COLS,
+    CONTINUOUS_FEATURES,
+)
+from .inference import infer_posterior_structured
 
-def scale_obs(obs, mean, std):
-    """Standardise observations feature-wise using training-set mean/std."""
-    return (obs - mean) / (std + 1e-12)
+def _slug(s):
+    s = str(s).strip().lower()
+    out = []
+    for ch in s:
+        if ch.isalnum() or ch in "._-":
+            out.append(ch)
+        elif ch.isspace():
+            out.append("-")
+    s = "".join(out)
+    while "--" in s:
+        s = s.replace("--", "-")
+    return s
+
+def scale_obs_masked(obs, mean, std, scale_idx):
+    """
+    Scale only selected feature indices (continuous dims) using mean/std.
+    Discrete dims (lane_pos, lc, *_exists) remain unchanged.
+    """
+    x = np.asarray(obs, dtype=np.float64).copy()
+    m = np.asarray(mean, dtype=np.float64)
+    s = np.asarray(std, dtype=np.float64)
+    denom = s[scale_idx] + 1e-12
+    x[:, scale_idx] = (x[:, scale_idx] - m[scale_idx]) / denom
+    return x
+
+def build_model_filename(cfg):
+    """
+    Mirror the training-side naming so evaluation picks the correct file by default.
+    (Matches train_highd_dbn.build_model_filename logic.)
+    """
+    # In your current config, DBN_STATES can vary; but S/A are encoded in the checkpoint too.
+    rec = getattr(cfg, "max_highd_recordings", None)
+    rec_str = "all" if (rec is None) else str(int(rec))
+    parts = [
+        "dbn_highd",
+        f"S{1}",      # DBN_STATES.driving_style is currently dummy in config; checkpoint is authoritative.
+        f"A{3}",      # same note; used only to keep filename stable with your current codebase defaults.
+        f"init-{_slug(getattr(cfg, 'cpd_init', 'unknown'))}",
+        f"rec{rec_str}",
+        f"seed{int(getattr(cfg, 'seed', 0))}",
+    ]
+    if hasattr(cfg, "bern_weight"):
+        parts.append(f"bw-{_slug(getattr(cfg, 'bern_weight'))}")
+    return "_".join(parts) + ".npz"
+
 
 def main():
     # ------------------------------------------------------------------
@@ -26,10 +73,11 @@ def main():
     # ------------------------------------------------------------------
     project_root = Path(__file__).resolve().parents[1]
     data_root = project_root / "data" / "highd"
-    cache_path = project_root / "data" / "highd_all.feather"
+    cache_path = project_root / "data" / "highd_all_with_meta.feather"
 
     model_dir = project_root / "models"
-    model_path = model_dir / "dbn_highd.npz"
+    # Default: same naming convention as training
+    model_path = model_dir / build_model_filename(TRAINING_CONFIG)
 
     print(f"[evaluate_highd_dbn] Loading highD data from: {data_root}")
     print(f"[evaluate_highd_dbn] Loading model from: {model_path}")
@@ -52,18 +100,15 @@ def main():
         print(f"[evaluate_highd_dbn] ERROR loading highD: {e}", file=sys.stderr)
         sys.exit(1)
 
-    feature_cols = [
-        "y", "vx", "vy", "ax", "ay", "lane_id",
-        "front_exists", "front_dx", "front_dvx",
-        "rear_exists",  "rear_dx",  "rear_dvx",
-    ]
+    feature_cols = list(BASELINE_FEATURE_COLS)
+    meta_cols = list(META_COLS)
 
-    meta_cols = [
-        "meta_class",
-        "meta_drivingDirection"
-    ]
-
-    df[feature_cols] = df[feature_cols].fillna(0.0) # Fill NaNs in features with 0.0
+    # - lane_pos invalid/unknown -> -1
+    # - other features NaN -> 0.0
+    if "lane_pos" in feature_cols:
+        df["lane_pos"] = df["lane_pos"].fillna(-1)
+    fill_cols = [c for c in feature_cols if c != "lane_pos"]
+    df[fill_cols] = df[fill_cols].fillna(0.0)
 
     sequences = df_to_sequences(df, feature_cols=feature_cols, meta_cols=meta_cols)
 
@@ -84,8 +129,6 @@ def main():
     # Load trained model
     # ------------------------------------------------------------------
     trainer = HDVTrainer.load(model_path)
-    pi_z = trainer.pi_z
-    A_zz = trainer.A_zz
     emissions = trainer.emissions
     scaler_mean = trainer.scaler_mean
     scaler_std = trainer.scaler_std
@@ -94,9 +137,10 @@ def main():
             f"Loaded model from '{model_path}' missing scaler_mean/std. "
             f"Ensure the model was trained with feature scaling enabled."
         )
+    # Indices of continuous dims (scale those only)
+    scale_idx = np.array([i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES], dtype=np.int64)
+ 
     
-    def scale_obs(obs, mean, std):
-        return (obs - mean) / (std + 1e-12)
 
     # Build scaled test obs
     test_obs_seqs = []
@@ -113,32 +157,55 @@ def main():
             mean = scaler_mean
             std = scaler_std
 
-        test_obs_seqs.append(scale_obs(seq.obs, mean, std))
+        test_obs_seqs.append(scale_obs_masked(seq.obs, mean, std, scale_idx))
 
     # ------------------------------------------------------------------
     # Evaluate log-likelihood on the test set
     # ------------------------------------------------------------------
     total_test_loglik = 0.0
     per_traj_loglik = []
+    total_test_T = 0
 
+    gamma_all = []
     for i, obs in enumerate(test_obs_seqs):
-        _, _, _, loglik = infer_posterior(
+        gamma, _, _, loglik = infer_posterior_structured(
             obs=obs,
-            pi_z=pi_z,
-            A_zz=A_zz,
+            pi_s0=trainer.pi_s0,
+            pi_a0_given_s0=trainer.pi_a0_given_s0,
+            A_s=trainer.A_s,
+            A_a=trainer.A_a,
             emissions=emissions,
         )
+        gamma_all.append(gamma)
         total_test_loglik += loglik
         per_traj_loglik.append(loglik)
+        total_test_T += int(obs.shape[0])
 
         if TRAINING_CONFIG.verbose >= 2:
             print(f"[evaluate_highd_dbn] traj {i:05d}: loglik={loglik:.3f}, T={obs.shape[0]}")
 
-    avg_loglik = total_test_loglik / max(len(test_obs_seqs), 1)
+    avg_loglik_per_traj = total_test_loglik / max(len(test_obs_seqs), 1)
+    avg_loglik_per_timestep = total_test_loglik / max(total_test_T, 1)
 
     print(f"[evaluate_highd_dbn] Total test log-likelihood: {total_test_loglik:.3f}")
-    print(f"[evaluate_highd_dbn] Average per-trajectory log-likelihood: {avg_loglik:.3f}")
+    print(f"[evaluate_highd_dbn] Average per-trajectory log-likelihood: {avg_loglik_per_traj:.3f}")
+    print(f"[evaluate_highd_dbn] Average per-timestep log-likelihood: {avg_loglik_per_timestep:.6f}")
 
+    # --------------------------------------------------------------
+    # Posterior diagnostics (test-time only)
+    # --------------------------------------------------------------
+    run_lengths, runlen_median = HDVTrainer._run_lengths_from_gamma_argmax(trainer, gamma_all)
+    ent_all, ent_mean = HDVTrainer._posterior_entropy_from_gamma(trainer, gamma_all)
+
+    print(
+        f"[evaluate_highd_dbn] Posterior entropy (mean over traj): "
+        f"{np.nanmean(ent_mean):.3f}"
+    )
+    print(
+        f"[evaluate_highd_dbn] Median run-length (timesteps): "
+        f"{np.nanmedian(runlen_median):.1f}"
+    )
+ 
     if len(per_traj_loglik) > 0:
         p = np.percentile(per_traj_loglik, [0, 5, 25, 50, 75, 95, 100])
         print(
@@ -148,6 +215,13 @@ def main():
         )
 
     print("[evaluate_highd_dbn] Evaluation finished.")
+    print(
+        "[evaluate_highd_dbn] Outputs available for comparison:\n"
+        "  - avg_loglik_per_timestep\n"
+        "  - per_traj_loglik distribution\n"
+        "  - posterior entropy statistics\n"
+        "  - run-length statistics\n"
+    )
 
 
 if __name__ == "__main__":
