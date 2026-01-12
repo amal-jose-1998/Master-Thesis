@@ -304,8 +304,8 @@ class HDVTrainer:
         """
         self.hdv_dbn = HDVDBN()
         self.obs_names = list(obs_names)
-        self.emissions = MixedEmissionModel(obs_names=self.obs_names)
-
+        self.emissions = MixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=bool(getattr(TRAINING_CONFIG, "disable_discrete_obs", False)))
+ 
         self.S = self.hdv_dbn.num_style
         self.A = self.hdv_dbn.num_action
         self.num_states = self.S * self.A

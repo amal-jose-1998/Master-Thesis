@@ -427,7 +427,9 @@ def plot_semantics_table_by_style(
         if SD.shape != M.shape:
             SD = None
 
-    feat_names = [str(x) for x in feat_names]
+    # Clean display names: keep feature name, drop condition suffix like " | right_rear_exist"
+    # Example: "right_rear_dvx | right_rear_exist" -> "right_rear_dvx"
+    feat_names = [str(x).split("|", 1)[0].strip() for x in feat_names]
     n_parts = int(np.ceil(F / max_cols))
 
     figs = {}

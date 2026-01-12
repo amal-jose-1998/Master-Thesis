@@ -1,18 +1,27 @@
 """
-Mixed emission model for an HMM / DBN-equivalent formulation with joint latent state z.
+Mixed emission model for an HMM / DBN-equivalent formulation with joint latent state z=(s,a).
 
-Observation vector o_t is partitioned into:
-  (1) Continuous features  o_t[cont]  -> Diagonal Gaussian per state (with optional gating masks)
-  (2) Binary features      o_t[bin_d] -> Independent Bernoulli per state (e.g., *_exists)
-  (3) Categorical features  o_t[cat_c] -> Categorical per state (e.g., lane_pos, lc)
+Observation vector o_t contains:
+  (1) Continuous features: modeled by a diagonal Gaussian per joint state z,
+      with gating masks for neighbor-relative dims based on corresponding *_exists flags.
+  (2) Discrete context variables:
+      - Binary *_exists flags (scene configuration / availability)
+      - Categorical lane_pos and lc (maneuver descriptors)
 
-Likelihood factorization (conditional independence given z):
-  Factorization (conditional independence given z):
-    p(o_t | z) =
-        N_diag(o_t[cont] ; mu_z, diag(var_z))   [with gating for missing relative dims]
-        * Π_d Bern(o_t[bin_d] ; p_zd)
-        * Π_c Cat(o_t[cat_c] ; pi_zc)
+Two operating modes (controlled by TRAINING_CONFIG.disable_discrete_obs or constructor flag):
+  - disable_discrete_obs = False (full / weighted):
+      log p(o_t | z) = log N_diag(o_t[cont]; μ_z, diag(var_z))
+                     + w_bern * Σ_d log Bern(o_t[bin_d]; p_zd)
+                     + w_lane * log Cat(o_t[lane_pos]; π_z)
+                     + w_lc   * log Cat(o_t[lc]; ρ_z)
+
+  - disable_discrete_obs = True (continuous-only likelihood):
+      log p(o_t | z) = log N_diag(o_t[cont]; μ_z, diag(var_z))
+
+In both modes, *_exists is used for gating neighbor-relative continuous dims (missingness handling),
+even when discrete variables are excluded from the likelihood and are not updated in the M-step.
 """
+
 import math
 import numpy as np
 import torch
@@ -428,7 +437,7 @@ class MixedEmissionModel:
       - to_arrays / from_arrays for checkpointing
     """
 
-    def __init__(self, obs_names, lane_name="lane_pos", lc_name = "lc", exists_suffix="_exists"):
+    def __init__(self, obs_names, lane_name="lane_pos", lc_name = "lc", exists_suffix="_exists", disable_discrete_obs=False,):
         """
         Initialize the mixed emission model.
 
@@ -467,6 +476,12 @@ class MixedEmissionModel:
         self.lc_idx = int(self.obs_names.index(self.lc_name))
 
         self.exists_suffix = exists_suffix
+
+        # If True, treat lane_pos, lc and *_exists as contextual variables:
+        # - they do not contribute to the emission likelihood (E-step)
+        # - their parameters are not updated (M-step)
+        # Relative-feature gating using *_exists remains active either way.
+        self.disable_discrete_obs = bool(disable_discrete_obs)        
 
         # All feature indices that end with the exists suffix
         all_exists_idx = [i for i, n in enumerate(self.obs_names) if n.endswith(exists_suffix)]
@@ -662,9 +677,10 @@ class MixedEmissionModel:
 
     def loglik_all_states(self, obs):
         """
-        This is the main emission evaluator. Compute 
-        logB[t,z] = log p(o_t | z) = logp_gauss + logp_bern + logp_lane 
-        for all t and all states z.
+        Main emission evaluator.
+        logB[t,z] = log p(o_t | z).
+        By default, discrete context variables (lane_pos, lc, *_exists) are excluded
+        from the likelihood to avoid "cheating" during inference.
 
         Parameters
         obs : np.ndarray | torch.Tensor
@@ -674,7 +690,9 @@ class MixedEmissionModel:
         logB : torch.Tensor
             Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
         """
-        logp_gauss, logp_bern, logp_lane, logp_lc = self.loglik_parts_all_states(obs) 
+        logp_gauss, logp_bern, logp_lane, logp_lc = self.loglik_parts_all_states(obs)
+        if self.disable_discrete_obs:
+            return logp_gauss
         w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
         w_lane = float(getattr(TRAINING_CONFIG, "lane_weight", 1.0))
         w_lc   = float(getattr(TRAINING_CONFIG, "lc_weight", 1.0))
@@ -708,9 +726,10 @@ class MixedEmissionModel:
 
         N = self.num_states
         # allocate accumulators
-        sum_bin = torch.zeros((N, self.bin_dim), device=device, dtype=dtype) if self.bin_dim > 0 else None # for Bernoulli MLE
-        lane_counts = torch.zeros((N, self.lane_K), device=device, dtype=dtype) # for categorical MLE
-        lc_counts   = torch.zeros((N, self.lc_K),   device=device, dtype=dtype)
+        if not self.disable_discrete_obs:
+            sum_bin = torch.zeros((N, self.bin_dim), device=device, dtype=dtype) if self.bin_dim > 0 else None # for Bernoulli MLE
+            lane_counts = torch.zeros((N, self.lane_K), device=device, dtype=dtype) # for categorical MLE
+            lc_counts   = torch.zeros((N, self.lc_K),   device=device, dtype=dtype)
 
         cont_obs_seqs = []
         cont_mask_seqs = []
@@ -727,33 +746,35 @@ class MixedEmissionModel:
             gamma_cont_seqs.append(g) 
 
             # Bernoulli update
-            if self.bin_dim > 0:
+            if self.bin_dim > 0 and (not self.disable_discrete_obs):
                 xb = (x[:, self.bin_idx] > 0.5).to(dtype=dtype)
                 sum_bin += g.T @ xb                      # (N,B)
 
             # Categorical update for lane_pos (ignore invalid lane_pos == -1)
-            lane_col = x[:, self.lane_idx]
-            lane_col = torch.where(torch.isfinite(lane_col), lane_col, torch.tensor(-1.0, device=x.device, dtype=x.dtype))
-            lane_raw = lane_col.round().to(torch.long)
-            valid = (lane_raw >= 0) & (lane_raw < self.lane_K)
-            if valid.any():
-                lane_valid = lane_raw[valid]                               # (Tv,)
-                g_valid = g[valid]                                         # (Tv,N)
-                lane_oh = torch.nn.functional.one_hot(lane_valid, num_classes=self.lane_K).to(dtype=dtype)    # (Tv,K)
-                lane_counts += g_valid.T @ lane_oh                          # (N,K)
-            
-            # Categorical update for lc (ignore invalid / NaNs)
-            lc_col = x[:, self.lc_idx]
-            lc_col = torch.where(torch.isfinite(lc_col), lc_col, torch.tensor(-99.0, device=x.device, dtype=x.dtype))
-            lc_raw = lc_col.round().to(torch.long)      # {-1,0,+1}
-            lc_mapped = lc_raw + 1                      # -> {0,1,2}
-            valid_lc = (lc_mapped >= 0) & (lc_mapped < self.lc_K)
-            if valid_lc.any():
-                lc_valid = lc_mapped[valid_lc]  # (Tv,)
-                g_valid = g[valid_lc]           # (Tv,N)
-                lc_oh = torch.nn.functional.one_hot(lc_valid, num_classes=self.lc_K).to(dtype=dtype)  # (Tv,K)
-                lc_counts += g_valid.T @ lc_oh
-            
+            if not self.disable_discrete_obs:
+                # Categorical update for lane_pos (ignore invalid lane_pos == -1)
+                lane_col = x[:, self.lane_idx]
+                lane_col = torch.where(torch.isfinite(lane_col), lane_col, torch.tensor(-1.0, device=x.device, dtype=x.dtype))
+                lane_raw = lane_col.round().to(torch.long)
+                valid = (lane_raw >= 0) & (lane_raw < self.lane_K)
+                if valid.any():
+                    lane_valid = lane_raw[valid]                               # (Tv,)
+                    g_valid = g[valid]                                         # (Tv,N)
+                    lane_oh = torch.nn.functional.one_hot(lane_valid, num_classes=self.lane_K).to(dtype=dtype)    # (Tv,K)
+                    lane_counts += g_valid.T @ lane_oh                          # (N,K)
+                
+                # Categorical update for lc (ignore invalid / NaNs)
+                lc_col = x[:, self.lc_idx]
+                lc_col = torch.where(torch.isfinite(lc_col), lc_col, torch.tensor(-99.0, device=x.device, dtype=x.dtype))
+                lc_raw = lc_col.round().to(torch.long)      # {-1,0,+1}
+                lc_mapped = lc_raw + 1                      # -> {0,1,2}
+                valid_lc = (lc_mapped >= 0) & (lc_mapped < self.lc_K)
+                if valid_lc.any():
+                    lc_valid = lc_mapped[valid_lc]  # (Tv,)
+                    g_valid = g[valid_lc]           # (Tv,N)
+                    lc_oh = torch.nn.functional.one_hot(lc_valid, num_classes=self.lc_K).to(dtype=dtype)  # (Tv,K)
+                    lc_counts += g_valid.T @ lc_oh
+                
             # Continuous + mask for gated diagonal Gaussian
             if self.cont_dim > 0:
                 cont_x = x[:, self.cont_idx]
@@ -781,19 +802,20 @@ class MixedEmissionModel:
         weights_t = torch.as_tensor(weights_np, device=device, dtype=dtype)  # (N,)
 
         # Bernoulli MLE
-        if self.bin_dim > 0:
+        if self.bin_dim > 0 and (not self.disable_discrete_obs):
             p = sum_bin / (weights_t[:, None] + EPSILON)
             p = p.clamp(EPSILON, 1.0 - EPSILON)
             self.bern_p = p.detach().cpu().numpy()
 
         # Categorical (Dirichlet smoothing)
-        alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
-        lane_p = (lane_counts + alpha)
-        lane_p = lane_p / (lane_p.sum(dim=1, keepdim=True) + EPSILON)
-        self.lane_p = lane_p.detach().cpu().numpy()
-        lc_p = (lc_counts + alpha)
-        lc_p = lc_p / (lc_p.sum(dim=1, keepdim=True) + EPSILON)
-        self.lc_p = lc_p.detach().cpu().numpy()
+        if not self.disable_discrete_obs:
+            alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
+            lane_p = (lane_counts + alpha)
+            lane_p = lane_p / (lane_p.sum(dim=1, keepdim=True) + EPSILON)
+            self.lane_p = lane_p.detach().cpu().numpy()
+            lc_p = (lc_counts + alpha)
+            lc_p = lc_p / (lc_p.sum(dim=1, keepdim=True) + EPSILON)
+            self.lc_p = lc_p.detach().cpu().numpy()
 
         self.invalidate_cache()
         return weights_np
