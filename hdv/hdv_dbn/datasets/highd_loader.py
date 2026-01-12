@@ -37,6 +37,20 @@ from .highd.scaling import (
     scale_sequences_classwise,
 )
 
+def _default_highd_cache_path(root, max_recordings):
+    """
+    Build a cache filename that depends on max_recordings.
+
+    - max_recordings is None -> "highd_all_with_meta.feather"
+    - max_recordings is N    -> "highd_first_{N}_with_meta.feather"
+    """
+    if max_recordings is None:
+        name = "highd_all_with_meta.feather"
+    else:
+        name = f"highd_first_{int(max_recordings)}_with_meta.feather"
+    return root / name
+
+
 def assert_required_columns_present(df, feature_cols, meta_cols, context="highD loader"):
     """Hard check that all required columns exist in the dataframe."""
     required = list(feature_cols) + list(meta_cols)
@@ -87,21 +101,15 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
     """
     root = Path(root)
     if cache_path is None:
-        cache_path = root / "highd_all_with_meta.feather"
+        cache_path = _default_highd_cache_path(root, max_recordings)
     else:
         cache_path = Path(cache_path)
 
     # Try to load from cache
-    if max_recordings is None and cache_path.exists() and not force_rebuild:
+    if cache_path.exists() and not force_rebuild:
         print(f"[highd_loader] Loading cached DataFrame from: {cache_path}")
         df_cached = pd.read_feather(cache_path)
 
-        # ensure lane_pos exists even for older caches
-        if "lane_pos" not in df_cached.columns:
-            raise RuntimeError(
-                "Cached highD feather is missing lane_pos. Delete the cache or set force_rebuild=True "
-                "so lane_pos can be computed from recordingMeta lane markings."
-            )
         return df_cached
     
     # Otherwise build from CSVs
@@ -239,9 +247,8 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
     )
     warn_all_zero_columns(df_all, feature_cols=BASELINE_FEATURE_COLS)
 
-    # Save cache for future calls only for full dataset
-    if max_recordings is None:
-        print(f"[load_highd_folder] Saving cached DataFrame to: {cache_path}")
-        df_all.to_feather(cache_path)
+    # Save cache for future calls (full OR subset)
+    print(f"[load_highd_folder] Saving cached DataFrame to: {cache_path}")
+    df_all.to_feather(cache_path)
 
     return df_all
