@@ -36,9 +36,9 @@ class WandbLogger:
         A = int(pi_a0_given_s0.shape[1])
 
         pi_z = (pi_s0[:, None] * pi_a0_given_s0).reshape(S * A)
-
-        # (s_prev, a_prev, s_cur, a_cur)
-        A_joint = A_s[:, None, :, None] * A_a[None, :, :, :]
+        
+        # (s_prev, s_cur, a_prev, a_cur)
+        A_joint = A_s[:, :, None, None] * A_a[None, :, :, :]
         A_zz = A_joint.reshape(S * A, S * A)
         return pi_z, A_zz
 
@@ -99,6 +99,11 @@ class WandbLogger:
         pi_a0_given_s0 = trainer.pi_a0_given_s0.detach().cpu().numpy()
         A_s = trainer.A_s.detach().cpu().numpy()
         A_a = trainer.A_a.detach().cpu().numpy()
+
+        print("[debug] pi_s0", pi_s0.shape,
+                "pi_a0_given_s0", pi_a0_given_s0.shape,
+                "A_s", A_s.shape,
+                "A_a", A_a.shape)
 
         # Joint-form diagnostics 
         pi_z_np, A_zz_np = WandbLogger._joint_from_structured(pi_s0, pi_a0_given_s0, A_s, A_a)
