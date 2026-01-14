@@ -48,32 +48,28 @@ def _slug(s):
     return s
 
 
-def build_model_filename(cfg):
+def build_model_filename(cfg, wandb_run=None):
     """
-    Build a deterministic model filename based on TRAINING_CONFIG and DBN_STATES.
+    Robust model filename:
+      <experiment-name>_S{S}_A{A}.npz
+    Priority:
+      1) wandb.run.name (actual experiment name)
+      2) cfg.wandb_run_name
+      3) deterministic config-based fallback
+    """
+    # experiment identity
+    if wandb_run is not None and getattr(wandb_run, "name", None):
+        exp_name = wandb_run.name
+    elif getattr(cfg, "wandb_run_name", None):
+        exp_name = cfg.wandb_run_name
+    else:
+        exp_name = "unnamed_experiment"
 
-    Includes the key factors that define a training run identity so models do not overwrite.
-    """
+    # model structure identity
     S = len(DBN_STATES.driving_style)
     A = len(DBN_STATES.action)
 
-    rec = cfg.max_highd_recordings
-    rec_str = "all" if (rec is None) else str(int(rec))
-
-    parts = [
-        "dbn_highd",
-        f"S{S}",
-        f"A{A}",
-        f"init-{_slug(getattr(cfg, 'cpd_init', 'unknown'))}",
-        f"rec{rec_str}",
-        f"seed{int(cfg.seed)}",
-    ]
-
-    
-    if hasattr(cfg, "bern_weight"):
-        parts.append(f"bw-{_slug(cfg.bern_weight)}")
-
-    return "_".join(parts) + ".npz"
+    return f"{_slug(exp_name)}_S{S}_A{A}.npz"
 
 def main():
     """Run the full training job."""
@@ -198,7 +194,7 @@ def main():
         # -----------------------------
         # Save model with config-based name
         # -----------------------------
-        model_filename = build_model_filename(TRAINING_CONFIG)  
+        model_filename = build_model_filename(TRAINING_CONFIG, wandb_run=wandb_run)
         model_path = model_dir / model_filename 
         trainer.save(model_path)
         print(f"[train_highd_dbn] Model saved to: {model_path}") 
