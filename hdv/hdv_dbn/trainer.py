@@ -444,7 +444,7 @@ class HDVTrainer:
             if self.verbose:
                 print("M-step: Updating emission parameters...")
             state_w, total_mass, state_frac = self._m_step_emissions(
-                                                    train_obs_seqs=train_obs_seqs,
+                                                    train_obs_seqs=obs_used,
                                                     gamma_all=gamma_all,
                                                     use_progress=use_progress,
                                                     verbose=self.verbose,
@@ -619,12 +619,20 @@ class HDVTrainer:
         if obs_seqs_raw is not None and len(obs_seqs_raw) != len(obs_seqs):
             raise ValueError("obs_seqs_raw must align with obs_seqs (same length/order).")
 
+        S = int(self.S)
+        A = int(self.A)
+        N = int(self.num_states)
+
         gamma_all = []
         xi_s_all = []
         xi_a_all = []
         obs_used = []
         obs_used_raw = [] if (obs_seqs_raw is not None) else None
         total_loglik = 0.0
+
+        skipped_empty = 0
+        skipped_bad_logB = 0
+        skipped_bad_ll = 0
 
         iterator = enumerate(obs_seqs)
         if use_progress:
@@ -634,22 +642,55 @@ class HDVTrainer:
             for i, obs in iterator:
         
                 if obs is None or obs.shape[0] == 0:
+                    skipped_empty += 1
                     continue
 
                 # emissions are joint-indexed: (T, N). Reshape to (T, S, A) for structured FB.
                 logB_flat = self._compute_logB_for_sequence(obs)  # (T, N); Compute emission log-likelihoods logB[t,z] = log p(o_t | z)
+                
+                if logB_flat.ndim != 2 or logB_flat.shape[1] != N:
+                    raise ValueError(
+                        f"logB_flat has shape {tuple(logB_flat.shape)}, expected (T,{N}). "
+                        f"Check emission model vs num_states (S={S}, A={A})."
+                    )
+                if not torch.isfinite(logB_flat).all(): # Skip if emissions contain non-finite values (avoids NaNs later)
+                    skipped_bad_logB += 1
+                    if verbose >= 2:
+                        bad = (~torch.isfinite(logB_flat)).sum().item()
+                        print(f"  Seq {i:03d}: logB has {bad} non-finite entries, skipping.")
+                    continue
+
                 T = int(logB_flat.shape[0])
-                logB_s_a = logB_flat.view(T, int(self.S), int(self.A))  # (T,S,A)
+                
+                if T <= 0:
+                    skipped_empty += 1
+                    continue
+
+                logB_s_a = logB_flat.view(T, S, A)  # (T,S,A)
+            
                 gamma_s_a, xi_s_sum, xi_a_sum, loglik = forward_backward_torch(
                                                                         self.pi_s0, self.pi_a0_given_s0, self.A_s, self.A_a, logB_s_a
                                                                     )
+                if loglik.ndim != 0:
+                    raise ValueError(f"loglik must be scalar, got shape {tuple(loglik.shape)}")
                 
-                if torch.isnan(loglik):
+                if (not torch.isfinite(loglik)) or torch.isnan(loglik):
+                    skipped_bad_ll += 1
                     if verbose >= 2:
-                        print(f"  Seq {i:03d}: loglik is NaN, skipping.")
+                        print(f"  Seq {i:03d}: loglik is non-finite, skipping.")
                     continue
 
-                gamma_flat = gamma_s_a.reshape(T, int(self.num_states))  # (T,N)
+                if gamma_s_a.shape != (T, S, A):
+                    raise ValueError(
+                        f"gamma_s_a has shape {tuple(gamma_s_a.shape)}, expected {(T, S, A)}"
+                    )
+                if xi_s_sum.shape != (S, S):
+                    raise ValueError(f"xi_s_sum has shape {tuple(xi_s_sum.shape)}, expected {(S, S)}")
+                if xi_a_sum.shape != (S, A, A):
+                    raise ValueError(f"xi_a_sum has shape {tuple(xi_a_sum.shape)}, expected {(S, A, A)}")
+
+
+                gamma_flat = gamma_s_a.reshape(T, N)
 
                 gamma_all.append(gamma_flat)
                 xi_s_all.append(xi_s_sum)
@@ -663,10 +704,14 @@ class HDVTrainer:
                 total_loglik += ll_i
 
                 if verbose >= 2:
-                    print(f"  Seq {i:03d}: T={obs.shape[0]}, loglik={ll_i:.3f}")
+                    print(f"  Seq {i:03d}: T={T}, loglik={ll_i:.3f}")
 
         if verbose:
-            print(f"  Total train loglik: {total_loglik:.3f}")
+            print(
+                f"  Total train loglik: {total_loglik:.3f} | "
+                f"used={len(obs_used)}/{len(obs_seqs)} | "
+                f"skipped_empty={skipped_empty}, skipped_bad_logB={skipped_bad_logB}, skipped_bad_ll={skipped_bad_ll}"
+            )
 
         return gamma_all, xi_s_all, xi_a_all, total_loglik, obs_used, obs_used_raw
 

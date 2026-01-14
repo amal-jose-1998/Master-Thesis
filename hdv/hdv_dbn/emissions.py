@@ -745,6 +745,12 @@ class MixedEmissionModel:
             g = g.to(device=device, dtype=dtype)
             gamma_cont_seqs.append(g) 
 
+            if x.shape[0] != g.shape[0]:
+                raise ValueError(
+                    f"Sequence length mismatch: obs T={x.shape[0]} vs gamma T={g.shape[0]}. "
+                    "This usually means obs_seqs and gamma_seqs are misaligned (e.g., skipped sequences in E-step)."
+                )
+
             # Bernoulli update
             if self.bin_dim > 0 and (not self.disable_discrete_obs):
                 xb = (x[:, self.bin_idx] > 0.5).to(dtype=dtype)
