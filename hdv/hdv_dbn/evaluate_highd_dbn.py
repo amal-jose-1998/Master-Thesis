@@ -15,7 +15,7 @@ from .datasets import load_highd_folder, df_to_sequences, train_val_test_split
 from .trainer import HDVTrainer
 from .config import (
     TRAINING_CONFIG,
-    BASELINE_FEATURE_COLS,
+    FRAME_FEATURE_COLS,
     META_COLS,
     CONTINUOUS_FEATURES,
 )
@@ -100,7 +100,7 @@ def main():
         print(f"[evaluate_highd_dbn] ERROR loading highD: {e}", file=sys.stderr)
         sys.exit(1)
 
-    feature_cols = list(BASELINE_FEATURE_COLS)
+    feature_cols = list(FRAME_FEATURE_COLS)
     meta_cols = list(META_COLS)
 
     # - lane_pos invalid/unknown -> -1
