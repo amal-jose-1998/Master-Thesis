@@ -1,5 +1,6 @@
 import numpy as np
-import pandas as pd
+from tqdm.auto import tqdm
+
 from ..dataset import TrajectorySequence
 from ...config import TRAINING_CONFIG, WINDOW_FEATURE_COLS
 
@@ -195,16 +196,22 @@ def windowize_sequences(sequences, W=150, stride=10):
     def risk_valid_mask(r):
         return np.isfinite(r) & (r > 0.0)
 
+    total_windows = 0
+    skipped = 0
+    pbar = tqdm(sequences, desc="Windowizing sequences", unit="seq")
     # Process each sequence individually
-    for seq in sequences:
+    for seq in pbar:
         X = seq.obs    # per-frame observation matrix for one vehicle: shape (T, F_in)
         T = X.shape[0] # number of frames 
         if T < W:      # vehicle’s trajectory length T is shorter than window size W; skip it
+            skipped += 1
+            pbar.set_postfix(skipped=skipped, out=len(out), windows=total_windows)
             continue
 
         starts = np.arange(0, T - W + 1, stride, dtype=np.int64)        # Starting indices of each window
         Tw = int(starts.size)                                           # number of windows
         Y = np.full((Tw, len(win_names)), np.nan, dtype=np.float64)     # Output observation matrix; shape: Tw × F_out; initialized to NaN (missing stays missing))
+        total_windows += Tw
 
         for t, s0 in enumerate(starts):     # For each window: slice the per-frame data
             s1 = s0 + W                     # Ending index (exclusive)
@@ -273,5 +280,6 @@ def windowize_sequences(sequences, W=150, stride=10):
             recording_id=seq.recording_id,
             meta=seq.meta,
         ))
+        pbar.set_postfix(skipped=skipped, out=len(out), windows=total_windows,)
 
     return out

@@ -585,34 +585,6 @@ class MixedEmissionModel:
         else:
             w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
             logB = logp_gauss + w_bern * logp_bern
-        
-        # ---------------------------------------------------------
-        # Lane-change window weighting (LC-active windows)
-        # ---------------------------------------------------------
-        lc_weight = float(getattr(TRAINING_CONFIG, "lc_weight", 1.0))
-        if lc_weight != 1.0 and self.bin_dim > 0:
-            # Extract LC Bernoulli columns
-            lc_idx = []
-            for name in ("lc_left_present", "lc_right_present"):
-                if name in self.obs_names:
-                    lc_idx.append(self.obs_names.index(name))
-
-            if len(lc_idx) > 0:
-                x = obs
-                if not torch.is_tensor(x):
-                    x = torch.as_tensor(x, device=self._device, dtype=self._dtype)
-                else:
-                    x = x.to(device=self._device, dtype=self._dtype)
-
-                # LC-active if any LC flag is present
-                lc_active = (x[:, lc_idx] > 0.5).any(dim=1)  # (T,)
-
-                # Build per-timestep weights
-                w_t = torch.ones_like(lc_active, dtype=self._dtype)
-                w_t[lc_active] = lc_weight
-
-                # Apply weighting (broadcast over states)
-                logB = logB * w_t[:, None]
 
         return logB
 

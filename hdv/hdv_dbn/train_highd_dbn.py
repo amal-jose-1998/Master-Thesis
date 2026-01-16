@@ -151,7 +151,6 @@ def main():
     train_obs_seqs = [seq.obs for seq in train_seqs_scaled]
     train_obs_seqs_raw = [seq.obs for seq in train_seqs]              # raw (unscaled)
     val_obs_seqs = [seq.obs for seq in val_seqs_scaled] if len(val_seqs_scaled) > 0 else None
-    val_obs_seqs_raw = [seq.obs for seq in val_seqs] if len(val_seqs) > 0  else None
 
     wandb_run = None
     if TRAINING_CONFIG.use_wandb and wandb is not None:
@@ -197,7 +196,6 @@ def main():
             val_obs_seqs=val_obs_seqs,
             wandb_run=wandb_run,
             train_obs_seqs_raw=train_obs_seqs_raw,
-            val_obs_seqs_raw=val_obs_seqs_raw,
         )
 
         # -----------------------------

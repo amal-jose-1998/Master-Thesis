@@ -336,7 +336,7 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     # EM training loop
     # ------------------------------------------------------------------
-    def em_train(self, train_obs_seqs, val_obs_seqs=None, wandb_run=None, train_obs_seqs_raw=None, val_obs_seqs_raw=None,):
+    def em_train(self, train_obs_seqs, val_obs_seqs=None, wandb_run=None, train_obs_seqs_raw=None):
         """
         Train the model using EM.
 
@@ -350,8 +350,7 @@ class HDVTrainer:
             Optional Weights & Biases run object for logging.
         train_obs_seqs_raw : list[np.ndarray] | None
             Raw trajectories. Each sequence has shape (T_n, obs_dim).
-        val_obs_seqs_raw : list[np.ndarray] | None
-            Raw trajectories. 
+            Used for computing physical-unit semantics in diagnostics.
         
         Returns
         history : dict
@@ -570,6 +569,36 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     # E-step helpers
     # ------------------------------------------------------------------
+    def _compute_lc_weights(self, obs):
+        """
+        compute per-timestep weights based on lane change indicator features.
+        If either "lc_left_present" or "lc_right_present" is > 0.5, weight is TRAINING_CONFIG.lc_weight, else 1.0.
+
+        Parameters
+        obs : np.ndarray
+            Observation sequence, shape (T, obs_dim).
+        
+        Returns
+        w : torch.Tensor
+            Weights per timestep, shape (T,), on self.device.
+        """
+        name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
+        idx = []
+        for k in ("lc_left_present", "lc_right_present"):
+            if k in name_to_idx:
+                idx.append(name_to_idx[k])
+
+        if not idx:
+            return torch.ones((obs.shape[0],), device=self.device, dtype=self.dtype)
+
+        x = torch.as_tensor(obs, device=self.device, dtype=self.dtype)
+        lc_active = (x[:, idx] > 0.5).any(dim=1)
+
+        w = torch.ones_like(lc_active, dtype=self.dtype)
+        w[lc_active] = float(TRAINING_CONFIG.lc_weight)
+        return w
+
+
     def _compute_logB_for_sequence(self, obs):
         """
         Compute emission log-likelihoods for one trajectory:
@@ -578,7 +607,7 @@ class HDVTrainer:
         Parameters
         obs : np.ndarray
             Observation sequence, shape (T, obs_dim).
-
+        
         Returns
         logB : torch.Tensor
             Emission log-likelihoods, shape (T, num_states), on self.device.
@@ -690,6 +719,10 @@ class HDVTrainer:
 
 
                 gamma_flat = gamma_s_a.reshape(T, N)
+
+                # Apply lane-change weighting to gamma if specified
+                w_t = self._compute_lc_weights(obs)   # (T,)
+                gamma_flat = gamma_flat * w_t[:, None]
 
                 gamma_all.append(gamma_flat)
                 xi_s_all.append(xi_s_sum)
@@ -811,7 +844,7 @@ class HDVTrainer:
             Whether to show tqdm.
         desc : str
             tqdm label.
-
+        
         Returns
         total_ll : float
             Sum of per-sequence log-likelihoods.
