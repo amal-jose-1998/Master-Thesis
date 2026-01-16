@@ -146,7 +146,7 @@ def add_direction_aware_context_features(df):
     return out
 
 
-def add_front_thw_ttc_from_tracks(df, ttc_clip=30.0):
+def add_front_thw_ttc_dhw_from_tracks(df):
     """
     Map highD-provided thw/ttc columns (tracks.csv) to our standard names:
         front_thw, front_ttc
@@ -154,22 +154,24 @@ def add_front_thw_ttc_from_tracks(df, ttc_clip=30.0):
     Rationale:
       - highD thw/ttc are typically defined w.r.t. the preceding vehicle (same-lane leader).
       - keep values finite (training/emissions do not use NaN masks).
-      - clip TTC to avoid extreme values dominating scaling.
     """
     out = df
 
     # if these columns don't exist (older caches / different preprocessing), default to 0.0
     if "thw" in out.columns:
-        out["front_thw"] = out["thw"].astype(np.float64).fillna(0.0)
+        out["front_thw"] = out["thw"].astype(np.float64)
     else:
-        out["front_thw"] = 0.0
+        out["front_thw"] = np.nan
+
+    if "dhw" in out.columns:
+        out["front_dhw"] = out["dhw"].astype(np.float64)
+    else:
+        out["front_dhw"] = np.nan
 
     if "ttc" in out.columns:
-        ttc = out["ttc"].astype(np.float64).fillna(0.0).to_numpy()
-        ttc = np.clip(ttc, 0.0, float(ttc_clip))
-        out["front_ttc"] = ttc
+        out["front_ttc"] = out["ttc"].astype(np.float64)
     else:
-        out["front_ttc"] = 0.0
+        out["front_ttc"] = np.nan
 
     return out
 
@@ -207,4 +209,32 @@ def add_ego_speed_and_jerk(df):
     else:
         out["jerk_x"] = 0.0
 
+    return out
+
+
+def add_neighbor_exists_flags(df):
+    """
+    Add only neighbor existence flags from neighbor ID columns.
+    Produces:
+      front_exists, rear_exists,
+      left_front_exists, left_side_exists, left_rear_exists,
+      right_front_exists, right_side_exists, right_rear_exists
+    """
+    specs = [
+        ("preceding_id",       "front"),
+        ("following_id",       "rear"),
+        ("left_preceding_id",  "left_front"),
+        ("left_alongside_id",  "left_side"),
+        ("left_following_id",  "left_rear"),
+        ("right_preceding_id", "right_front"),
+        ("right_alongside_id", "right_side"),
+        ("right_following_id", "right_rear"),
+    ]
+    out = df
+    for id_col, prefix in specs:
+        if id_col in out.columns:
+            nid = out[id_col].fillna(0)
+            out[f"{prefix}_exists"] = (nid.astype("Int64") > 0).astype(np.float64)
+        else:
+            out[f"{prefix}_exists"] = 0.0
     return out

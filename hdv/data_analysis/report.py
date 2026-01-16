@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
+import math
 
 # ---------------------------------------------------------
 # Ensure project root (containing 'hdv/') is on PYTHONPATH
@@ -134,6 +135,31 @@ def build_trajs_for_feasibility(df, show_progress=True):
 
 
 # =========================================================
+# Percentile-based longitudinal thresholds
+# =========================================================
+def compute_longitudinal_thresholds_from_df(df, ax_col="ax"):
+    """
+    Compute percentile-based longitudinal action thresholds from vehicle-centric ax.
+
+    Returns
+    dict with keys:
+      a_brake, a_accel, p10, p90
+    """
+    ax = pd.to_numeric(df[ax_col], errors="coerce").dropna()
+    if ax.empty:
+        raise ValueError("[report] ax column is empty; cannot compute thresholds.")
+
+    p10 = float(ax.quantile(0.10))
+    p90 = float(ax.quantile(0.90))
+
+    return {
+        "p10": p10,
+        "p90": p90,
+        "a_brake": abs(p10),
+        "a_accel": p90,
+    }
+
+# =========================================================
 # Main report
 # =========================================================
 def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
@@ -153,29 +179,14 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    steps = [
-        ("Load Feather cache / build", "load"),
-        ("Kinematics analysis", "kinematics"),
-        ("Lane-change analysis", "lane_change"),
-        ("Lane-pose report", "lane_pose"),
-        ("Window feasibility (lane-change)", "win_feas_lc"),
-        ("Window feasibility (longitudinal)", "win_feas_long"),
-    ]
-
-    pbar = tqdm(total=len(steps), disable=(not show_progress), desc="[report] progress", unit="step")
+    pbar = tqdm(total=7, desc="[report] progress", disable=(not show_progress))
 
     try:
         # ---- Step 1: Load ----
-        pbar.set_postfix_str("load")
-        df = load_highd_cached_or_build(
-            tracks_dir=tracks_dir,
-            max_recordings=max_recordings,
-            force_rebuild=False,
-        )
+        df = load_highd_cached_or_build(tracks_dir=tracks_dir, max_recordings=max_recordings, force_rebuild=False)
         pbar.update(1)
 
         # ---- Step 2: Kinematics ----
-        pbar.set_postfix_str("kinematics")
         run_kinematics_analysis(
             df=df,
             out_dir=out_dir / "kinematics",
@@ -190,7 +201,6 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
         pbar.update(1)
 
         # ---- Step 3: Lane-change ----
-        pbar.set_postfix_str("lane_change")
         run_lane_change_analysis(
             df=df,
             out_dir=out_dir / "lane_change",
@@ -205,8 +215,6 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
         pbar.update(1)
 
         # ---- Step 4: Lane-pose ----
-        pbar.set_postfix_str("lane_pose")
-
         # Frame-based fractions (default). If you later want "one vote per vehicle", set count_unique_vehicles=True.
         cfg = LanePoseReportConfig(
             lane_pos_col="lane_pos",
@@ -214,48 +222,38 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
             direction_col="meta_drivingDirection",
             recording_col="recording_id",
             vehicle_col="vehicle_id",
-            include_lane_pos=(-1, 0, 1, 2, 3, 4),
             count_unique_vehicles=False,
             dpi=160,
         )
-
-        run_lane_pose_report(
-            df=df,
-            out_dir=out_dir / "lane_pose",
-            cfg=cfg,
-        )
+        run_lane_pose_report(df=df, out_dir=out_dir / "lane_pose", cfg=cfg)
+        pbar.update(1)
         
         # ---- Step 5: Build traj dicts for feasibility ----
-        pbar.set_postfix_str("build_trajs")
         trajs = build_trajs_for_feasibility(df, show_progress=show_progress)
         pbar.update(1)
 
         # ---- Step 6: Window feasibility (lane-change) ----
-        pbar.set_postfix_str("win_feas_lc")
-        cfg_w = WindowFeasibilityConfig(
-            window_len=150,
-            stride=10,
-            min_gap_frames=10,
-            lc_key="lc",
-            lane_key="lane_id",
-        )
-        save_window_feasibility_report(
-            out_dir=out_dir / "window_feasibility_lc",
-            trajs=trajs,
-            cfg=cfg_w,
-        )
+        cfg_w = WindowFeasibilityConfig(window_len=150, stride=10, min_gap_frames=10, lc_key="lc", lane_key="lane_id",)
+        save_window_feasibility_report(out_dir=out_dir / "window_feasibility_lc", trajs=trajs, cfg=cfg_w)
         pbar.update(1)
 
         # ---- Step 7: Window feasibility (longitudinal) ----
-        pbar.set_postfix_str("win_feas_long")
+        thr = compute_longitudinal_thresholds_from_df(df)
+        W = 150
+        min_frames = int(math.ceil(0.05 * W))
         cfg_long = LongitudinalFeasibilityConfig(
-            window_len=100,
+            window_len=W,
             stride=10,
-            a_brake=0.5,
-            a_accel=0.5,
+            a_brake=thr["a_brake"],
+            a_accel=thr["a_accel"],
             min_event_frames=5,
             min_gap_frames=10,
-            min_frames_in_window=5,
+            min_frames_in_window=min_frames,
+        )
+        print(
+            f"[report] Longitudinal thresholds: "
+            f"a_brake={cfg_long.a_brake:.3f}, "
+            f"a_accel={cfg_long.a_accel:.3f}"
         )
         save_longitudinal_window_feasibility_report(
             out_dir=out_dir / "window_feasibility_longitudinal",
@@ -263,46 +261,7 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
             cfg=cfg_long,
         )
         pbar.update(1)
-
-        # ---- Step 5: Build traj dicts for feasibility ----
-        pbar.set_postfix_str("build_trajs")
-        trajs = build_trajs_for_feasibility(df, show_progress=show_progress)
-        pbar.update(1)
-
-        # ---- Step 6: Window feasibility (lane-change) ----
-        pbar.set_postfix_str("win_feas_lc")
-        cfg_w = WindowFeasibilityConfig(
-            window_len=150,
-            stride=10,
-            min_gap_frames=10,
-            lc_key="lc",
-            lane_key="lane_id",
-        )
-        save_window_feasibility_report(
-            out_dir=out_dir / "window_feasibility_lc",
-            trajs=trajs,
-            cfg=cfg_w,
-        )
-        pbar.update(1)
-
-        # ---- Step 7: Window feasibility (longitudinal) ----
-        pbar.set_postfix_str("win_feas_long")
-        cfg_long = LongitudinalFeasibilityConfig(
-            window_len=100,
-            stride=10,
-            a_brake=0.5,
-            a_accel=0.5,
-            min_event_frames=5,
-            min_gap_frames=10,
-            min_frames_in_window=5,
-        )
-        save_longitudinal_window_feasibility_report(
-            out_dir=out_dir / "window_feasibility_longitudinal",
-            trajs=trajs,
-            cfg=cfg_long,
-        )
-        pbar.update(1)
-
+        
     finally:
         pbar.close()
 

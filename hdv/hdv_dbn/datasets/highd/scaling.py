@@ -1,12 +1,11 @@
 import numpy as np
 from ..dataset import TrajectorySequence
-from .neighbours import _rel_to_exists_pairs
 
 def compute_feature_scaler_masked(sequences, scale_idx):
     """
-    Compute per-feature mean and standard deviation from a set of sequences,
-    only for the features specified by scale_idx. For neighbor-relative features (*_dx/_dy/_dvx/_dvy),
-    compute stats ONLY on frames where the corresponding *_exists == 1.
+    Compute per-feature mean/std for selected features (scale_idx), ignoring NaNs/Infs.
+    If a feature has a companion "<prefix>_vfrac", statistics are computed only on
+    rows where vfrac > 0 (feature defined at least once in the window).
 
     Parameters
     sequences : sequence of TrajectorySequence
@@ -22,44 +21,46 @@ def compute_feature_scaler_masked(sequences, scale_idx):
         clamped to 1.0 to avoid division by near-zero during scaling.
     """
     if len(sequences) == 0:
-        raise ValueError("No sequences provided.")
+        raise ValueError("[compute_feature_scaler_masked] No sequences provided.")
     
-    obs_names = sequences[0].obs_names
-    F = int(sequences[0].obs.shape[1])
-    scale_idx = np.asarray(list(scale_idx), dtype=int)
+    obs_names = sequences[0].obs_names # list of feature names from the first sequence.
+    name_to_idx = {n: i for i, n in enumerate(obs_names)} # dict mapping feature name → column index.
 
-    mean = np.zeros((F,), dtype=np.float64)
-    std = np.ones((F,), dtype=np.float64)
+    F = int(sequences[0].obs.shape[1]) # number of features
+    scale_idx = np.asarray(scale_idx, dtype=int)
 
-    X = np.vstack([seq.obs for seq in sequences])  # (sumT, F)
+    mean = np.zeros(F, dtype=np.float64)
+    std = np.ones(F, dtype=np.float64)
 
-    rel_pairs = dict(_rel_to_exists_pairs(obs_names)) # build rel_idx -> exists_idx mapping
+    X = np.vstack([np.asarray(seq.obs, dtype=np.float64) for seq in sequences]) # Stack all observations across sequences. Shape: (total_timesteps, F)
 
-    for j in scale_idx:
-        col = X[:, j]
-        mask = np.isfinite(col)
+    for j in scale_idx: # Loop over features to scale
+        col = X[:, j] # Extracts the entire feature column across all stacked rows.
+        mask = np.isfinite(col) # True where col is not NaN and not ±Inf.
 
-        # if this is a relative feature, only use rows where exists==1
-        if j in rel_pairs:
-            exj = rel_pairs[j]
-            mask = mask & (X[:, exj] > 0.5)
+        fname = obs_names[j] # name of this feature
+        if fname.endswith(("_mean", "_min", "_std")): # Only apply vfrac gating to summary-style window features.
+            vfrac_name = fname.rsplit("_", 1)[0] + "_vfrac"
+            vf_idx = name_to_idx.get(vfrac_name)
+            if vf_idx is not None:
+                vf = X[:, vf_idx] 
+                mask &= np.isfinite(vf) & (vf > 0.0) # Update mask to include only rows where vfrac > 0.
 
-        vals = col[mask]
+        vals = col[mask] # Select only valid entries for this feature.
         if vals.size == 0:
             mean[j] = 0.0
             std[j] = 1.0
             continue
 
-        m = float(vals.mean())
+        mean[j] = float(vals.mean())
         s = float(vals.std())
-        mean[j] = m
         std[j] = 1.0 if s < 1e-6 else s
 
     return mean, std
 
 def compute_classwise_feature_scalers_masked(sequences, scale_idx, class_key="meta_class"):
     """
-    Compute one *masked* scaler per class.
+    Compute one *masked* scaler per class: {class_name: (mean, std)}.
 
     Parameters
     sequences : list[TrajectorySequence]
@@ -75,21 +76,38 @@ def compute_classwise_feature_scalers_masked(sequences, scale_idx, class_key="me
     """
     buckets = {}
     for seq in sequences:
-        if not seq.meta or class_key not in seq.meta:
-            continue
-        cls = str(seq.meta[class_key])
-        buckets.setdefault(cls, []).append(seq)
+        if seq.meta and class_key in seq.meta:
+            buckets.setdefault(str(seq.meta[class_key]), []).append(seq)
 
-    scalers = {}
-    for cls, seqs in buckets.items():
-        scalers[cls] = compute_feature_scaler_masked(seqs, scale_idx=scale_idx)
-    return scalers
+    # Returns: { "car": (mean,std), "truck": (mean,std), ... }
+    return {
+        cls: compute_feature_scaler_masked(seqs, scale_idx)
+        for cls, seqs in buckets.items()
+    }
+
+def _scale_obs_masked(x, mean, std):
+    """
+    Scale only finite entries in x. NaNs/Infs are preserved exactly.
+    """
+    x = np.asarray(x, dtype=np.float64) # shape (T, F)
+    # Convert mean/std to 1D float arrays of shape (F,).
+    mean = np.asarray(mean, dtype=np.float64).reshape(-1)
+    std = np.asarray(std, dtype=np.float64).reshape(-1)
+
+    if x.shape[1] != mean.shape[0]:
+        raise ValueError(f"mean/std shape mismatch: mean {mean.shape}, obs {x.shape}")
+
+    finite = np.isfinite(x) # True where x[t,f] is a real number.
+    z = (x - mean[None, :]) / std[None, :]
+
+    out = x.copy()
+    out[finite] = z[finite] # Only update finite entries.
+    return out
 
 def scale_sequences(sequences, mean, std):
     """
-    Apply z-score scaling and then neutralize neighbor-relative features when the neighbor is absent.
-    Scaling is applied as:
-        obs_scaled = (obs - mean) / std
+    Apply z-score scaling to finite entries only (masked NaNs design).
+    NaNs/Infs remain NaN/Inf. No imputation is performed.
 
     Parameters
     sequences : sequence of TrajectorySequence
@@ -104,37 +122,25 @@ def scale_sequences(sequences, mean, std):
         New list of sequences with scaled observations and neutralized absent-neighbor
         relative features. Metadata (vehicle_id, frames, obs_names, recording_id) is preserved.
     """
-    out = []
-
     if len(sequences) == 0:
-        return out
-    
-    # rel feature ↔ exists feature pairs
-    rel_pairs = _rel_to_exists_pairs(sequences[0].obs_names)
+        return []
 
+    out = []
     for seq in sequences:
-        obs_scaled = (seq.obs - mean) / std
-        
-        # if neighbor doesn't exist, set its relative features to 0 (neutral in scaled space)
-        for rel_idx, ex_idx in rel_pairs:
-            absent = seq.obs[:, ex_idx] <= 0.5
-            obs_scaled[absent, rel_idx] = 0.0
-        
-        out.append(
-            TrajectorySequence(
-                vehicle_id=seq.vehicle_id,
-                frames=seq.frames,
-                obs=obs_scaled,
-                obs_names=seq.obs_names,
-                recording_id=seq.recording_id,
-                meta=seq.meta
-            )
-        )
+        obs_scaled = _scale_obs_masked(seq.obs, mean, std)
+        out.append(TrajectorySequence(
+            vehicle_id=seq.vehicle_id,
+            frames=seq.frames,
+            obs=obs_scaled,
+            obs_names=seq.obs_names,
+            recording_id=seq.recording_id,
+            meta=seq.meta
+        ))
     return out
 
 def scale_sequences_classwise(sequences, scalers, class_key="meta_class"):
     """
-    Apply class-specific feature scaling and neutralize absent-neighbor relative features.
+    Apply class-specific masked scaling (finite entries only).
 
     Parameters
     sequences : list[TrajectorySequence]
@@ -148,37 +154,27 @@ def scale_sequences_classwise(sequences, scalers, class_key="meta_class"):
     list[TrajectorySequence]
         Scaled sequences.
     """
-    out = []
-
     if len(sequences) == 0:
-        return out
-    
-    rel_pairs = _rel_to_exists_pairs(sequences[0].obs_names)
+        return []
 
+    out = []
     for seq in sequences:
-        if seq.meta is None or class_key not in seq.meta:
-            raise ValueError("Sequence missing class information for class-wise scaling.")
+        if not seq.meta or class_key not in seq.meta:
+            raise ValueError("[scale_sequences_classwise] Missing class information.")
 
-        cls = seq.meta[class_key]
+        cls = seq.meta[class_key] # Read class label.
         if cls not in scalers:
-            raise ValueError(f"No scaler found for class '{cls}'.")
+            raise ValueError(f"[scale_sequences_classwise] No scaler for class '{cls}'.")
 
         mean, std = scalers[cls]
-        obs_scaled = (seq.obs - mean) / std
+        obs_scaled = _scale_obs_masked(seq.obs, mean, std)
 
-        for rel_idx, ex_idx in rel_pairs:
-            absent = seq.obs[:, ex_idx] <= 0.5
-            obs_scaled[absent, rel_idx] = 0.0
-
-        out.append(
-            TrajectorySequence(
-                vehicle_id=seq.vehicle_id,
-                frames=seq.frames,
-                obs=obs_scaled,
-                obs_names=seq.obs_names,
-                recording_id=seq.recording_id,
-                meta=seq.meta,
-            )
-        )
-
+        out.append(TrajectorySequence(
+            vehicle_id=seq.vehicle_id,
+            frames=seq.frames,
+            obs=obs_scaled,
+            obs_names=seq.obs_names,
+            recording_id=seq.recording_id,
+            meta=seq.meta
+        ))
     return out

@@ -1,10 +1,11 @@
-"""EM training loop for the HDV DBN with Mixed emissions (Gaussian + discrete)."""
+"""EM training loop for the HDV DBN with Mixed emissions (Gaussian + Bernoulli)."""
 
 import numpy as np
 import torch
 from sklearn.cluster import MiniBatchKMeans
 from tqdm.auto import tqdm
 import time
+import math
 
 from .model import HDVDBN
 from .emissions import MixedEmissionModel, GaussianParams
@@ -279,9 +280,8 @@ class HDVTrainer:
         p(a_0 | s_0) = pi_a0_given_s0[s, a]
 
     Emissions (MixedEmissionModel), conditionally independent given z_t:
-        - Diagonal Gaussian over continuous features
-        - Independent Bernoulli over binary features
-        - Categorical over lane_pos (K=5) and lc (K=3)
+        - Diagonal Gaussian over continuous window features (NaN-masked)
+        - Independent Bernoulli over binary window features (e.g., lc_*_present)
 
     EM procedure:
     - E-step: structured forward–backward per trajectory to compute
@@ -305,7 +305,6 @@ class HDVTrainer:
         self.hdv_dbn = HDVDBN()
         self.obs_names = list(obs_names)
         self.emissions = MixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=bool(getattr(TRAINING_CONFIG, "disable_discrete_obs", False)))
- 
         self.S = self.hdv_dbn.num_style
         self.A = self.hdv_dbn.num_action
         self.num_states = self.S * self.A
@@ -824,13 +823,28 @@ class HDVTrainer:
 
         with torch.no_grad():
             for _, obs in iterator:
+                if obs is None or obs.shape[0] == 0:
+                    continue
+
                 logB_flat = self._compute_logB_for_sequence(obs)  # (T,N)
+                if logB_flat.ndim != 2 or logB_flat.shape[1] != int(self.num_states):
+                    raise ValueError(
+                        f"logB_flat has shape {tuple(logB_flat.shape)}, expected (T,{int(self.num_states)})."
+                    )
+                if not torch.isfinite(logB_flat).all(): 
+                    continue # Skip if emissions contain non-finite values
+
                 T = int(logB_flat.shape[0])
+                if T <= 0:
+                    continue
+
                 logB_s_a = logB_flat.view(T, int(self.S), int(self.A))
                 _, _, _, ll = forward_backward_torch(
                                     self.pi_s0, self.pi_a0_given_s0, self.A_s, self.A_a, logB_s_a
                                 )
-                total_ll += float(ll.detach().cpu().item())
+                if torch.isfinite(ll) and (not torch.isnan(ll)):
+                    total_ll += float(ll.detach().cpu().item())
+
         return total_ll
     
     # ------------------------------------------------------------------
@@ -987,7 +1001,6 @@ class HDVTrainer:
         Initialise MixedEmissionModel parameters using MiniBatchKMeans on continuous dims.
         - Gaussian part: KMeans on continuous dimensions only.
         - Bernoulli part: global mean of binary features.
-        - Lane categorical: global empirical lane distribution with smoothing.
 
         Parameters
         train_obs_seqs : list[np.ndarray]
@@ -1012,15 +1025,28 @@ class HDVTrainer:
         X_all_cont = X_all[:, cont_idx]  # (N_total, cont_dim)
         cont_dim = int(X_all_cont.shape[1])
 
+        # Drop rows with non-finite continuous values (window stats may be NaN by design).
+        finite_rows = np.all(np.isfinite(X_all_cont), axis=1)
+        X_all_cont_f = X_all_cont[finite_rows]
+        if X_all_cont_f.shape[0] < max(10 * K, cont_dim + 1):
+            # Fallback: replace non-finite with column medians (robust) then proceed.
+            Xc_tmp = X_all_cont.copy()
+            col_med = np.nanmedian(np.where(np.isfinite(Xc_tmp), Xc_tmp, np.nan), axis=0)
+            col_med = np.where(np.isfinite(col_med), col_med, 0.0)
+            bad = ~np.isfinite(Xc_tmp)
+            Xc_tmp[bad] = np.take(col_med, np.where(bad)[1])
+            X_all_cont_f = Xc_tmp
+
         # Choose a random subset for clustering
         rng = np.random.default_rng(seed)
-        if N_total > max_samples:
-            idx = rng.choice(N_total, size=max_samples, replace=False)
-            Xc = X_all_cont[idx]
-            print(f"  Using subsample of {max_samples} out of {N_total} points for k-means initialisation.")
+        N_f = int(X_all_cont_f.shape[0])
+        if N_f > max_samples:
+            idx = rng.choice(N_f, size=max_samples, replace=False)
+            Xc = X_all_cont_f[idx]
+            print(f"  Using subsample of {max_samples} out of {N_f} finite/filled points for k-means initialisation.")
         else:
-            Xc = X_all_cont
-            print(f"  Using all {N_total} points for k-means initialisation.")
+            Xc = X_all_cont_f
+            print(f"  Using all {N_f} finite/filled points for k-means initialisation.")
 
         # global variance (diag) as fallback
         global_var = np.var(Xc, axis=0) + 1e-6  
@@ -1061,46 +1087,18 @@ class HDVTrainer:
             self.emissions.gauss.params[s, a] = GaussianParams(mean=mean_z, var=var_z)  
         
         # -----------------------------
-        # Discrete parts (Bernoulli + lane categorical)
+        # Discrete parts (Bernoulli)
         # -----------------------------
         if self.emissions.bin_dim > 0:  
             xb = X_all[:, self.emissions.bin_idx]
-            xb = np.clip(xb, 0.0, 1.0)
-            p0 = xb.mean(axis=0)
+            # finite-mask for safety
+            finite_b = np.isfinite(xb)
+            xb_bin = (xb > 0.5).astype(np.float64)
+            xb_bin[~finite_b] = np.nan
+            p0 = np.nanmean(xb_bin, axis=0)
+            p0 = np.where(np.isfinite(p0), p0, 0.5)
             p0 = np.clip(p0, 1e-3, 1.0 - 1e-3)
             self.emissions.bern_p = np.tile(p0[None, :], (K, 1))  
-        # lane_pos init must ignore invalid lane_pos == -1 (or any out-of-range)
-        lane_raw = X_all[:, self.emissions.lane_idx]
-        lane_int = np.rint(lane_raw).astype(int)
-
-        if hasattr(self.emissions, "lc_idx") and self.emissions.lc_idx is not None:
-            lc_raw = X_all[:, self.emissions.lc_idx]
-            lc_int = np.rint(lc_raw).astype(int)
-
-            # map {-1,0,1} -> {0,1,2}
-            lc_mapped = lc_int + 1
-
-            valid_lc = (lc_mapped >= 0) & (lc_mapped < self.emissions.lc_K)
-            if np.any(valid_lc):
-                lc_valid = lc_mapped[valid_lc]
-                counts = np.bincount(lc_valid, minlength=self.emissions.lc_K).astype(np.float64)
-            else:
-                counts = np.ones((self.emissions.lc_K,), dtype=np.float64)
-
-            alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
-            p_lc = (counts + alpha) / (counts.sum() + alpha * self.emissions.lc_K)
-            self.emissions.lc_p = np.tile(p_lc[None, :], (K, 1))
-
-        valid = (lane_int >= 0) & (lane_int < self.emissions.lane_K)
-        if np.any(valid):
-            lane_valid = lane_int[valid] 
-            counts = np.bincount(lane_valid, minlength=self.emissions.lane_K).astype(np.float64)  
-        else:
-            # fallback to uniform if everything is invalid
-            counts = np.ones((self.emissions.lane_K,), dtype=np.float64)  
-        alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
-        p_lane = (counts + alpha) / (counts.sum() + alpha * self.emissions.lane_K)
-        self.emissions.lane_p = np.tile(p_lane[None, :], (K, 1))
 
         self.emissions.invalidate_cache()
         self.emissions.to_device(device=self.device, dtype=self.dtype)
@@ -1154,32 +1152,22 @@ class HDVTrainer:
             "A_a": A_a_np,
         }
 
-       # -----------------------------
-        # Meta needed to reconstruct trainer/emissions
         # -----------------------------
+        # Meta needed to reconstruct trainer/emissions
+        # ----------------------------
         payload["obs_names"] = np.array(self.obs_names, dtype=object)
-        lane_K = int(getattr(self.emissions, "lane_K", 0))
-        payload["lane_num_categories"] = np.array([lane_K], dtype=np.int64)
-        if int(payload["lane_num_categories"][0]) <= 0:
-            raise ValueError("lane_num_categories is invalid (<=0). Emissions may not be initialized correctly.")
-        lc_K = int(getattr(self.emissions, "lc_K", 0)) if hasattr(self.emissions, "lc_K") else 0
-        payload["lc_num_categories"] = np.array([lc_K], dtype=np.int64)
 
         # -----------------------------
         # Emissions 
         # -----------------------------
         required = {
             "obs_names",
-            "lane_K",
-            "lc_K",
-            "lc_p",
             "cont_idx",
             "bin_idx",
-            "lane_idx",
+            "bernoulli_names",
             "gauss_means",
-            "gauss_vars",   
+            "gauss_vars",
             "bern_p",
-            "lane_p",
         }
         em_dict = self.emissions.to_arrays()  
         missing = [k for k in sorted(required) if k not in em_dict]
@@ -1188,11 +1176,6 @@ class HDVTrainer:
                 f"MixedEmissionModel.to_arrays() is missing keys: {missing}. "
                 "Check emissions.py to_arrays()/from_arrays() implementation."
             )
-
-        laneK_header = int(payload["lane_num_categories"][0])
-        laneK_em = int(np.asarray(em_dict["lane_K"]).reshape(-1)[0])
-        if laneK_header != laneK_em:
-            raise ValueError(f"lane_K mismatch: header={laneK_header}, emissions={laneK_em}")
 
         for k, v in em_dict.items():      
             payload[f"em__{k}"] = v           
@@ -1241,18 +1224,15 @@ class HDVTrainer:
         data = np.load(path, allow_pickle=True)
 
         # ------------------------------------------------------------------
-        # Reconstruct trainer (MixedEmissionModel requires obs_names & lane_K). 
+        # Reconstruct trainer 
         # ------------------------------------------------------------------
-        if "obs_names" not in data.files or "lane_num_categories" not in data.files:  
+        if "obs_names" not in data.files:
             raise ValueError(
-                "Saved model is missing 'obs_names' or 'lane_num_categories'. "
+                "Saved model is missing 'obs_names'. "
                 "Re-save the model."
             )  
 
-        obs_names = [str(x) for x in list(data["obs_names"])]  
-        lane_K = int(np.asarray(data["lane_num_categories"]).ravel()[0])
-        lc_K = int(np.asarray(data["lc_num_categories"]).ravel()[0]) if "lc_num_categories" in data.files else None
-
+        obs_names = [str(x) for x in list(data["obs_names"])] 
         trainer = cls(obs_names=obs_names)
 
         # ------------------------------------------------------------------
@@ -1334,52 +1314,36 @@ class HDVTrainer:
             return name_to_idx.get(name, None)
 
         # ego indices
-        i_vx, i_vy = idx("vx"), idx("vy")
-        i_ax, i_ay = idx("ax"), idx("ay")
+        i_vx, i_vy = idx("vx_mean"), idx("vy_mean")
+        i_ax, i_ay = idx("ax_mean"), idx("ay_mean")
         compute_speed_mag = (i_vx is not None and i_vy is not None)
-        compute_acc_mag   = (i_ax is not None and i_ay is not None)
+        compute_acc_mag = (i_ax is not None and i_ay is not None)
 
-        # direct ego signals (only if present in obs_names)
-        ego_direct = []
-        for name in ["speed", "jerk_x", "vx", "vy", "ax", "ay"]:
-            if idx(name) is not None:
-                ego_direct.append(name)
+        feat_specs = []  # (label, j, special)
 
-        # Neighbors: ALL prefixes present in your baseline config
-        neighbor_prefixes = [
-            "front", "rear",
-            "left_front", "left_side", "left_rear",
-            "right_front", "right_side", "right_rear",
-        ]
-
-        neighbor_suffixes = ["dx", "dy", "dvx", "dvy", "thw", "ttc"]
-
-         # Build list of feature specs:
-        # each spec is (label, exists_idx_or_None, value_idx_or_None, special_type)
-        # where special_type in {None, "ego_speed_mag", "ego_acc_mag", "direct"}
-        feat_specs = []
-
-        # Derived ego magnitudes
         if compute_speed_mag:
-            feat_specs.append(("speed_mag", None, None, "ego_speed_mag"))
+            feat_specs.append(("speed_mag_mean", None, "ego_speed_mag"))
         if compute_acc_mag:
-            feat_specs.append(("acc_mag", None, None, "ego_acc_mag"))
-
-        # Direct ego channels
-        for name in ego_direct:
-            feat_specs.append((name, None, idx(name), "direct"))
-
-        # Neighbor conditioned features
-        for p in neighbor_prefixes:
-            i_e = idx(f"{p}_exists")
-            if i_e is None:
-                continue  # can't condition without exists
-
-            for suf in neighbor_suffixes:
-                i_val = idx(f"{p}_{suf}")
-                if i_val is None:
-                    continue
-                feat_specs.append((f"{p}_{suf} | {p}_exists=1", i_e, i_val, None))
+            feat_specs.append(("acc_mag_mean", None, "ego_acc_mag"))
+        
+        candidate_names = [
+            "vx_mean","vx_std","vy_mean","vy_std",
+            "ax_mean","ax_std","ay_mean","ay_std",
+            "jerk_mean","jerk_std",
+            "d_left_lane_mean","d_left_lane_min",
+            "d_right_lane_mean","d_right_lane_min",
+            "front_thw_mean","front_thw_min","front_thw_vfrac",
+            "front_ttc_mean","front_ttc_min","front_ttc_vfrac",
+            "front_dhw_mean","front_dhw_min","front_dhw_vfrac",
+            "lc_left_present","lc_right_present",
+            "front_exists_frac","rear_exists_frac",
+            "left_front_exists_frac","left_side_exists_frac","left_rear_exists_frac",
+            "right_front_exists_frac","right_side_exists_frac","right_rear_exists_frac",
+        ]
+        for n in candidate_names:
+            j = idx(n)
+            if j is not None:
+                feat_specs.append((n, j, "direct")) 
 
         feat_names = [fs[0] for fs in feat_specs]
         F = len(feat_names)
@@ -1407,47 +1371,41 @@ class HDVTrainer:
             if compute_acc_mag:
                 a_mag = np.sqrt(x[:, i_ax] ** 2 + x[:, i_ay] ** 2)
 
-            # Accumulate posterior-weighted moments
-            for col, (label, i_e, i_val, special) in enumerate(feat_specs):
-                mask = None
-                val = None
-
+        # Accumulate posterior-weighted moments with finite masking
+            for col, (label, j, special) in enumerate(feat_specs):
                 if special == "ego_speed_mag":
                     val = v_mag
                 elif special == "ego_acc_mag":
                     val = a_mag
-                elif special == "direct":
-                    val = x[:, i_val]
                 else:
-                    # neighbor conditioned on exists==1
-                    mask = (x[:, i_e] >= 0.5).astype(np.float64)
-                    val = x[:, i_val]
+                    val = x[:, j]
 
-                if val is None:
+                finite = np.isfinite(val)
+                if not np.any(finite):
                     continue
 
+                v = np.where(finite, val, 0.0).astype(np.float64)
+                fm = finite.astype(np.float64)
+
                 for k in range(K):
-                    w = g[:, k]
-                    if mask is not None:
-                        w = w * mask
+                    w = g[:, k] * fm
                     sw = w.sum()
                     if sw <= 0.0:
                         continue
-                    sum_w[k, col]   += sw
-                    sum_wx[k, col]  += (w * val).sum()
-                    sum_wx2[k, col] += (w * val * val).sum()
-
+                    sum_w[k, col] += sw
+                    sum_wx[k, col] += (w * v).sum()
+                    sum_wx2[k, col] += (w * v * v).sum()
+ 
         # finalize mean/std
         for k in range(K):
-            for f in range(F):
-                sw = sum_w[k, f]
-                if sw > 1e-12:
-                    mu = sum_wx[k, f] / sw
-                    ex2 = sum_wx2[k, f] / sw
-                    var = ex2 - mu * mu
-                    if var < 0.0:
-                        var = 0.0
-                    means[k, f] = mu
-                    stds[k, f] = np.sqrt(var)
+            for col in range(F):
+                sw = sum_w[k, col]
+                if sw <= 0.0:
+                    continue
+                m = sum_wx[k, col] / sw
+                ex2 = sum_wx2[k, col] / sw
+                var = max(ex2 - m*m, 0.0)
+                means[k, col] = m
+                stds[k, col] = math.sqrt(var)
 
         return feat_names, means, stds

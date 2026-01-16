@@ -3,7 +3,7 @@ Entry point for training the HDV DBN / joint-HMM model on the highD dataset.
 
 Pipeline
 - Load highD CSVs from `data/highd/` (optionally using a cached feather file).
-- Build per-vehicle observation sequences from selected feature columns.
+- Build per-vehicle FRAME sequences, then windowize into per-window timesteps.
 - Split sequences into train/val/test.
 - Fit a feature scaler (mean/std) on the training split only, then scale all splits.
 - Train the model with EM (optionally evaluating validation log-likelihood each iteration).
@@ -19,6 +19,7 @@ from dataclasses import asdict
 from .datasets import (
     load_highd_folder,
     df_to_sequences,
+    windowize_sequences,
     train_val_test_split,
     compute_feature_scaler_masked,  
     scale_sequences,
@@ -26,7 +27,10 @@ from .datasets import (
     scale_sequences_classwise,
 )
 from .trainer import HDVTrainer
-from .config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS, CONTINUOUS_FEATURES, DBN_STATES
+from .config import (
+    TRAINING_CONFIG, FRAME_FEATURE_COLS, META_COLS,
+    WINDOW_FEATURE_COLS, CONTINUOUS_FEATURES, WINDOW_CONFIG, DBN_STATES
+)
 
 if TRAINING_CONFIG.use_wandb:
     import wandb
@@ -88,26 +92,31 @@ def main():
         print(f"[train_highd_dbn] ERROR during initialization: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Observation features used by the emission model (baseline set)
-    feature_cols = BASELINE_FEATURE_COLS
-    # Meta features for analysis / scaling choices
-    meta_cols = META_COLS
+    # -----------------------------
+    # Frame -> window pipeline
+    # -----------------------------
+    frame_feature_cols = list(FRAME_FEATURE_COLS)
+    meta_cols = list(META_COLS)
+    # Build per-vehicle frame sequences 
+    frame_sequences = df_to_sequences(df, feature_cols=frame_feature_cols, meta_cols=meta_cols)
+    print(f"[train_highd_dbn] Total FRAME sequences (vehicles) loaded: {len(frame_sequences)}")
 
-    scale_idx = [i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES] # scale exactly the continuous features from config
+    # Convert frame sequences -> window sequences
+    win_sequences = windowize_sequences(
+        frame_sequences,
+        W=int(WINDOW_CONFIG.W),
+        stride=int(WINDOW_CONFIG.stride)
+    )
+    print(f"[train_highd_dbn] Total WINDOW sequences produced: {len(win_sequences)}")
 
-    # Fill NaNs in features with 0.0 (e.g., missing front/rear vehicle info)
-    if "lane_pos" in feature_cols:
-        df["lane_pos"] = df["lane_pos"].fillna(-1)  # invalid/unknown stays -1
-    fill_cols = [c for c in feature_cols if c != "lane_pos"]  
-    df[fill_cols] = df[fill_cols].fillna(0.0)                 
+    # Split by sequence (vehicle) to avoid leakage
+    train_seqs, val_seqs, test_seqs = train_val_test_split(win_sequences, train_frac=0.7, val_frac=0.1)
 
-    sequences = df_to_sequences(df, feature_cols=feature_cols, meta_cols=meta_cols)
-    print(f"[train_highd_dbn] Total sequences (vehicles) loaded: {len(sequences)}")
-
-    train_seqs, val_seqs, test_seqs = train_val_test_split(sequences, train_frac=0.7, val_frac=0.1)
     # -----------------------------
     # Choose scaling strategy
     # -----------------------------
+    feature_cols = list(WINDOW_FEATURE_COLS)
+    scale_idx = [i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES]
     if USE_CLASSWISE_SCALING:
         scalers = compute_classwise_feature_scalers_masked(train_seqs, scale_idx=scale_idx, class_key="meta_class")  
         train_seqs_scaled = scale_sequences_classwise(train_seqs, scalers, class_key="meta_class")  
@@ -138,7 +147,7 @@ def main():
         trainer.scaler_mean, trainer.scaler_std = scaler_to_store
 
     # Convert TrajectorySequence objects -> numpy observation sequences
-    # Training uses SCALED sequences; we also keep RAW sequences for physical-unit semantic logging.
+    # Training uses SCALED sequences; keep RAW for physical-unit semantics.
     train_obs_seqs = [seq.obs for seq in train_seqs_scaled]
     train_obs_seqs_raw = [seq.obs for seq in train_seqs]              # raw (unscaled)
     val_obs_seqs = [seq.obs for seq in val_seqs_scaled] if len(val_seqs_scaled) > 0 else None
@@ -175,9 +184,9 @@ def main():
 
                 # data / features used
                 "obs_dim": int(obs_dim),
-                "feature_cols": list(BASELINE_FEATURE_COLS),
+                "frame_feature_cols": list(FRAME_FEATURE_COLS),
+                "obs_feature_cols": list(WINDOW_FEATURE_COLS),
                 "meta_cols": list(META_COLS),
-                "continuous_features": list(CONTINUOUS_FEATURES),
             }),
         )
 

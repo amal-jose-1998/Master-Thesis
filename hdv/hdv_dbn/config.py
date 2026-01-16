@@ -21,132 +21,12 @@ class DBNStates:
 
 # Define the DBN states
 DBN_STATES = DBNStates(
-    driving_style=("style_0", "style_1", "style_2"),
-    action=("action_0", "action_1", "action_2",)
+    #driving_style=("style_0", "style_1", "style_2",),
+    driving_style=("dummy",),
+    action=("action_0", "action_1", "action_2", "action_3", "action_4")
+    #action=("dummy")
     )
 
-# =============================================================================
-# Observation feature configuration for highD dataset
-# =============================================================================
-
-# meta columns stored per sequence (not part of obs vector)
-META_COLS: List[str] = [
-    "meta_class",           # vehicle class (e.g., car/truck)
-    "meta_drivingDirection",# driving direction (+1 or -1)
-]
-
-# -----------------------------
-# Ego features
-# -----------------------------
-EGO_FEATURES: List[str] = [
-    "vx", "vy",
-    "ax", "ay",
-    "lane_pos", "lc",
-    "speed", "jerk_x",
-]
-
-# -----------------------------
-# Neighbor feature blocks
-# -----------------------------
-FRONT_FEATURES: List[str] = [
-    "front_exists",
-    "front_dx", "front_dy",
-    "front_dvx", "front_dvy",
-    "front_thw", "front_ttc",
-]
-
-REAR_FEATURES: List[str] = [
-    "rear_exists",
-    "rear_dx", "rear_dy",
-    "rear_dvx", "rear_dvy",
-]
-
-LEFT_FRONT_FEATURES: List[str] = [
-    "left_front_exists",
-    "left_front_dx", "left_front_dy",
-    "left_front_dvx", "left_front_dvy",
-]
-
-LEFT_REAR_FEATURES: List[str] = [
-    "left_rear_exists",
-    "left_rear_dx", "left_rear_dy",
-    "left_rear_dvx", "left_rear_dvy",
-]
-
-RIGHT_FRONT_FEATURES: List[str] = [
-    "right_front_exists",
-    "right_front_dx", "right_front_dy",
-    "right_front_dvx", "right_front_dvy",
-]
-
-RIGHT_REAR_FEATURES: List[str] = [
-    "right_rear_exists",
-    "right_rear_dx", "right_rear_dy",
-    "right_rear_dvx", "right_rear_dvy",
-]
-
-LEFT_SIDE_FEATURES: List[str] = [  
-    "left_side_exists",            
-    "left_side_dx", "left_side_dy",
-    "left_side_dvx", "left_side_dvy",
-]                                 
-
-RIGHT_SIDE_FEATURES: List[str] = [
-    "right_side_exists",           
-    "right_side_dx", "right_side_dy",
-    "right_side_dvx", "right_side_dvy",
-]     
-
-# Full baseline observation vector (feature order matters!)
-BASELINE_FEATURE_COLS: List[str] = (
-     EGO_FEATURES
-    + FRONT_FEATURES
-    + LEFT_FRONT_FEATURES
-    + LEFT_SIDE_FEATURES
-    + LEFT_REAR_FEATURES
-    + RIGHT_FRONT_FEATURES
-    + RIGHT_SIDE_FEATURES
-    + RIGHT_REAR_FEATURES
-)
-
-# -----------------------------
-# Discrete vs continuous split
-# -----------------------------
-"""
-Discrete features are handled by non-Gaussian emission components:
-  - lane_pos: categorical distribution (K=5)
-      coding: {0,1,2,3,4} (ignore/mask -1 if present)
-  - lc: categorical distribution (K=3; left/none/right)
-      coding: {-1, 0, +1} (we will map internally to {0,1,2})
-  - *_exists: independent Bernoulli distributions
-
-Continuous features are modeled by a multivariate Gaussian per latent state.
-Only continuous features should be z-score normalized.
-"""
-# Categorical (multinomial) discrete features
-CATEGORICAL_FEATURES: List[str] = [
-    "lane_pos",
-    "lc",
-]
-
-# Number of categories for each categorical feature
-CATEGORICAL_FEATURE_SIZES = {
-    "lane_pos": 5,
-    "lc": 3,
-}
-
-# Binary discrete features (modeled with independent Bernoulli emissions)
-BERNOULLI_FEATURES: List[str] = [
-    "front_exists", "rear_exists",
-    "left_front_exists", "left_side_exists", "left_rear_exists",
-    "right_front_exists", "right_side_exists", "right_rear_exists",
-]
-
-# All discrete features (categorical + Bernoulli)
-DISCRETE_FEATURES: List[str] = CATEGORICAL_FEATURES + BERNOULLI_FEATURES
-
-# Everything else is continuous
-CONTINUOUS_FEATURES: List[str] = [f for f in BASELINE_FEATURE_COLS if f not in DISCRETE_FEATURES]
 
 # =============================================================================
 # Training configuration
@@ -216,19 +96,19 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 100
 
-    bern_weight: float = 1.0                   # E1=1.0, E3=0.5 or 0.25, E4=1
-    lane_weight: float = 0.2                   # E4=0.2
-    lc_weight: float = 1.0                     # E4=1
+    disable_discrete_obs: bool = False     
+    bern_weight: float = 1                     
+    lc_weight: float = 25                  
 
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
     early_stop_delta_A_thresh: float = 1e-3
 
     # Transition MAP priors (Dirichlet + stickiness)
-    alpha_A_s: float = 0.1   # smoothing for style rows
-    kappa_A_s: float = 25.0  # extra self-transition mass for style (stickier)
-    alpha_A_a: float = 0.1   # smoothing for action rows
-    kappa_A_a: float = 3.0   # extra self-transition mass for action (less sticky than style)
+    alpha_A_s: float = 0.01   # smoothing for style rows
+    kappa_A_s: float = 5.0    # extra self-transition mass for style (stickier)
+    alpha_A_a: float = 0.01   # smoothing for action rows
+    kappa_A_a: float = 1.0     # extra self-transition mass for action (less sticky than style)
 
     verbose: int = 1
     use_progress: bool = True
@@ -241,22 +121,119 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = 3
+    max_highd_recordings: Optional[int] = 1
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "Experiment 1: uniform"
+    wandb_run_name: Optional[str] = "Experiment 1.0"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
-    dtype: Literal["float32", "float64"] = "float64"
+    dtype: Literal["float32", "float64"] = "float32"
 
-    cpd_init: Literal["uniform", "random", "sticky"] = "uniform"
+    cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123
 
-    
-    
-
 TRAINING_CONFIG = TrainingConfig()
+
+
+# =============================================================================
+# Observation feature configuration for highD dataset
+# =============================================================================
+# meta columns stored per sequence (not part of obs vector)
+META_COLS: List[str] = [
+    "meta_class",           # vehicle class (e.g., car/truck)
+    "meta_drivingDirection",# driving direction (+1 or -1)
+]
+
+# Per-frame columns we keep in the dataframe (to build windows) 
+FRAME_FEATURE_COLS: List[str] = [
+    # ego kinematics
+    "vx", "vy", "ax", "ay", "jerk_x",
+
+    # lane change evidence  ∈ { -1, 0, +1 }
+    "lc",       
+
+    # lane boundary distances (from add_lane_boundary_distance_features)
+    # These may be NaN if lane boundaries are undefined.
+    "d_left_lane", "d_right_lane",
+
+    # front risk from highD tracks (kept as NaN when undefined)
+    "front_thw", "front_ttc", "front_dhw",
+
+    # existence flags (frame-level, later windowised into fractions)
+    "front_exists",
+    "rear_exists",
+    "left_front_exists", "left_side_exists", "left_rear_exists",
+    "right_front_exists", "right_side_exists", "right_rear_exists",
+]
+
+
+# =============================================================================
+# Windowing configuration (window = timestep)
+# =============================================================================
+@dataclass(frozen=True)
+class WindowConfig:
+    """
+    Controls conversion from per-frame trajectories to per-window timesteps.
+    W and stride are in frames. 
+    """
+    W: int = 150  # highD is 25 Hz (so 150 frames ~= 6s).
+    stride: int = 10 # 10 frames ~= 0.4s between window starts
+
+WINDOW_CONFIG = WindowConfig()
+
+# Window-level columns produced by windowize_sequences() 
+WINDOW_EGO_FEATURES: List[str] = [
+    "vx_mean", "vx_std",
+    "ax_mean", "ax_std",
+    "vy_mean", "vy_std",
+    "ay_mean", "ay_std",
+    "jerk_mean", "jerk_std"
+]
+
+WINDOW_LC_FEATURES: List[str] = [
+    "lc_left_present",
+    "lc_right_present", 
+]
+
+WINDOW_LANE_GEOM_FEATURES: List[str] = [
+    "d_left_lane_mean",  "d_left_lane_min",
+    "d_right_lane_mean", "d_right_lane_min",
+]
+
+# *_vfrac = fraction of frames where the signal was valid
+# if vfrac == 0 → mean and min are NaN (masked later in emissions / E-step)
+WINDOW_FRONT_RISK_FEATURES: List[str] = [
+    "front_thw_mean", "front_thw_min", "front_thw_vfrac", 
+    "front_ttc_mean", "front_ttc_min", "front_ttc_vfrac",
+    "front_dhw_mean", "front_dhw_min", "front_dhw_vfrac",
+]
+
+# Existence fractions (window-level)
+WINDOW_EXISTS_FRAC_FEATURES: List[str] = [
+    "front_exists_frac",
+    "rear_exists_frac",
+    "left_front_exists_frac", "left_side_exists_frac", "left_rear_exists_frac",
+    "right_front_exists_frac", "right_side_exists_frac", "right_rear_exists_frac",
+]
+
+WINDOW_FEATURE_COLS: List[str] = (
+    WINDOW_EGO_FEATURES
+    + WINDOW_LC_FEATURES
+    + WINDOW_LANE_GEOM_FEATURES
+    + WINDOW_FRONT_RISK_FEATURES
+    + WINDOW_EXISTS_FRAC_FEATURES
+)
+
+BERNOULLI_FEATURES: List[str] = [
+    "lc_left_present",
+    "lc_right_present",
+]
+
+CONTINUOUS_FEATURES: List[str] = [
+    n for n in WINDOW_FEATURE_COLS
+    if n not in set(BERNOULLI_FEATURES)
+]

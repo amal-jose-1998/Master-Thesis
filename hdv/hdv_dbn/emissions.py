@@ -1,25 +1,17 @@
 """
-Mixed emission model for an HMM / DBN-equivalent formulation with joint latent state z=(s,a).
-
+Window-level mixed emissions for the HDV DBN with joint latent state z=(style, action).
 Observation vector o_t contains:
-  (1) Continuous features: modeled by a diagonal Gaussian per joint state z,
-      with gating masks for neighbor-relative dims based on corresponding *_exists flags.
-  (2) Discrete context variables:
-      - Binary *_exists flags (scene configuration / availability)
-      - Categorical lane_pos and lc (maneuver descriptors)
+  (1) Continuous window features: modeled by a diagonal Gaussian per joint state.
+  (2) Bernoulli features: explicitly listed in config.BERNOULLI_FEATURES
+      (e.g., lc_left_present / lc_right_present).
 
-Two operating modes (controlled by TRAINING_CONFIG.disable_discrete_obs or constructor flag):
+Two operating modes controlled by TRAINING_CONFIG.disable_discrete_obs:
   - disable_discrete_obs = False (full / weighted):
       log p(o_t | z) = log N_diag(o_t[cont]; μ_z, diag(var_z))
                      + w_bern * Σ_d log Bern(o_t[bin_d]; p_zd)
-                     + w_lane * log Cat(o_t[lane_pos]; π_z)
-                     + w_lc   * log Cat(o_t[lc]; ρ_z)
 
   - disable_discrete_obs = True (continuous-only likelihood):
       log p(o_t | z) = log N_diag(o_t[cont]; μ_z, diag(var_z))
-
-In both modes, *_exists is used for gating neighbor-relative continuous dims (missingness handling),
-even when discrete variables are excluded from the likelihood and are not updated in the M-step.
 """
 
 import math
@@ -28,7 +20,7 @@ import torch
 from dataclasses import dataclass
 from tqdm.auto import tqdm
 
-from .config import DBN_STATES, TRAINING_CONFIG, CATEGORICAL_FEATURE_SIZES
+from .config import DBN_STATES, TRAINING_CONFIG, BERNOULLI_FEATURES
 
 # ---------------------------------------------------------------------
 # Numerical stability
@@ -301,10 +293,11 @@ class GaussianEmissionModel:
                 raise ValueError(f"Expected obs_cont shape (T,{D}), got {tuple(x.shape)}")
             if g.ndim != 2 or g.shape[1] != N:
                 raise ValueError(f"Expected gamma shape (T,{N}), got {tuple(g.shape)}")
+            if x.shape[0] != g.shape[0]:
+                raise ValueError(f"T mismatch: obs T={x.shape[0]} vs gamma T={g.shape[0]}")
 
             # state mass
-            w = g.sum(dim=0)  # (N,)
-            weights_z += w
+            weights_z += g.sum(dim=0) # state mass accumulation over sequences; shape (N,)
 
             # mask
             if mask is None:
@@ -341,9 +334,9 @@ class GaussianEmissionModel:
         )
 
         # vectorized low-mass mask + observed-dim mask
-        mass_ok = (weights_z >= min_mass)[:, None]          # (N,1) boolean
-        obs_ok = (weights_zd > 1.0)                         # (N,D) boolean
-        upd = mass_ok & obs_ok                              # (N,D)
+        mass_ok = (weights_z >= min_mass)[:, None]          # (N,1) boolean; need min_mass to update
+        obs_ok = (weights_zd > 1.0)                         # (N,D) boolean; need >1 sample to compute variance
+        upd = mass_ok & obs_ok                              # (N,D); only update these entries
 
         mean = prev_means.clone()
         var = prev_vars.clone()
@@ -354,7 +347,6 @@ class GaussianEmissionModel:
         
         mean_np = mean.detach().cpu().numpy()
         var_np = var.detach().cpu().numpy()
-
         for z in range(N):
             s, a = self._z_to_sa(z)
             self.params[s, a] = GaussianParams(mean=mean_np[z], var=var_np[z])
@@ -426,30 +418,25 @@ class GaussianEmissionModel:
 class MixedEmissionModel:
     """
     Hybrid emission model over the full observation vector (T, F), split by names:
-
-      - Continuous indices: GaussianEmissionModel (diagonal) with gating for relative dims
-      - Binary indices (*_exists): independent Bernoulli per state
-      - Categorical indices (default: lane_pos): categorical per state
+      - Continuous dims: diagonal Gaussian with NaN-masking
+      - Bernoulli dims: independent Bernoulli per joint state
 
     Public API:
       - loglik_all_states(obs) -> (T, N) torch tensor
       - update_from_posteriors(obs_seqs, gamma_seqs, ...) -> weights (N,)
       - to_arrays / from_arrays for checkpointing
     """
-
-    def __init__(self, obs_names, lane_name="lane_pos", lc_name = "lc", exists_suffix="_exists", disable_discrete_obs=False,):
+    def __init__(self, obs_names, disable_discrete_obs=False, bernoulli_names=None,):
         """
         Initialize the mixed emission model.
 
         Parameters
         obs_names : Sequence[str]
             List of observation feature names, in order.
-        lane_name : str
-            Name of the categorical lane position feature.
-        lc_name : str
-            Name of the categorical lane change feature.
-        exists_suffix : str
-            Suffix for binary existence mask features.
+        disable_discrete_obs : bool
+            If True, only continuous features are used in likelihoods.
+        bernoulli_names : Sequence[str] | None
+            List of names for Bernoulli features. If None, uses config.BERNOULLI_FEATURES.
 
         Raises
         ValueError
@@ -464,91 +451,33 @@ class MixedEmissionModel:
         self.num_action = len(self.action_states)
         self.num_states = self.num_style * self.num_action
 
-        if lane_name not in self.obs_names:
-            raise ValueError(f"Categorical feature '{lane_name}' not found in obs_names.")
+        self.disable_discrete_obs = bool(disable_discrete_obs)
 
-        self.lane_name = lane_name
-        self.lane_idx = int(self.obs_names.index(lane_name))  # lane_pos index
+        if bernoulli_names is None:
+            bernoulli_names = list(BERNOULLI_FEATURES)
+        self.bernoulli_names = list(bernoulli_names)
 
-        self.lc_name = lc_name
-        if self.lc_name not in self.obs_names:
-            raise ValueError(f"Categorical feature '{self.lc_name}' not found in obs_names.")
-        self.lc_idx = int(self.obs_names.index(self.lc_name))
-
-        self.exists_suffix = exists_suffix
-
-        # If True, treat lane_pos, lc and *_exists as contextual variables:
-        # - they do not contribute to the emission likelihood (E-step)
-        # - their parameters are not updated (M-step)
-        # Relative-feature gating using *_exists remains active either way.
-        self.disable_discrete_obs = bool(disable_discrete_obs)        
-
-        # All feature indices that end with the exists suffix
-        all_exists_idx = [i for i, n in enumerate(self.obs_names) if n.endswith(exists_suffix)]
-
-        # Always model *_exists as Bernoulli. Don't treat existence masks as Gaussians.
-        self.bin_idx = all_exists_idx
-
-        # Exclude *_exists columns from the continuous feature set so they are not accidentally modeled by the Gaussian component.
-        exists_set = set(all_exists_idx)
-        # continuous = everything except categorical and any *_exists features
-        self.cont_idx = [
-            i for i in range(self.obs_dim)
-            if (i != self.lane_idx) and (i != self.lc_idx) and (i not in exists_set)
-        ]
-        
-        # Gating map for neighbor-relative continuous features 
-        # Any continuous feature ending with _dx/_dy/_dvx/_dvy/_thw/_ttc will be gated by its corresponding *_exists
-        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy", "_thw", "_ttc")
         name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
-        self._cont_rel_gate = []  # list of (cont_local_idx, exists_global_idx)
-        for local_j, global_j in enumerate(self.cont_idx):
-            fname = self.obs_names[global_j]
-            for suf in rel_suffixes:
-                if fname.endswith(suf):
-                    prefix = fname[: -len(suf)]
-                    ex_name = f"{prefix}_exists"
-                    if ex_name in name_to_idx:
-                        self._cont_rel_gate.append((local_j, int(name_to_idx[ex_name])))
-                    break
-
-        # Precompute gating indices for fast, vectorized mask construction.
-        self._gate_cont_local_idx = [j for (j, _) in self._cont_rel_gate]
-        self._gate_exists_global_idx = [ex for (_, ex) in self._cont_rel_gate]
-        self._gate_cont_local_t = None
-        self._gate_exists_global_t = None
-
-        # store dimensions
-        self.cont_dim = len(self.cont_idx)
+        self.bin_idx = [int(name_to_idx[n]) for n in self.bernoulli_names if n in name_to_idx]
+        bin_set = set(self.bin_idx)
         self.bin_dim = len(self.bin_idx)
-        self.lane_K = int(CATEGORICAL_FEATURE_SIZES.get("lane_pos", 5)) # lane_pos has 5 categories (0,1,2,3,4)
-        if self.lane_K < 2:
-            raise ValueError("lane_num_categories must be >= 2")
-        self.lc_K = int(CATEGORICAL_FEATURE_SIZES.get("lc", 3)) # lc has 3 categories (-1,0,+1 mapped to 0,1,2)
+        # Continuous dims are everything except Bernoulli dims.
+        self.cont_idx = [i for i in range(self.obs_dim) if i not in bin_set]
+        self.cont_dim = len(self.cont_idx)
 
         # components
         self.gauss = GaussianEmissionModel(obs_dim=self.cont_dim)
-
-        # initialize discrete parameters
+        # Bernoulli params: (N,B)
         self.bern_p = np.full((self.num_states, self.bin_dim), 0.5, dtype=np.float64) # shape (N, bin_dim) all 0.5
-        self.lane_p = np.full((self.num_states, self.lane_K), 1.0 / self.lane_K, dtype=np.float64) # shape (N, lane_K) uniform 1/lane_K
-        self.lc_p   = np.full((self.num_states, self.lc_K),   1.0 / self.lc_K,   dtype=np.float64) # shape (N, lc_K) uniform 1/lc_K
-
 
         # setup torch caches for discrete distributions
         self._device = torch.device("cpu")
         self._dtype = torch.float32
         self._bern_p_t = None     # (N,B), where B = bin_dim and N = num_states
-        self._lane_logp_t = None  # (N,K), where K = lane_K and N = num_states
-        self._lc_logp_t = None    # (N,K), where K = lc_K and N = num_states
 
     def invalidate_cache(self):
         """Invalidate Torch caches. They will be rebuilt on next use."""
         self._bern_p_t = None
-        self._lane_logp_t = None
-        self._lc_logp_t = None 
-        self._gate_cont_local_t = None
-        self._gate_exists_global_t = None
         self.gauss.invalidate_cache()
 
     def to_device(self, device, dtype):
@@ -565,54 +494,37 @@ class MixedEmissionModel:
         self._dtype = dtype
         self.gauss.to_device(device=device, dtype=dtype)
 
-        # Materialize gating indices on the current device for fast mask construction.
-        if self._gate_cont_local_idx:
-            self._gate_cont_local_t = torch.as_tensor(
-                self._gate_cont_local_idx,
-                device=self._device,
-                dtype=torch.long,
-            )
-            self._gate_exists_global_t = torch.as_tensor(
-                self._gate_exists_global_idx,
-                device=self._device,
-                dtype=torch.long,
-            )
-        else:
-            self._gate_cont_local_t = None
-            self._gate_exists_global_t = None
-
         if self.bin_dim > 0:
             self._bern_p_t = torch.as_tensor(self.bern_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0 - EPSILON)
         else:
             self._bern_p_t = None
-
-        lane_p_t = torch.as_tensor(self.lane_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0 - EPSILON)
-        self._lane_logp_t = torch.log(lane_p_t)
-        lc_p_t = torch.as_tensor(self.lc_p, device=self._device, dtype=self._dtype).clamp(EPSILON, 1.0 - EPSILON)
-        self._lc_logp_t = torch.log(lc_p_t)
-
-    def loglik_parts_all_states(self, obs): 
-        """
-        Compute emission log-likelihood parts for one trajectory, for all states:
-          - Gaussian part (continuous dims) -> (T, N)
-          - Bernoulli part (binary dims)    -> (T, N)   
-          - Categorical part                -> (T, N)   
-
-        Returns
-        (logp_gauss, logp_bern, logp_lane, logp_lc) each torch.Tensor of shape (T, N).
-        """ 
-        if (
-            self._lane_logp_t is None
-            or self._lc_logp_t is None
-            or (self.bin_dim > 0 and self._bern_p_t is None)
-            or self.gauss._means_t is None
-            or self.gauss._inv_var_t is None
-            or self.gauss._log_var_t is None
-        ):
+    
+    def _ensure_caches(self):
+        need = (self.gauss._means_t is None) or (self.gauss._inv_var_t is None) or (self.gauss._log_var_t is None)
+        need = need or (self.bin_dim > 0 and self._bern_p_t is None)
+        if need:
             dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
             dtype = torch.float32 if dtype_str == "float32" else torch.float64
             device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
             self.to_device(device=device, dtype=dtype)
+
+    # =========================================================================
+    # Likelihood evaluation
+    # =========================================================================
+    def loglik_parts_all_states(self, obs): 
+        """
+        Compute emission log-likelihood parts for one trajectory, for all states:
+          - Gaussian part (continuous dims) -> (T, N)
+          - Bernoulli part (binary dims)    -> (T, N)  
+
+        Parameters
+        obs : np.ndarray | torch.Tensor
+            Observation sequence of shape (T, obs_dim). 
+
+        Returns
+        (logp_gauss, logp_bern) each torch.Tensor of shape (T, N).
+        """ 
+        self._ensure_caches()
 
         x = obs
         if not torch.is_tensor(x):
@@ -626,61 +538,38 @@ class MixedEmissionModel:
         # N = num_states 
         # T = time steps
         # B = bin_dim
-        # Tv = valid time steps for lane_pos
+        # Dc = cont_dim
 
-        # (1) Gaussian part
-        x_cont = x[:, self.cont_idx] if self.cont_dim > 0 else x[:, :0] # (T,cont_dim)
-        if self.cont_dim > 0 and (self._gate_cont_local_t is not None):
-            # Vectorized gating: mask relative continuous dims using their corresponding *_exists flags
-            mask_cont = torch.ones((x.shape[0], self.cont_dim), device=x.device, dtype=self._dtype)
-            mask_cont[:, self._gate_cont_local_t] = (x[:, self._gate_exists_global_t] > 0.5).to(dtype=self._dtype)
+        # (1) Gaussian on continuous dims with finite-masking
+        if self.cont_dim > 0:
+            x_cont_raw = x[:, self.cont_idx]  # (T,Dc)
+            finite = torch.isfinite(x_cont_raw)
+            mask_cont = finite.to(dtype=self._dtype)
+            x_cont = torch.where(finite, x_cont_raw, torch.zeros_like(x_cont_raw))
+            logp_gauss = self.gauss.loglik_all_states(x_cont, mask=mask_cont) # (T,N)
          
         else:
-            mask_cont = None
-        logp_gauss = self.gauss.loglik_all_states(x_cont, mask=mask_cont)  # (T,N) 
+            T = x.shape[0]
+            logp_gauss = torch.zeros((T, self.num_states), device=self._device, dtype=self._dtype)
 
-        # (2) Bernoulli part (summed over binary features)
+        # (2) Bernoulli on bin dims
         if self.bin_dim > 0:
-            xb = x[:, self.bin_idx].clamp(0.0, 1.0)       # (T,B)
-            p = self._bern_p_t[None, :, :]                # (1,N,B)
-            xb = xb[:, None, :]                           # (T,1,B)
+            xb_raw = x[:, self.bin_idx]  # (T,B)
+            xb = (xb_raw > 0.5).to(dtype=self._dtype)  # treat as binary
+            p = self._bern_p_t[None, :, :]             # (1,N,B)
+            xb = xb[:, None, :]                        # (T,1,B)
             logp_bern_full = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)  # (T,N,B)
-            logp_bern = logp_bern_full.sum(dim=2)         # (T,N)
+            logp_bern = logp_bern_full.sum(dim=2)      # (T,N)
         else:
             logp_bern = torch.zeros_like(logp_gauss)
 
-        # (3) Lane categorical part (0 for invalid frames)
-        logp_lane = torch.zeros_like(logp_gauss)
-        lane_col = x[:, self.lane_idx]  # (T,)
-        lane_col = torch.where(torch.isfinite(lane_col), lane_col, torch.tensor(-1.0, device=x.device, dtype=x.dtype))
-        lane_raw = lane_col.round().to(torch.long)               # (T,)
-        valid = (lane_raw >= 0) & (lane_raw < self.lane_K) # valid lane categories only
-        if valid.any():
-            lane_valid = lane_raw[valid]                        # (Tv,)
-            logp_lane_valid = self._lane_logp_t[:, lane_valid]  # (N,Tv)
-            logp_lane[valid] = logp_lane_valid.T                # (Tv,N)
-
-        # (4) Lane-change categorical part (0 for invalid frames)
-        logp_lc = torch.zeros_like(logp_gauss)
-        lc_col = x[:, self.lc_idx]  # (T,)
-        lc_col = torch.where(torch.isfinite(lc_col), lc_col, torch.tensor(-99.0, device=x.device, dtype=x.dtype))
-        lc_raw = lc_col.round().to(torch.long)  # expected values: -1, 0, +1
-        # map {-1,0,+1} -> {0,1,2}
-        lc_mapped = lc_raw + 1
-        valid_lc = (lc_mapped >= 0) & (lc_mapped < self.lc_K)
-        if valid_lc.any():
-            lc_valid = lc_mapped[valid_lc]             # (Tv,)
-            logp_lc_valid = self._lc_logp_t[:, lc_valid]  # (N,Tv)
-            logp_lc[valid_lc] = logp_lc_valid.T        # (Tv,N)
-
-        return logp_gauss, logp_bern, logp_lane, logp_lc
+        return logp_gauss, logp_bern
+    
 
     def loglik_all_states(self, obs):
         """
         Main emission evaluator.
         logB[t,z] = log p(o_t | z).
-        By default, discrete context variables (lane_pos, lc, *_exists) are excluded
-        from the likelihood to avoid "cheating" during inference.
 
         Parameters
         obs : np.ndarray | torch.Tensor
@@ -690,18 +579,51 @@ class MixedEmissionModel:
         logB : torch.Tensor
             Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
         """
-        logp_gauss, logp_bern, logp_lane, logp_lc = self.loglik_parts_all_states(obs)
+        logp_gauss, logp_bern = self.loglik_parts_all_states(obs)
         if self.disable_discrete_obs:
-            return logp_gauss
-        w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
-        w_lane = float(getattr(TRAINING_CONFIG, "lane_weight", 1.0))
-        w_lc   = float(getattr(TRAINING_CONFIG, "lc_weight", 1.0))
-        logp = logp_gauss + w_bern * logp_bern + w_lane * logp_lane + w_lc * logp_lc
-        return logp
+            logB = logp_gauss
+        else:
+            w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
+            logB = logp_gauss + w_bern * logp_bern
+        
+        # ---------------------------------------------------------
+        # Lane-change window weighting (LC-active windows)
+        # ---------------------------------------------------------
+        lc_weight = float(getattr(TRAINING_CONFIG, "lc_weight", 1.0))
+        if lc_weight != 1.0 and self.bin_dim > 0:
+            # Extract LC Bernoulli columns
+            lc_idx = []
+            for name in ("lc_left_present", "lc_right_present"):
+                if name in self.obs_names:
+                    lc_idx.append(self.obs_names.index(name))
 
-    def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress, verbose):
+            if len(lc_idx) > 0:
+                x = obs
+                if not torch.is_tensor(x):
+                    x = torch.as_tensor(x, device=self._device, dtype=self._dtype)
+                else:
+                    x = x.to(device=self._device, dtype=self._dtype)
+
+                # LC-active if any LC flag is present
+                lc_active = (x[:, lc_idx] > 0.5).any(dim=1)  # (T,)
+
+                # Build per-timestep weights
+                w_t = torch.ones_like(lc_active, dtype=self._dtype)
+                w_t[lc_active] = lc_weight
+
+                # Apply weighting (broadcast over states)
+                logB = logB * w_t[:, None]
+
+        return logB
+
+    # =========================================================================
+    # EM M-step update
+    # =========================================================================
+    def update_from_posteriors(self, obs_seqs, gamma_seqs, use_progress=True, verbose=0):
         """
         M-step update for mixed emissions from responsibilities.
+          - Bernoulli: masked MLE (only where values are finite; binary threshold at 0.5)
+          - Gaussian: masked diagonal update (mask = isfinite for continuous dims)
 
         Parameters
         obs_seqs : list of np.ndarray
@@ -726,10 +648,12 @@ class MixedEmissionModel:
 
         N = self.num_states
         # allocate accumulators
-        if not self.disable_discrete_obs:
-            sum_bin = torch.zeros((N, self.bin_dim), device=device, dtype=dtype) if self.bin_dim > 0 else None # for Bernoulli MLE
-            lane_counts = torch.zeros((N, self.lane_K), device=device, dtype=dtype) # for categorical MLE
-            lc_counts   = torch.zeros((N, self.lc_K),   device=device, dtype=dtype)
+        if (not self.disable_discrete_obs) and self.bin_dim > 0:
+            sum_bin = torch.zeros((N, self.bin_dim), device=device, dtype=dtype)
+            sum_bin_w = torch.zeros((N, self.bin_dim), device=device, dtype=dtype)
+        else:
+            sum_bin = None
+            sum_bin_w = None
 
         cont_obs_seqs = []
         cont_mask_seqs = []
@@ -740,63 +664,42 @@ class MixedEmissionModel:
             it = tqdm(it, total=len(obs_seqs), desc="M-step emissions (mixed)", leave=False)
 
         for obs, gamma in it:
-            x = torch.as_tensor(obs, device=device, dtype=dtype)
+            x = obs if torch.is_tensor(obs) else torch.as_tensor(obs, device=device, dtype=dtype)
             g = gamma if torch.is_tensor(gamma) else torch.as_tensor(gamma, device=device, dtype=dtype)
+            x = x.to(device=device, dtype=dtype)
             g = g.to(device=device, dtype=dtype)
-            gamma_cont_seqs.append(g) 
 
+            if x.ndim != 2 or x.shape[1] != self.obs_dim:
+                raise ValueError(f"Expected obs shape (T,{self.obs_dim}), got {tuple(x.shape)}")
+            if g.ndim != 2 or g.shape[1] != N:
+                raise ValueError(f"Expected gamma shape (T,{N}), got {tuple(g.shape)}")
             if x.shape[0] != g.shape[0]:
-                raise ValueError(
-                    f"Sequence length mismatch: obs T={x.shape[0]} vs gamma T={g.shape[0]}. "
-                    "This usually means obs_seqs and gamma_seqs are misaligned (e.g., skipped sequences in E-step)."
-                )
+                raise ValueError(f"T mismatch: obs T={x.shape[0]} vs gamma T={g.shape[0]}")
+            
+            gamma_cont_seqs.append(g)
 
-            # Bernoulli update
-            if self.bin_dim > 0 and (not self.disable_discrete_obs):
-                xb = (x[:, self.bin_idx] > 0.5).to(dtype=dtype)
-                sum_bin += g.T @ xb                      # (N,B)
+            # Bernoulli MLE (finite-masked)
+            if (sum_bin is not None) and self.bin_dim > 0:
+                xb_raw = x[:, self.bin_idx]
+                finite_b = torch.isfinite(xb_raw)
+                xb = (xb_raw > 0.5).to(dtype=dtype) * finite_b.to(dtype=dtype)
+                m = finite_b.to(dtype=dtype)
+                sum_bin += g.T @ xb
+                sum_bin_w += g.T @ m
 
-            # Categorical update for lane_pos (ignore invalid lane_pos == -1)
-            if not self.disable_discrete_obs:
-                # Categorical update for lane_pos (ignore invalid lane_pos == -1)
-                lane_col = x[:, self.lane_idx]
-                lane_col = torch.where(torch.isfinite(lane_col), lane_col, torch.tensor(-1.0, device=x.device, dtype=x.dtype))
-                lane_raw = lane_col.round().to(torch.long)
-                valid = (lane_raw >= 0) & (lane_raw < self.lane_K)
-                if valid.any():
-                    lane_valid = lane_raw[valid]                               # (Tv,)
-                    g_valid = g[valid]                                         # (Tv,N)
-                    lane_oh = torch.nn.functional.one_hot(lane_valid, num_classes=self.lane_K).to(dtype=dtype)    # (Tv,K)
-                    lane_counts += g_valid.T @ lane_oh                          # (N,K)
-                
-                # Categorical update for lc (ignore invalid / NaNs)
-                lc_col = x[:, self.lc_idx]
-                lc_col = torch.where(torch.isfinite(lc_col), lc_col, torch.tensor(-99.0, device=x.device, dtype=x.dtype))
-                lc_raw = lc_col.round().to(torch.long)      # {-1,0,+1}
-                lc_mapped = lc_raw + 1                      # -> {0,1,2}
-                valid_lc = (lc_mapped >= 0) & (lc_mapped < self.lc_K)
-                if valid_lc.any():
-                    lc_valid = lc_mapped[valid_lc]  # (Tv,)
-                    g_valid = g[valid_lc]           # (Tv,N)
-                    lc_oh = torch.nn.functional.one_hot(lc_valid, num_classes=self.lc_K).to(dtype=dtype)  # (Tv,K)
-                    lc_counts += g_valid.T @ lc_oh
-                
-            # Continuous + mask for gated diagonal Gaussian
+            # Continuous for Gaussian: finite-mask per entry (NaNs kept out)
             if self.cont_dim > 0:
-                cont_x = x[:, self.cont_idx]
+                cont_raw = x[:, self.cont_idx]
+                finite_c = torch.isfinite(cont_raw)
+                cont_x = torch.where(finite_c, cont_raw, torch.zeros_like(cont_raw))
+                cont_m = finite_c.to(dtype=dtype)
                 cont_obs_seqs.append(cont_x)
-
-                if self._gate_cont_local_t is not None:
-                    m = torch.ones((x.shape[0], self.cont_dim), device=device, dtype=dtype)
-                    m[:, self._gate_cont_local_t] = (x[:, self._gate_exists_global_t] > 0.5).to(dtype=dtype)
-                    cont_mask_seqs.append(m)
-                else:
-                    cont_mask_seqs.append(None)
+                cont_mask_seqs.append(cont_m)
             else:
                 cont_obs_seqs.append(x[:, :0])
                 cont_mask_seqs.append(None)
 
-        # Gaussian update (continuous, diagonal, gated)
+        # Gaussian update
         weights_np = self.gauss.update_from_posteriors(
             obs_seqs=cont_obs_seqs,
             gamma_seqs=gamma_cont_seqs,
@@ -804,24 +707,12 @@ class MixedEmissionModel:
             use_progress=False,
             verbose=verbose,
         )
-        
-        weights_t = torch.as_tensor(weights_np, device=device, dtype=dtype)  # (N,)
 
-        # Bernoulli MLE
-        if self.bin_dim > 0 and (not self.disable_discrete_obs):
-            p = sum_bin / (weights_t[:, None] + EPSILON)
+        # Bernoulli update
+        if (sum_bin is not None) and self.bin_dim > 0:
+            p = sum_bin / (sum_bin_w + EPSILON)
             p = p.clamp(EPSILON, 1.0 - EPSILON)
             self.bern_p = p.detach().cpu().numpy()
-
-        # Categorical (Dirichlet smoothing)
-        if not self.disable_discrete_obs:
-            alpha = float(getattr(TRAINING_CONFIG, "cat_alpha", 1.0))
-            lane_p = (lane_counts + alpha)
-            lane_p = lane_p / (lane_p.sum(dim=1, keepdim=True) + EPSILON)
-            self.lane_p = lane_p.detach().cpu().numpy()
-            lc_p = (lc_counts + alpha)
-            lc_p = lc_p / (lc_p.sum(dim=1, keepdim=True) + EPSILON)
-            self.lc_p = lc_p.detach().cpu().numpy()
 
         self.invalidate_cache()
         return weights_np
@@ -839,29 +730,24 @@ class MixedEmissionModel:
         """
         g_means, g_vars = self.gauss.to_arrays()
 
-        # Backward-compatible diagonal covariance export
+        # backward-compatible diagonal covariance export
         S, A, D = g_vars.shape
         g_covs = np.zeros((S, A, D, D), dtype=np.float64)
-        diag_idx = np.arange(D)
-        g_covs[:, :, diag_idx, diag_idx] = g_vars
-        
-        return dict(
+        diag = np.arange(D)
+        g_covs[:, :, diag, diag] = g_vars
+
+        payload = dict(
             obs_names=np.array(self.obs_names, dtype=object),
-            lane_name=np.array([self.lane_name], dtype=object),
-            lane_K=np.array([self.lane_K], dtype=np.int64),
-            lc_name=np.array([self.lc_name], dtype=object),
-            lc_K=np.array([self.lc_K], dtype=np.int64),
             cont_idx=np.array(self.cont_idx, dtype=np.int64),
             bin_idx=np.array(self.bin_idx, dtype=np.int64),
-            lane_idx=np.array([self.lane_idx], dtype=np.int64),
-            lc_idx=np.array([self.lc_idx], dtype=np.int64),
+            bernoulli_names=np.array(self.bernoulli_names, dtype=object),
             gauss_means=g_means,
             gauss_vars=g_vars,
             gauss_covs=g_covs,
             bern_p=np.asarray(self.bern_p, dtype=np.float64),
-            lane_p=np.asarray(self.lane_p, dtype=np.float64),
-            lc_p=np.asarray(self.lc_p, dtype=np.float64),
         )
+
+        return payload
 
     def from_arrays(self, payload):
         """
@@ -878,59 +764,38 @@ class MixedEmissionModel:
         self.obs_names = list(payload["obs_names"].tolist())
         self.obs_dim = len(self.obs_names)
 
-        self.lane_name = str(np.asarray(payload.get("lane_name", np.array(["lane_pos"], dtype=object))).reshape(-1)[0])
-        self.lane_K = int(np.asarray(payload["lane_K"]).reshape(-1)[0])
-
-        self.lc_name = str(np.asarray(payload.get("lc_name", np.array(["lc"], dtype=object))).reshape(-1)[0])
-        self.lc_K = int(np.asarray(payload.get("lc_K", np.array([3], dtype=np.int64))).reshape(-1)[0])
+        # Bernoulli names
+        if "bernoulli_names" in payload:
+            self.bernoulli_names = list(np.asarray(payload["bernoulli_names"], dtype=object).tolist())
+        else:
+            self.bernoulli_names = list(BERNOULLI_FEATURES)
         
-        self.cont_idx = list(np.asarray(payload["cont_idx"], dtype=np.int64).tolist())
-        self.bin_idx = list(np.asarray(payload["bin_idx"], dtype=np.int64).tolist())
-        self.lane_idx = int(np.asarray(payload["lane_idx"]).reshape(-1)[0])
-        self.lc_idx = int(np.asarray(payload.get("lc_idx", np.array([self.obs_names.index("lc")], dtype=np.int64))).reshape(-1)[0])
+        # Indices
+        if "cont_idx" in payload and "bin_idx" in payload:
+            self.cont_idx = list(np.asarray(payload["cont_idx"], dtype=np.int64).tolist())
+            self.bin_idx = list(np.asarray(payload["bin_idx"], dtype=np.int64).tolist())
+        else:
+            # rebuild indices from names (best-effort)
+            name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
+            self.bin_idx = [int(name_to_idx[n]) for n in self.bernoulli_names if n in name_to_idx]
+            bin_set = set(self.bin_idx)
+            self.cont_idx = [i for i in range(self.obs_dim) if i not in bin_set]
 
         self.cont_dim = len(self.cont_idx)
         self.bin_dim = len(self.bin_idx)
 
-        # rebuild gating map
-        rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy", "_thw", "_ttc")
-        name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
-        self._cont_rel_gate = []
-        for local_j, global_j in enumerate(self.cont_idx):
-            fname = self.obs_names[global_j]
-            for suf in rel_suffixes:
-                if fname.endswith(suf):
-                    prefix = fname[: -len(suf)]
-                    ex_name = f"{prefix}_exists"
-                    if ex_name in name_to_idx:
-                        self._cont_rel_gate.append((local_j, int(name_to_idx[ex_name])))
-                    break
-        # Rebuild precomputed gating indices after loading.
-        self._gate_cont_local_idx = [j for (j, _) in self._cont_rel_gate]
-        self._gate_exists_global_idx = [ex for (_, ex) in self._cont_rel_gate]
-        self._gate_cont_local_t = None
-        self._gate_exists_global_t = None
-
+        # rebuild components
         self.gauss = GaussianEmissionModel(obs_dim=self.cont_dim)
 
         g_means = payload["gauss_means"]
         if "gauss_vars" in payload:
             g_second = payload["gauss_vars"]
         else:
-            g_second = payload["gauss_covs"]  # legacy checkpoints
+            g_second = payload["gauss_covs"]  # legacy
         self.gauss.from_arrays(g_means, g_second)
 
-        self.bern_p = np.asarray(payload["bern_p"], dtype=np.float64)
-        
-        self.lane_p = np.asarray(payload["lane_p"], dtype=np.float64)
-        if self.lane_p.shape != (self.num_states, self.lane_K):
-            raise ValueError(f"lane_p has shape {self.lane_p.shape}, expected {(self.num_states, self.lane_K)}")
-        
-        self.lc_p = np.asarray(
-            payload.get("lc_p", np.full((self.num_states, self.lc_K), 1.0 / self.lc_K)),
-            dtype=np.float64,
-        )
-        if self.lc_p.shape != (self.num_states, self.lc_K):
-            raise ValueError(f"lc_p has shape {self.lc_p.shape}, expected {(self.num_states, self.lc_K)}")
+        self.bern_p = np.asarray(payload.get("bern_p", np.full((self.num_states, self.bin_dim), 0.5)), dtype=np.float64)
+        if self.bern_p.shape != (self.num_states, self.bin_dim):
+            raise ValueError(f"bern_p has shape {self.bern_p.shape}, expected {(self.num_states, self.bin_dim)}")
 
         self.invalidate_cache()

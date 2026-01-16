@@ -34,7 +34,7 @@ def _parse_lane_markings(value):
             continue
     return np.sort(np.asarray(out, dtype=np.float64))
 
-def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y", upper_key="rec_upperLaneMarkings", lower_key="rec_lowerLaneMarkings"):
+def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y_center", upper_key="rec_upperLaneMarkings", lower_key="rec_lowerLaneMarkings"):
     """
     Derive stable lane-position categories from lane markings + direction.
 
@@ -169,6 +169,81 @@ def add_lane_position_feature(df, dir_col="meta_drivingDirection", y_col="y", up
 
     df["lane_pos"] = lane_pos
     return df
+
+
+def add_lane_boundary_distance_features(df, y_col="y_center", dir_col="meta_drivingDirection", upper_key="rec_upperLaneMarkings", lower_key="rec_lowerLaneMarkings"):
+    """
+    Add vehicle-centric distances to left/right lane boundaries.
+    Outputs:
+      - d_left_lane  >= 0
+      - d_right_lane >= 0
+
+    If boundaries cannot be determined, values are NaN.
+    """
+    if y_col not in df.columns or dir_col not in df.columns:
+        df["d_left_lane"] = np.nan
+        df["d_right_lane"] = np.nan
+        return df
+
+    # Pre-parse markings per recording 
+    if "recording_id" in df.columns:
+        rec_ids = df["recording_id"].dropna().unique().tolist()
+    else:
+        rec_ids = [None]
+
+    rec_to_upper, rec_to_lower = {}, {}
+    for rid in rec_ids:
+        sub = df[df["recording_id"] == rid] if rid is not None else df
+        rec_to_upper[rid] = _parse_lane_markings(sub[upper_key].iloc[0]) if upper_key in sub else np.array([])
+        rec_to_lower[rid] = _parse_lane_markings(sub[lower_key].iloc[0]) if lower_key in sub else np.array([])
+
+    y = df[y_col].to_numpy(dtype=np.float64, copy=False)
+    d = df[dir_col].to_numpy(copy=False)
+    rid_arr = df["recording_id"].to_numpy(copy=False) if "recording_id" in df.columns else np.full(len(df), None)
+
+    d_left = np.full(len(df), np.nan, dtype=np.float64)
+    d_right = np.full(len(df), np.nan, dtype=np.float64)
+
+    for i in range(len(df)):
+        yi = y[i]
+        if np.isnan(yi):
+            continue
+
+        di = int(d[i]) if not pd.isna(d[i]) else -1
+        rid = rid_arr[i]
+
+        if di == 1:
+            marks = rec_to_upper.get(rid, np.array([]))
+        elif di == 2:
+            marks = rec_to_lower.get(rid, np.array([]))
+        else:
+            continue
+
+        if marks.size < 2:
+            continue
+
+        # find lane interval
+        j = int(np.searchsorted(marks, yi, side="right") - 1)
+        if j < 0 or j >= marks.size - 1:
+            continue
+
+        left_world = marks[j]
+        right_world = marks[j + 1]
+
+        # convert to vehicle-centric left/right
+        if di == 2:
+            # smaller world-y = vehicle-left
+            d_left[i] = yi - left_world
+            d_right[i] = right_world - yi
+        else:
+            # di == 1: smaller world-y = vehicle-right (swap)
+            d_left[i] = right_world - yi
+            d_right[i] = yi - left_world
+
+    df["d_left_lane"] = d_left
+    df["d_right_lane"] = d_right
+    return df
+
 
 def add_lane_change_feature(df, lane_col="lane_id", dir_sign_col="dir_sign"):
     """

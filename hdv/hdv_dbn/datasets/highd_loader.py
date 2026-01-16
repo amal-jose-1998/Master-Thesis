@@ -10,32 +10,21 @@ import pandas as pd
 
 try:
     # When imported as a package module
-    from .dataset import TrajectorySequence
-    from ..config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS
+    from ..config import FRAME_FEATURE_COLS, META_COLS
 except ImportError:
     # When run as a standalone script (debug)
     import sys
     from pathlib import Path
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
-    from hdv.hdv_dbn.datasets.dataset import TrajectorySequence
-    from hdv.hdv_dbn.config import TRAINING_CONFIG, BASELINE_FEATURE_COLS, META_COLS
+    from hdv.hdv_dbn.config import FRAME_FEATURE_COLS, META_COLS
 
 from .highd.io import HIGHD_COL_MAP, _read_recording_bundle
 from .highd.normalise import normalize_vehicle_centric
-from .highd.neighbours import (
-    add_direction_aware_context_features,
-    add_front_thw_ttc_from_tracks,
-    add_ego_speed_and_jerk,
-)
-from .highd.lanes import add_lane_position_feature, add_lane_change_feature
-from .highd.sequences import df_to_sequences, train_val_test_split, prune_columns
-from .highd.scaling import (
-    compute_feature_scaler_masked,
-    compute_classwise_feature_scalers_masked,
-    scale_sequences,
-    scale_sequences_classwise,
-)
+from .highd.neighbours import add_neighbor_exists_flags, add_front_thw_ttc_dhw_from_tracks, add_ego_speed_and_jerk
+from .highd.lanes import add_lane_change_feature, add_lane_boundary_distance_features
+from .highd.sequences import prune_columns, df_to_sequences, windowize_sequences, train_val_test_split
+from .highd.scaling import compute_feature_scaler_masked, scale_sequences, compute_classwise_feature_scalers_masked, scale_sequences_classwise
 
 def _default_highd_cache_path(root, max_recordings):
     """
@@ -177,30 +166,19 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
             else:
                 df["dir_sign"] = 1.0
         
-        df = add_direction_aware_context_features(df)
-        df = add_lane_position_feature(df, y_col="y_center")
+        df = add_neighbor_exists_flags(df)
+        df = add_lane_boundary_distance_features(df, y_col="y_center")
         df = add_lane_change_feature(df, lane_col="lane_id", dir_sign_col="dir_sign")
-        df = add_front_thw_ttc_from_tracks(df)
+        df = add_front_thw_ttc_dhw_from_tracks(df)
         df = add_ego_speed_and_jerk(df)
         
         dfs.append(df)
 
     df_all = pd.concat(dfs, ignore_index=True)
 
-    # Cast neighbor id columns (missing -> 0)
-    neighbor_cols = [
-        "preceding_id","following_id",
-        "left_preceding_id","left_alongside_id","left_following_id",
-        "right_preceding_id","right_alongside_id","right_following_id",
-    ]
-    for c in neighbor_cols:
-        if c in df_all.columns:
-            df_all[c] = df_all[c].fillna(0).astype(int)
-
     # cast types explicitly
     df_all["vehicle_id"] = df_all["vehicle_id"].astype(int)
     df_all["frame"] = df_all["frame"].astype(int)
-    df_all["lane_pos"] = df_all["lane_pos"].astype(int)
     df_all["recording_id"] = df_all["recording_id"].astype(int)
     if "lc" in df_all.columns:
         df_all["lc"] = df_all["lc"].astype(int)
@@ -209,22 +187,18 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
         "x", "y", "x_center", "y_center",
         "vx", "vy", "ax", "ay",
         "speed", "jerk_x",
-        "front_thw", "front_ttc",
-        "thw", "ttc",
+        "front_thw", "front_ttc", "front_dhw",
+        "thw", "ttc", "dhw",
+        "d_left_lane", "d_right_lane",
     ]
-    float_rel_suffixes = ("_dx", "_dy", "_dvx", "_dvy")  
+ 
     float_cols = []
 
     for c in float_base:
         if c in df_all.columns:
             float_cols.append(c)
-    
-    for c in df_all.columns:  
-        if any(c.endswith(suf) for suf in float_rel_suffixes):  
-            float_cols.append(c) 
-    
+            
     float_cols = sorted(set(float_cols))
-
     for c in float_cols:
         df_all[c] = df_all[c].astype(float)
     
@@ -234,18 +208,18 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
 
     df_all = prune_columns(
         df_all,
-        feature_cols=BASELINE_FEATURE_COLS,  
+        feature_cols=FRAME_FEATURE_COLS,  
         meta_cols=META_COLS,                 
         keep_extra=[],                       
     )
 
     assert_required_columns_present(
         df_all,
-        feature_cols=BASELINE_FEATURE_COLS,
+        feature_cols=FRAME_FEATURE_COLS,
         meta_cols=META_COLS,
         context="load_highd_folder",
     )
-    warn_all_zero_columns(df_all, feature_cols=BASELINE_FEATURE_COLS)
+    warn_all_zero_columns(df_all, feature_cols=FRAME_FEATURE_COLS)
 
     # Save cache for future calls (full OR subset)
     print(f"[load_highd_folder] Saving cached DataFrame to: {cache_path}")

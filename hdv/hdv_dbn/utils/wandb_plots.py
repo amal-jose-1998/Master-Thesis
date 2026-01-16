@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import textwrap
 
 
 def plot_pi_s0_bar(pi_s):
@@ -135,12 +136,42 @@ def plot_lane_heatmap(lane_p):
     fig.colorbar(im, ax=ax)
     return fig
 
-def plot_bernoulli_means_per_state(values, num_states):
+def plot_bernoulli_means_per_state(values, num_states, title="Bernoulli features: mean p(x=1) per state", ylabel="mean p(x=1) across Bernoulli dims",):
+    """Line plot of a single Bernoulli summary statistic per joint state."""
     fig, ax = plt.subplots()
     ax.plot(np.arange(num_states), values, marker="o")
-    ax.set_title("Bernoulli exists: mean p(exists) per state")
+    ax.set_title(title)
     ax.set_xlabel("joint state z")
-    ax.set_ylabel("mean bern_p over exists dims")
+    ax.set_ylabel(ylabel)
+    return fig
+
+def plot_bernoulli_feature_means_per_state(bern_p, bern_names=None, title: str = "Bernoulli features: p(x=1) per state"):
+    """Plot per-feature Bernoulli probabilities per joint state.
+
+    Parameters
+    ----------
+    bern_p : array-like, shape (K, B)
+        Bernoulli probabilities p(x=1) for each joint state (rows) and binary feature (cols).
+    bern_names : list[str] | None
+        Optional names for the Bernoulli features.
+    """
+    P = np.asarray(bern_p, dtype=np.float64)
+    if P.ndim != 2:
+        raise ValueError(f"bern_p must be 2D (K,B), got shape {P.shape}")
+    K, B = P.shape
+
+    if bern_names is None or len(bern_names) != B:
+        bern_names = [f"bern_{j}" for j in range(B)]
+
+    fig, ax = plt.subplots()
+    x = np.arange(K)
+    for j in range(B):
+        ax.plot(x, P[:, j], marker="o", label=str(bern_names[j]))
+
+    ax.set_title(title)
+    ax.set_xlabel("joint state z")
+    ax.set_ylabel("p(x=1)")
+    ax.legend(loc="best", fontsize=8)
     return fig
 
 
@@ -395,8 +426,18 @@ def plot_semantics_table_by_style(
     A,
     stds=None,
     title_prefix="Semantics (raw) table",
-    max_cols=12,
+    max_cols=10,
     fmt="{:.2f}",
+    wrap_header_at=14,          # wrap feature names at ~N chars per line
+    header_rotation="auto",     # "auto" | 0 | 30 | 45 | 60 | 90
+    header_fontsize=8,
+    cell_fontsize=8,
+    rowlabel_fontsize=8,
+    base_col_width=0.75,        # inches per column baseline
+    min_fig_w=10.0,
+    max_fig_w=28.0,
+    fig_h_per_row=0.55,
+    extra_top_margin=0.18,      # increases room for wrapped headers
 ):
     """
     Render numeric tables (matplotlib table) for semantics.
@@ -417,6 +458,16 @@ def plot_semantics_table_by_style(
     figs : dict[str, matplotlib.figure.Figure]
     keys like: "style_0_part_0"
     """
+
+    def _wrap(s: str, width: int) -> str:
+        s = str(s)
+        if width is None or width <= 0:
+            return s
+        # keep underscores; wrap on underscores/spaces reasonably
+        # (textwrap will break long tokens; this is fine for feature names)
+        return "\n".join(textwrap.wrap(s, width=width, break_long_words=True, break_on_hyphens=False))
+
+
     M = np.asarray(means, dtype=np.float64)
     K, F = M.shape
     assert K == S * A, f"Expected K=S*A={S*A}, got {K}"
@@ -436,7 +487,6 @@ def plot_semantics_table_by_style(
     row_labels = [f"a={a}" for a in range(A)]
 
     for s in range(S):
-        # build (A,F) grid for this style
         grid = np.vstack([M[s * A + a] for a in range(A)])  # (A,F)
         grid_sd = None
         if SD is not None:
@@ -446,7 +496,10 @@ def plot_semantics_table_by_style(
             j0 = p * max_cols
             j1 = min(F, (p + 1) * max_cols)
 
-            cols = feat_names[j0:j1]
+            cols_raw = feat_names[j0:j1]
+            cols = [_wrap(c, wrap_header_at) for c in cols_raw]
+
+            # build cell text
             cell_text = []
             for a in range(A):
                 row = []
@@ -457,11 +510,24 @@ def plot_semantics_table_by_style(
                         row.append(_format_cell(grid[a, j], grid_sd[a, j], fmt=fmt))
                 cell_text.append(row)
 
-            # Figure size scales with column count
-            fig_w = max(8.0, 0.85 * (j1 - j0))
-            fig_h = max(2.6, 0.55 * A + 1.0)
+            # ---------- figure sizing ----------
+            ncol = (j1 - j0)
+
+            # estimate needed width from header lengths
+            raw_lens = [len(str(c)) for c in cols_raw]
+            max_len = max(raw_lens) if raw_lens else 1
+
+            # if headers are long, grow the per-col width a bit
+            # (log-ish growth; avoids exploding width)
+            len_factor = 1.0 + min(1.2, max(0.0, (max_len - 12) / 20.0))
+            fig_w = max(min_fig_w, base_col_width * ncol * len_factor)
+            fig_w = min(fig_w, max_fig_w)
+
+            fig_h = max(2.8, fig_h_per_row * A + 1.2)
+
             fig, ax = plt.subplots(figsize=(fig_w, fig_h))
             ax.axis("off")
+
             title = f"{title_prefix} (style s={s})"
             if n_parts > 1:
                 title += f"  [features {j0}:{j1}]"
@@ -474,9 +540,66 @@ def plot_semantics_table_by_style(
                 loc="center",
                 cellLoc="center",
             )
+
             tbl.auto_set_font_size(False)
-            tbl.set_fontsize(8)
+            tbl.set_fontsize(cell_fontsize)
+
+            # make rows a bit taller to accommodate wrapped headers
+            # (header row index is 0 for col labels; data rows start at 1)
             tbl.scale(1.0, 1.35)
+
+            # ---------- style header row ----------
+            # Decide rotation if "auto"
+            if header_rotation == "auto":
+                # rotate if still too dense after wrapping or too many columns
+                rot = 0
+                if ncol >= 9:
+                    rot = 45
+                if max_len >= 22:
+                    rot = 45
+                if ncol >= 11:
+                    rot = 60
+            else:
+                rot = int(header_rotation)
+
+            # Set per-column widths (longer headers get slightly wider)
+            # Table columns indices are 0..ncol-1 for header/data cols.
+            # Row-label column has col index -1 internally (skip).
+            total_len = float(sum(raw_lens)) if raw_lens else 1.0
+            # base width in axis fraction for each column (normalized)
+            # We distribute by header length but keep a floor.
+            weights = []
+            for L in raw_lens:
+                weights.append(max(1.0, L / (total_len / max(1, ncol))))
+            wsum = float(sum(weights)) if weights else 1.0
+            col_widths = [w / wsum for w in weights]  # sum to ~1 in axis coords
+
+            # Apply header formatting + width
+            for ci in range(ncol):
+                # header cell: row=0, col=ci
+                cell = tbl[(0, ci)]
+                cell.get_text().set_rotation(rot)
+                cell.get_text().set_fontsize(header_fontsize)
+                cell.get_text().set_fontweight("bold")
+                cell.get_text().set_va("center")
+                cell.get_text().set_ha("center")
+
+                # widen/narrow the whole column (header + data cells)
+                # cells exist for rows 0..A (0=header, 1..A=data)
+                for ri in range(0, A + 1):
+                    tbl[(ri, ci)].set_width(col_widths[ci])
+
+            # Row label styling (row labels are at col=-1, rows 1..A)
+            for ri in range(1, A + 1):
+                try:
+                    c = tbl[(ri, -1)]
+                    c.get_text().set_fontsize(rowlabel_fontsize)
+                    c.get_text().set_fontweight("bold")
+                except Exception:
+                    pass
+
+            # extra top room for wrapped/rotated headers
+            fig.subplots_adjust(top=1.0 - extra_top_margin)
 
             fig.tight_layout()
             figs[f"style_{s}_part_{p}"] = fig
