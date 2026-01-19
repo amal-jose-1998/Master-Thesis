@@ -102,6 +102,10 @@ class GaussianEmissionModel:
     def _z_to_sa(self, z):
         """
         Map a flattened joint index z into (style_idx, action_idx).
+            z_idx = style_idx * num_action + action_idx
+        Solving for style_idx and action_idx gives:
+            style_idx = z_idx // num_action
+            action_idx = z_idx % num_action
 
         Parameters
         z : int
@@ -110,8 +114,8 @@ class GaussianEmissionModel:
         Returns
         (style_idx, action_idx) : Tuple[int, int]
         """
-        s = int(z // self.num_action)
-        a = int(z % self.num_action)
+        s = int(z // self.num_action) # integer division for style index because style is the major index (dim 0)
+        a = int(z % self.num_action) # modulo for action index because action is the minor index (dim 1)
         return s, a
     
     # =========================================================================
@@ -165,11 +169,11 @@ class GaussianEmissionModel:
     # =========================================================================
     # Likelihood evaluation
     # =========================================================================
-    def loglik_all_states(self, obs_cont, mask=None):
+    def loglikelihood(self, obs_cont, mask=None):
         """
         Vectorized evaluation of log-likelihoods for ALL states and ALL time steps.
         Computes:
-            logB[t, z] = log p(o_t | z)
+            logB[t, z] = log p(o_t | z) = log N_diag(o_t; μ_z, diag(var_z)) = sum_d log N(o_t[d]; μ_zd, var_zd)
         for t = 0..T-1 and z = 0..N-1, where N = num_style * num_action.
 
         Parameters
@@ -183,16 +187,13 @@ class GaussianEmissionModel:
             Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.
         """
         if self.obs_dim == 0:
-            # no continuous dims => zero contribution
-            x = obs_cont
-            T = int(x.shape[0]) if hasattr(x, "shape") else 0
-            return torch.zeros((T, self.num_states), device=self._device, dtype=self._dtype)
+            raise RuntimeError("GaussianEmissionModel called with obs_dim==0. Caller should skip Gaussian path.")
 
         if self._means_t is None or self._inv_var_t is None or self._log_var_t is None:
-            dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
-            dtype = torch.float32 if dtype_str == "float32" else torch.float64
-            device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
-            self.to_device(device=device, dtype=dtype)
+            raise RuntimeError(
+                "GaussianEmissionModel caches not initialized. "
+                "Call emissions.to_device() after setting parameters."
+            )
 
         x = obs_cont
         if not torch.is_tensor(x):
@@ -216,17 +217,18 @@ class GaussianEmissionModel:
                 m = m.to(device=self._device, dtype=self._dtype)
             if m.shape != x.shape:
                 raise ValueError(f"mask shape {tuple(m.shape)} must match obs_cont shape {tuple(x.shape)}")
-            m = (m > 0.5).to(dtype=self._dtype)
+            m = (m > 0.5).to(dtype=self._dtype) # Force it to {0,1} float mask.
 
+        # Diagonal Gaussian logpdf per dimension:
         # log N(x; mu, var) = -0.5 * [log(2π) + log(var) + (x-mu)^2 / var]
-        diff = x[:, None, :] - self._means_t[None, :, :]            # (T,N,D)
-        quad = (diff * diff) * self._inv_var_t[None, :, :]          # (T,N,D)
-        per_dim = -0.5 * (math.log(2.0 * math.pi) + self._log_var_t[None, :, :] + quad)  # (T,N,D)
+        diff = x[:, None, :] - self._means_t[None, :, :]                                 # diff[t,z,d]=x[t,d]−μ[z,d]; shape (T,N,D)
+        quad = (diff * diff) * self._inv_var_t[None, :, :]                               # quad[t,z,d] = (x[t,d]−μ[z,d])^2 / var[z,d]; shape (T,N,D)
+        per_dim = -0.5 * (math.log(2.0 * math.pi) + self._log_var_t[None, :, :] + quad)  # per_dim[t,z,d] = log N(x[t,d]; μ[z,d], var[z,d]); shape (T,N,D)
 
-        if m is not None:
+        if m is not None: # apply mask
             per_dim = per_dim * m[:, None, :]
 
-        return per_dim.sum(dim=2)  # (T,N)
+        return per_dim.sum(dim=2)  # sum over d; shape (T,N)
 
     # =========================================================================
     # EM M-step update
@@ -511,7 +513,7 @@ class MixedEmissionModel:
     # =========================================================================
     # Likelihood evaluation
     # =========================================================================
-    def loglik_parts_all_states(self, obs): 
+    def loglikelihood_parts(self, obs): 
         """
         Compute emission log-likelihood parts for one trajectory, for all states:
           - Gaussian part (continuous dims) -> (T, N)
@@ -538,15 +540,15 @@ class MixedEmissionModel:
         # N = num_states 
         # T = time steps
         # B = bin_dim
-        # Dc = cont_dim
+        # Dc = self.cont_dim
 
         # (1) Gaussian on continuous dims with finite-masking
         if self.cont_dim > 0:
-            x_cont_raw = x[:, self.cont_idx]  # (T,Dc)
+            x_cont_raw = x[:, self.cont_idx]  # (T,Dc); continuous dims
             finite = torch.isfinite(x_cont_raw)
             mask_cont = finite.to(dtype=self._dtype)
             x_cont = torch.where(finite, x_cont_raw, torch.zeros_like(x_cont_raw))
-            logp_gauss = self.gauss.loglik_all_states(x_cont, mask=mask_cont) # (T,N)
+            logp_gauss = self.gauss.loglikelihood(x_cont, mask=mask_cont) # (T,N)
          
         else:
             T = x.shape[0]
@@ -556,17 +558,19 @@ class MixedEmissionModel:
         if self.bin_dim > 0:
             xb_raw = x[:, self.bin_idx]  # (T,B)
             xb = (xb_raw > 0.5).to(dtype=self._dtype)  # treat as binary
-            p = self._bern_p_t[None, :, :]             # (1,N,B)
+            p = self._bern_p_t[None, :, :]             # cached Bernoulli probabilities for each joint state; (1,N,B)
             xb = xb[:, None, :]                        # (T,1,B)
-            logp_bern_full = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)  # (T,N,B)
-            logp_bern = logp_bern_full.sum(dim=2)      # (T,N)
+            # Compute log p(x[t,b] | z) for Bernoulli:
+            # log Bern(x; p) = x * log(p) + (1-x) * log(1-p)
+            logp_bern_full = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)  # logp_bern_full[t,z,b] = log p(x[t,b] | z); shape (T,N,B)
+            logp_bern = logp_bern_full.sum(dim=2)      # logp_bern[t,z] = sum_b log p(x[t,b] | z); shape (T,N)
         else:
-            logp_bern = torch.zeros_like(logp_gauss)
+            logp_bern = torch.zeros_like(logp_gauss) # (T,N)
 
         return logp_gauss, logp_bern
     
 
-    def loglik_all_states(self, obs):
+    def loglikelihood(self, obs):
         """
         Main emission evaluator.
         logB[t,z] = log p(o_t | z).
@@ -579,7 +583,7 @@ class MixedEmissionModel:
         logB : torch.Tensor
             Log-likelihood matrix with shape (T, num_states), stored on the configured Torch device.    
         """
-        logp_gauss, logp_bern = self.loglik_parts_all_states(obs)
+        logp_gauss, logp_bern = self.loglikelihood_parts(obs)
         if self.disable_discrete_obs:
             logB = logp_gauss
         else:

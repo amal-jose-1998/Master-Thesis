@@ -7,7 +7,7 @@ Pipeline
 - Split sequences into train/val/test.
 - Fit a feature scaler (mean/std) on the training split only, then scale all splits.
 - Train the model with EM (optionally evaluating validation log-likelihood each iteration).
-- Save the trained parameters and the scaler to `models/dbn_highd.npz`.
+- Save the trained parameters and the scaler to `models/<experiment>_S{S}_A{A}.npz`.
 """
 
 from pathlib import Path
@@ -19,12 +19,12 @@ from dataclasses import asdict
 from .datasets import (
     load_highd_folder,
     df_to_sequences,
-    windowize_sequences,
     train_val_test_split,
-    compute_feature_scaler_masked,  
+    compute_feature_scaler,  
     scale_sequences,
-    compute_classwise_feature_scalers_masked,  
+    compute_classwise_feature_scalers,  
     scale_sequences_classwise,
+    load_or_build_windowized,
 )
 from .trainer import HDVTrainer
 from .config import (
@@ -38,6 +38,63 @@ else:
     wandb = None
 
 USE_CLASSWISE_SCALING = TRAINING_CONFIG.use_classwise_scaling
+
+# -----------------------------
+# W&B table builders 
+# -----------------------------
+def _scaler_rows_global(feature_cols, scale_idx, mean_vec, std_vec):
+    """Rows for W&B table: [feature, mean, std]."""
+    return [[feature_cols[j], float(mean_vec[j]), float(std_vec[j])] for j in scale_idx]
+
+
+def _scaler_rows_classwise(feature_cols, scale_idx, scalers):
+    """Rows for W&B table: [class, feature, mean, std]."""
+    rows = []
+    for cls, (mean_vec, std_vec) in scalers.items():
+        for j in scale_idx:
+            rows.append([str(cls), feature_cols[j], float(mean_vec[j]), float(std_vec[j])])
+    return rows
+
+
+def _post_scale_rows(feature_cols, scale_idx, scaled_seqs, max_seqs=500):
+    """Rows for W&B table: [feature, scaled_mean, scaled_std, n_finite] (finite-only)."""
+    if not scaled_seqs:
+        return []
+    
+    # Subsample sequences for speed (evenly spaced)
+    if max_seqs is not None and len(scaled_seqs) > max_seqs and max_seqs > 0:
+        idx = np.linspace(0, len(scaled_seqs) - 1, num=max_seqs, dtype=np.int64)
+        seqs = [scaled_seqs[i] for i in idx]
+    else:
+        seqs = scaled_seqs
+
+    scale_idx = np.asarray(scale_idx, dtype=np.int64)
+
+    # Accumulate per-feature: sum, sumsq, count over finite entries only
+    s = np.zeros(scale_idx.size, dtype=np.float64)
+    ssq = np.zeros(scale_idx.size, dtype=np.float64)
+    n = np.zeros(scale_idx.size, dtype=np.int64)
+
+    for seq in seqs:
+        X = np.asarray(seq.obs)[:, scale_idx]   # (T, K)
+        X = X.astype(np.float64, copy=False)  # avoid copies if already float64
+        finite = np.isfinite(X)
+        s   += np.sum(X,   axis=0, where=finite)
+        ssq += np.sum(X*X, axis=0, where=finite)
+        n   += np.sum(finite, axis=0)
+
+    rows = []
+    for k, j in enumerate(scale_idx):
+        if n[k] == 0:
+            continue
+        mean = s[k] / n[k]
+        var = ssq[k] / n[k] - mean * mean          # E[x^2] - (E[x])^2
+        var = max(float(var), 0.0)                 # guard tiny negative due to rounding
+        std = float(np.sqrt(var))
+        rows.append([feature_cols[int(j)], float(mean), std, int(n[k])])
+
+    return rows
+
 
 # -----------------------------
 # Model naming helpers
@@ -56,10 +113,6 @@ def build_model_filename(cfg, wandb_run=None):
     """
     Robust model filename:
       <experiment-name>_S{S}_A{A}.npz
-    Priority:
-      1) wandb.run.name (actual experiment name)
-      2) cfg.wandb_run_name
-      3) deterministic config-based fallback
     """
     # experiment identity
     if wandb_run is not None and getattr(wandb_run, "name", None):
@@ -77,6 +130,9 @@ def build_model_filename(cfg, wandb_run=None):
 
 def main():
     """Run the full training job."""
+    # -----------------------------
+    # Initialization: paths, data loading
+    # -----------------------------
     try:
         project_root = Path(__file__).resolve().parents[1]
         data_root = project_root / "data" / "highd"
@@ -93,43 +149,54 @@ def main():
         sys.exit(1)
 
     # -----------------------------
-    # Frame -> window pipeline
+    # Frame -> window pipeline -> train/val/test split
     # -----------------------------
     frame_feature_cols = list(FRAME_FEATURE_COLS)
     meta_cols = list(META_COLS)
+    
     # Build per-vehicle frame sequences 
     frame_sequences = df_to_sequences(df, feature_cols=frame_feature_cols, meta_cols=meta_cols)
     print(f"[train_highd_dbn] Total FRAME sequences (vehicles) loaded: {len(frame_sequences)}")
 
     # Convert frame sequences -> window sequences
-    win_sequences = windowize_sequences(
-        frame_sequences,
-        W=int(WINDOW_CONFIG.W),
-        stride=int(WINDOW_CONFIG.stride)
-    )
+    S = len(DBN_STATES.driving_style)
+    A = len(DBN_STATES.action)
+    exp_name = _slug(TRAINING_CONFIG.wandb_run_name) if getattr(TRAINING_CONFIG, "wandb_run_name", None) else "unnamed_experiment"
+    cache_dir = data_root / "cache"
+    # trajectory windowing with caching. returns a list of TrajectorySequence objects
+    win_sequences = load_or_build_windowized(frame_sequences, cache_dir=cache_dir, W=int(WINDOW_CONFIG.W), 
+                                             stride=int(WINDOW_CONFIG.stride), S=S, A=A, exp_name=exp_name, force_rebuild=False) 
     print(f"[train_highd_dbn] Total WINDOW sequences produced: {len(win_sequences)}")
 
     # Split by sequence (vehicle) to avoid leakage
-    train_seqs, val_seqs, test_seqs = train_val_test_split(win_sequences, train_frac=0.7, val_frac=0.1)
+    train_seqs, val_seqs, test_seqs = train_val_test_split(win_sequences, train_frac=0.7, val_frac=0.1, seed=TRAINING_CONFIG.seed)
 
     # -----------------------------
     # Choose scaling strategy
     # -----------------------------
+    scaler_table_rows = None
+    scalecheck_table_rows = None
     feature_cols = list(WINDOW_FEATURE_COLS)
-    scale_idx = [i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES]
+    scale_idx = [i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES] # indices of features to scale (only continuous ones)
     if USE_CLASSWISE_SCALING:
-        scalers = compute_classwise_feature_scalers_masked(train_seqs, scale_idx=scale_idx, class_key="meta_class")  
-        train_seqs_scaled = scale_sequences_classwise(train_seqs, scalers, class_key="meta_class")  
-        val_seqs_scaled   = scale_sequences_classwise(val_seqs, scalers, class_key="meta_class")    
-        test_seqs_scaled  = scale_sequences_classwise(test_seqs, scalers, class_key="meta_class")   
-        scaler_to_store = scalers  # dict: {class -> (mean,std)}
+        # Compute class-wise scalers on training split. ie., one (mean,std) per vehicle class for each continuous feature.
+        scalers = compute_classwise_feature_scalers(train_seqs, scale_idx=scale_idx, class_key="meta_class")  # dict: {class -> (mean_vec,std_vec)}
+        train_seqs_scaled = scale_sequences_classwise(train_seqs, scalers, class_key="meta_class")  # scaled training sequences (z scorings)
+        val_seqs_scaled   = scale_sequences_classwise(val_seqs, scalers, class_key="meta_class")    # scaled validation sequences
+        test_seqs_scaled  = scale_sequences_classwise(test_seqs, scalers, class_key="meta_class")   # scaled test sequences
+        scaler_to_store = scalers    
+        
+        scaler_table_rows = _scaler_rows_classwise(feature_cols, scale_idx, scalers)
+        scalecheck_table_rows = _post_scale_rows(feature_cols, scale_idx, train_seqs_scaled)
     else:
-        train_mean, train_std = compute_feature_scaler_masked(train_seqs, scale_idx=scale_idx)  
+        train_mean, train_std = compute_feature_scaler(train_seqs, scale_idx=scale_idx)  
         train_seqs_scaled = scale_sequences(train_seqs, train_mean, train_std)
         val_seqs_scaled   = scale_sequences(val_seqs, train_mean, train_std)
         test_seqs_scaled  = scale_sequences(test_seqs, train_mean, train_std)
         scaler_to_store = (train_mean, train_std)  # tuple: (mean,std)
-
+        
+        scaler_table_rows = _scaler_rows_global(feature_cols, scale_idx, train_mean, train_std)
+        scalecheck_table_rows = _post_scale_rows(feature_cols, scale_idx, train_seqs_scaled)
     print(
         f"[train_highd_dbn] Split sizes -> "
         f"Train: {len(train_seqs)}  "
@@ -139,7 +206,8 @@ def main():
 
     obs_dim = len(feature_cols)
     trainer = HDVTrainer(obs_names=feature_cols)
-    # Store scalers for saving later (trainer.save will handle dict vs arrays after our patch below)
+
+    # Set scaler in trainer for saving alongside model. This is used during inference.
     if USE_CLASSWISE_SCALING:
         trainer.scaler_mean = {k: v[0] for k, v in scaler_to_store.items()}
         trainer.scaler_std  = {k: v[1] for k, v in scaler_to_store.items()}
@@ -152,6 +220,9 @@ def main():
     train_obs_seqs_raw = [seq.obs for seq in train_seqs]              # raw (unscaled)
     val_obs_seqs = [seq.obs for seq in val_seqs_scaled] if len(val_seqs_scaled) > 0 else None
 
+    # -----------------------------
+    # W&B init + log scaler tables
+    # -----------------------------
     wandb_run = None
     if TRAINING_CONFIG.use_wandb and wandb is not None:
         # Initialise a Weights & Biases run for logging training diagnostics.
@@ -162,7 +233,7 @@ def main():
             if isinstance(obj, (int, float, bool, str)):
                 return obj
             if isinstance(obj, (list, tuple)):
-                return [_wandb_safe(x) for x in obj]
+                return [_wandb_safe(x) for x in obj] 
             if isinstance(obj, dict):
                 return {str(k): _wandb_safe(v) for k, v in obj.items()}
             # fallback: string representation
@@ -189,6 +260,25 @@ def main():
             }),
         )
 
+        # Log scaler stats to W&B once 
+        try:
+            if scaler_table_rows is not None:
+                if USE_CLASSWISE_SCALING:
+                    t = wandb.Table(columns=["class", "feature", "mean", "std"], data=scaler_table_rows)
+                    wandb_run.log({"scaler/classwise_mean_std": t})
+                else:
+                    t = wandb.Table(columns=["feature", "mean", "std"], data=scaler_table_rows)
+                    wandb_run.log({"scaler/global_mean_std": t})
+
+            if scalecheck_table_rows is not None:
+                t2 = wandb.Table(columns=["feature", "scaled_mean", "scaled_std", "n_finite"], data=scalecheck_table_rows)
+                wandb_run.log({"scaler/train_scaled_sanitycheck": t2})
+        except Exception as e:
+            print(f"[train_highd_dbn] WARNING: failed to log scaler tables to W&B: {e}", file=sys.stderr)
+
+    # -----------------------------
+    # Train + save
+    # -----------------------------
     try:
         # Run EM training. 
         history = trainer.em_train(

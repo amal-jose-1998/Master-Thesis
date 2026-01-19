@@ -23,8 +23,8 @@ from .highd.io import HIGHD_COL_MAP, _read_recording_bundle
 from .highd.normalise import normalize_vehicle_centric
 from .highd.neighbours import add_neighbor_exists_flags, add_front_thw_ttc_dhw_from_tracks, add_ego_speed_and_jerk
 from .highd.lanes import add_lane_change_feature, add_lane_boundary_distance_features
-from .highd.sequences import prune_columns, df_to_sequences, windowize_sequences, train_val_test_split
-from .highd.scaling import compute_feature_scaler_masked, scale_sequences, compute_classwise_feature_scalers_masked, scale_sequences_classwise
+from .highd.sequences import prune_columns, df_to_sequences, windowize_sequences, train_val_test_split, load_or_build_windowized
+from .highd.scaling import compute_feature_scaler, scale_sequences, compute_classwise_feature_scalers, scale_sequences_classwise
 
 def _default_highd_cache_path(root, max_recordings):
     """
@@ -40,14 +40,14 @@ def _default_highd_cache_path(root, max_recordings):
     return root / name
 
 
-def assert_required_columns_present(df, feature_cols, meta_cols, context="highD loader"):
+def assert_required_columns_present(df, feature_cols, meta_cols):
     """Hard check that all required columns exist in the dataframe."""
     required = list(feature_cols) + list(meta_cols)
     missing = [c for c in required if c not in df.columns]
 
     if missing:
         raise RuntimeError(
-            f"[{context}] Missing required columns in dataframe:\n"
+            "[highD loader] Missing required columns in dataframe:\n"
             f"{missing}\n\n"
             f"Available columns ({len(df.columns)}):\n"
             f"{list(df.columns)}"
@@ -56,10 +56,38 @@ def assert_required_columns_present(df, feature_cols, meta_cols, context="highD 
 def warn_all_zero_columns(df, feature_cols, tol=1e-12):
     bad = []
     for c in feature_cols:
-        if df[c].dtype.kind in "fi" and abs(df[c]).sum() < tol:
+        if df[c].dtype.kind in "fi" and abs(df[c]).sum() < tol: # all-zero column for numeric types
             bad.append(c)
     if bad:
         print(f"[WARN] All-zero feature columns detected: {bad}")
+
+def enforce_dtypes(df):
+    """
+    Enforce consistent dtypes based on feature semantics.
+    """
+    out = df.copy()
+    # -----------------------------
+    # Identifiers / indices
+    # -----------------------------
+    for c in ("vehicle_id", "frame", "recording_id"):
+        if c in out.columns:
+            out[c] = out[c].astype(np.int64, copy=False)
+    # Discrete labels
+    if "lc" in out.columns:
+        out["lc"] = out["lc"].astype(np.int8, copy=False)
+    # -----------------------------
+    # Other columns
+    # -----------------------------
+    for c in out.columns:
+        if c.endswith("_exists"):
+            # binary existence flags
+            out[c] = out[c].fillna(0).astype(np.int8)
+
+        elif pd.api.types.is_numeric_dtype(out[c]):
+            # continuous numeric features
+            out[c] = out[c].astype(np.float64, copy=False)
+
+    return out
 
 # ---------------------------------------------------------------------
 # Main loader: load all recordings with meta and normalization
@@ -129,7 +157,7 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
 
         # Prefix meta columns to avoid name collisions
         tracksmeta_cols = [c for c in df_tracksmeta.columns if c != "vehicle_id"]  
-        df_tracksmeta = df_tracksmeta[["vehicle_id"] + tracksmeta_cols].copy()
+        df_tracksmeta = df_tracksmeta[["vehicle_id"] + tracksmeta_cols].copy() 
         df_tracksmeta = df_tracksmeta.rename(columns={c: f"meta_{c}" for c in tracksmeta_cols})  
 
         # RecordingMeta: usually one row; prefix as rec_
@@ -160,9 +188,7 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
         if apply_vehicle_centric:
             dir_col = "meta_drivingDirection" if "meta_drivingDirection" in df.columns else None
             if dir_col is not None:
-                df["drivingDirection"] = df[dir_col]
-                df = normalize_vehicle_centric(df, dir_col="drivingDirection", flip_longitudinal=True, flip_lateral=flip_lateral, flip_positions=flip_positions)
-                df = df.drop(columns=["drivingDirection"], errors="ignore")
+                df = normalize_vehicle_centric(df, dir_col="meta_drivingDirection", flip_longitudinal=True, flip_lateral=flip_lateral, flip_positions=flip_positions)
             else:
                 df["dir_sign"] = 1.0
         
@@ -174,51 +200,14 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
         
         dfs.append(df)
 
-    df_all = pd.concat(dfs, ignore_index=True)
+    df_all = pd.concat(dfs, ignore_index=True) # concatenate all recordings
 
     # cast types explicitly
-    df_all["vehicle_id"] = df_all["vehicle_id"].astype(int)
-    df_all["frame"] = df_all["frame"].astype(int)
-    df_all["recording_id"] = df_all["recording_id"].astype(int)
-    if "lc" in df_all.columns:
-        df_all["lc"] = df_all["lc"].astype(int)
+    df_all = enforce_dtypes(df_all)
 
-    float_base = [
-        "x", "y", "x_center", "y_center",
-        "vx", "vy", "ax", "ay",
-        "speed", "jerk_x",
-        "front_thw", "front_ttc", "front_dhw",
-        "thw", "ttc", "dhw",
-        "d_left_lane", "d_right_lane",
-    ]
- 
-    float_cols = []
+    df_all = prune_columns(df_all, feature_cols=FRAME_FEATURE_COLS, meta_cols=META_COLS, keep_extra=[])
 
-    for c in float_base:
-        if c in df_all.columns:
-            float_cols.append(c)
-            
-    float_cols = sorted(set(float_cols))
-    for c in float_cols:
-        df_all[c] = df_all[c].astype(float)
-    
-    for c in df_all.columns:  
-        if c.endswith("_exists"): 
-            df_all[c] = df_all[c].astype(float)  
-
-    df_all = prune_columns(
-        df_all,
-        feature_cols=FRAME_FEATURE_COLS,  
-        meta_cols=META_COLS,                 
-        keep_extra=[],                       
-    )
-
-    assert_required_columns_present(
-        df_all,
-        feature_cols=FRAME_FEATURE_COLS,
-        meta_cols=META_COLS,
-        context="load_highd_folder",
-    )
+    assert_required_columns_present(df_all, feature_cols=FRAME_FEATURE_COLS, meta_cols=META_COLS)
     warn_all_zero_columns(df_all, feature_cols=FRAME_FEATURE_COLS)
 
     # Save cache for future calls (full OR subset)

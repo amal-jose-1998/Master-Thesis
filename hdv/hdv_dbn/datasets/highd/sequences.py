@@ -1,8 +1,11 @@
 import numpy as np
 from tqdm.auto import tqdm
+from pathlib import Path
+import joblib
+import json
 
 from ..dataset import TrajectorySequence
-from ...config import TRAINING_CONFIG, WINDOW_FEATURE_COLS
+from ...config import WINDOW_FEATURE_COLS
 
 def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame",  meta_cols=None):
     """
@@ -29,30 +32,36 @@ def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame",  m
     sequences = []
 
     group_cols = ["recording_id", id_col]
+    obs_names = list(feature_cols)
 
     df = df.sort_values(group_cols + [frame_col], kind="mergesort")
 
     if meta_cols is None:
         meta_cols = []
 
-    for (rec_id, veh_id), g in df.groupby(group_cols, sort=False): # Groups all rows belonging to the same vehicle in a particular recording
-        #g = g.sort_values(frame_col) # DataFrame with only that vehicle’s data. Sorts rows by frame number (time ordering).
+    grouped = df.groupby(group_cols, sort=False)
+    pbar = tqdm(grouped, total=grouped.ngroups, desc="Building sequences", unit="seq")
+
+    for (rec_id, veh_id), g in pbar: # Groups all rows belonging to the same vehicle in a particular recording
         frames = g[frame_col].to_numpy(dtype=np.int64, copy=False) # Extracts time indices
-        obs = g[list(feature_cols)].to_numpy(dtype=np.float64, copy=True) # Extracts the observation features into a NumPy array of shape: T × F
+        obs = g[obs_names].to_numpy(dtype=np.float64, copy=False) # Extracts the observation features into a NumPy array of shape: T × F
+        obs.setflags(write=False) # Make read-only to prevent accidental modification
+       
         meta = {}
         if meta_cols:
             first = g.iloc[0]
             for c in meta_cols:
                 if c in g.columns:
-                    meta[c] = first[c]
+                    meta[c] = first[c] # Extracts metadata from the first row of this vehicle's data. (Eg: meta_class, meta_drivingDirection)
+       
         # Create one TrajectorySequence object representing this vehicle.
-        seq = TrajectorySequence(vehicle_id=veh_id, frames=frames, obs=obs, obs_names=list(feature_cols), recording_id=rec_id,  meta=meta if meta else None)
+        seq = TrajectorySequence(vehicle_id=veh_id, frames=frames, obs=obs, obs_names=obs_names, recording_id=rec_id,  meta=meta if meta else None)
         sequences.append(seq) # Adds this trajectory to the list.
 
     return sequences
 
 
-def train_val_test_split(sequences, train_frac=0.7, val_frac=0.15):
+def train_val_test_split(sequences, train_frac=0.7, val_frac=0.15, seed=123):
     """
     Randomly partition a list of sequences into train/validation/test sets.
 
@@ -63,6 +72,8 @@ def train_val_test_split(sequences, train_frac=0.7, val_frac=0.15):
         Percentage of sequences assigned to the training set.
     val_frac : float, default=0.15
         Percentage assigned to validation.
+    seed : int, default=123
+        Random seed for reproducibility.
 
     Returns
     (list, list, list)
@@ -75,7 +86,6 @@ def train_val_test_split(sequences, train_frac=0.7, val_frac=0.15):
     if train_frac + val_frac > 1.0:
         raise ValueError("train_frac + val_frac must be <= 1.0.")
 
-    seed = TRAINING_CONFIG.seed
     rng = np.random.default_rng(seed) # Shuffles the order randomly.
     indices = np.arange(len(sequences))
     rng.shuffle(indices)
@@ -129,6 +139,152 @@ def _nanmin(x):
     x = x[np.isfinite(x)]
     return float(x.min()) if x.size else np.nan
 
+def _seti(Y, t, j, v):
+    """
+    Set Y[t, j] if j is not None.
+    
+    Parameters
+    Y : np.ndarray
+        Output observation matrix.
+    t : int
+        Current time index.
+    j : int or None
+        Column index to set, or None to skip.
+    v : float
+        Value to set.
+    """
+    if j is not None:
+        Y[t, j] = v
+
+def _risk_valid_mask(r):
+    return np.isfinite(r) & (r > 0.0)
+
+def _compute_kinematics(win, Y, t, in_idx, out):
+    """
+    Compute kinematic summaries: mean/std of vx, ax, vy, ay.
+    
+    Parameters
+    win : np.ndarray
+        Input window of shape (W, F_in).
+    Y : np.ndarray
+        Output observation matrix of shape (Tw, F_out).
+    t : int
+        Current window index in Y.
+    in_idx : dict
+        Mapping from input feature names to their column indices in `win`.
+    out : dict
+        Mapping from output feature names to their column indices in `Y`.
+    """
+    for c in ("vx", "ax", "vy", "ay"):
+        col = win[:, in_idx[c]]
+        _seti(Y, t, out.get(f"{c}_mean"), _nanmean(col))
+        _seti(Y, t, out.get(f"{c}_std"),  _nanstd(col))
+
+def _compute_jerk(win, Y, t, in_idx, out):
+    """
+    Compute jerk summaries: mean/std of jerk_x.
+
+    Parameters
+    win : np.ndarray
+        Input window of shape (W, F_in).
+    Y : np.ndarray
+        Output observation matrix of shape (Tw, F_out).
+    t : int
+        Current window index in Y.
+    in_idx : dict
+        Mapping from input feature names to their column indices in `win`.
+    out : dict
+        Mapping from output feature names to their column indices in `Y`.
+    """
+    jm = out.get("jerk_mean")
+    js = out.get("jerk_std")
+    if jm is None and js is None:
+        return
+    col = win[:, in_idx["jerk_x"]]
+    _seti(Y, t, jm, _nanmean(col))
+    _seti(Y, t, js, _nanstd(col))
+
+def _compute_lane_change_flags(win, Y, t, in_idx, out):
+    # lc: -1 left, +1 right, 0 none, NaNs ignored
+    lc = win[:, in_idx["lc"]]
+    lc_f = lc[np.isfinite(lc)]
+    _seti(Y, t, out.get("lc_left_present"),  float(np.any(lc_f == -1))) # 1 if any left lane changes in window; else 0
+    _seti(Y, t, out.get("lc_right_present"), float(np.any(lc_f == +1))) # 1 if any right lane changes in window; else 0
+
+def _compute_lane_boundaries(win, Y, t, in_idx, out):
+    j = out.get("d_left_lane_mean")
+    k = out.get("d_left_lane_min")
+    if j is not None or k is not None:
+        dl = win[:, in_idx["d_left_lane"]]
+        _seti(Y, t, j, _nanmean(dl))
+        _seti(Y, t, k, _nanmin(dl))
+
+    j = out.get("d_right_lane_mean")
+    k = out.get("d_right_lane_min")
+    if j is not None or k is not None:
+        dr = win[:, in_idx["d_right_lane"]]
+        _seti(Y, t, j, _nanmean(dr))
+        _seti(Y, t, k, _nanmin(dr))
+
+def _compute_risk(win, Y, t, in_idx, out, has_front_exists):
+    # Only compute if any risk outputs exist
+    for colname in ("front_thw", "front_ttc", "front_dhw"):
+        j_mean = out.get(f"{colname}_mean")
+        j_min  = out.get(f"{colname}_min")
+        j_vfr  = out.get(f"{colname}_vfrac")
+        if j_mean is None and j_min is None and j_vfr is None:
+            continue
+
+        r = win[:, in_idx[colname]].astype(np.float64, copy=False)
+        valid = _risk_valid_mask(r)
+        if has_front_exists:
+            ex = win[:, in_idx["front_exists"]]
+            valid = valid & (ex > 0.5)
+
+        vfrac = float(np.mean(valid)) if valid.size else 0.0
+        rv = r[valid]
+        _seti(Y, t, j_mean, (float(rv.mean()) if rv.size else np.nan))
+        _seti(Y, t, j_min,  (float(rv.min())  if rv.size else np.nan))
+        _seti(Y, t, j_vfr,  vfrac)
+
+def _compute_existence_fracs(win, Y, t, in_idx, out, exists_cols):
+    for c in exists_cols:
+        j = out.get(f"{c}_frac")
+        if j is None:
+            continue
+        ex = win[:, in_idx[c]]
+        _seti(Y, t, j, float(np.mean(np.isfinite(ex) & (ex > 0.5))))
+
+def _validate_required_columns(in_idx, out_idx):
+    required_frame = {"vx", "ax", "vy", "ay", "lc"}
+
+    if "jerk_mean" in out_idx or "jerk_std" in out_idx:
+        required_frame.add("jerk_x")
+
+    if "d_left_lane_mean" in out_idx or "d_left_lane_min" in out_idx:
+        required_frame.add("d_left_lane")
+    if "d_right_lane_mean" in out_idx or "d_right_lane_min" in out_idx:
+        required_frame.add("d_right_lane")
+
+    for r in ("front_thw", "front_ttc", "front_dhw"):
+        if (f"{r}_mean" in out_idx) or (f"{r}_min" in out_idx) or (f"{r}_vfrac" in out_idx):
+            required_frame.add(r)
+
+    exists_cols = [
+        "front_exists", "rear_exists",
+        "left_front_exists", "left_side_exists", "left_rear_exists",
+        "right_front_exists", "right_side_exists", "right_rear_exists",
+    ]
+    for c in exists_cols:
+        if f"{c}_frac" in out_idx:
+            required_frame.add(c)
+
+    missing = [c for c in sorted(required_frame) if c not in in_idx]
+    if missing:
+        raise RuntimeError(f"[windowize_sequences] Missing required frame cols: {missing}")
+
+    return exists_cols
+
 def windowize_sequences(sequences, W=150, stride=10):
     """
     Convert per-frame sequences into per-window sequences by computing summary statistics over sliding windows.
@@ -156,49 +312,15 @@ def windowize_sequences(sequences, W=150, stride=10):
     win_names = list(WINDOW_FEATURE_COLS) # schema of window-level features in the output.
     out_idx = {n: i for i, n in enumerate(win_names)}
 
-    def _set(Y, t, name, value):
-        """Write value into Y[t, idx] if feature name exists in output."""
-        idx = out_idx.get(name)
-        if idx is not None:
-            Y[t, idx] = value
-
     #strict input validation (fail fast) 
-    required_frame = {"vx", "ax", "vy", "ay", "lc"}
-    # jerk outputs require jerk_x
-    if "jerk_mean" in out_idx or "jerk_std" in out_idx:
-        required_frame.add("jerk_x")
-    # lane outputs require lane distances
-    if "d_left_lane_mean" in out_idx or "d_left_lane_min" in out_idx:
-        required_frame.add("d_left_lane")
-    if "d_right_lane_mean" in out_idx or "d_right_lane_min" in out_idx:
-        required_frame.add("d_right_lane")
-    # risk outputs require corresponding risk columns
-    for r in ["front_thw", "front_ttc", "front_dhw"]:
-        if f"{r}_mean" in out_idx or f"{r}_min" in out_idx or f"{r}_vfrac" in out_idx:
-            required_frame.add(r)
-
-    # exists outputs require exists inputs
-    exists_cols = [
-        "front_exists", "rear_exists",
-        "left_front_exists", "left_side_exists", "left_rear_exists",
-        "right_front_exists", "right_side_exists", "right_rear_exists",
-    ]
-    for c in exists_cols:
-        if f"{c}_frac" in out_idx:
-            required_frame.add(c)
-
-    missing = [c for c in sorted(required_frame) if c not in in_idx]
-    if missing:
-        raise RuntimeError(f"[windowize_sequences] Missing required frame cols: {missing}")
+    exists_cols = _validate_required_columns(in_idx, out_idx)
 
     has_front_exists = "front_exists" in in_idx  
-
-    def risk_valid_mask(r):
-        return np.isfinite(r) & (r > 0.0)
 
     total_windows = 0
     skipped = 0
     pbar = tqdm(sequences, desc="Windowizing sequences", unit="seq")
+
     # Process each sequence individually
     for seq in pbar:
         X = seq.obs    # per-frame observation matrix for one vehicle: shape (T, F_in)
@@ -217,64 +339,19 @@ def windowize_sequences(sequences, W=150, stride=10):
             s1 = s0 + W                     # Ending index (exclusive)
             win = X[s0:s1, :]               # per-frame data inside this window; shape: W, F_in 
 
-            for c in ["vx", "ax", "vy", "ay"]:
-                col = win[:, in_idx[c]] # extract the W values in that window
-                # compute mean/std ignoring NaNs
-                _set(Y, t, f"{c}_mean", _nanmean(col))
-                _set(Y, t, f"{c}_std",  _nanstd(col))
-
-            # jerk_x -> jerk_mean/std
-            if "jerk_mean" in out_idx or "jerk_std" in out_idx:
-                col = win[:, in_idx["jerk_x"]]
-                _set(Y, t, "jerk_mean", _nanmean(col))
-                _set(Y, t, "jerk_std",  _nanstd(col))
-
-            # LC presence flags
-            lc = win[:, in_idx["lc"]]  
-            lc_finite = lc[np.isfinite(lc)] 
-            # set presence flags
-            _set(Y, t, "lc_left_present",  float(np.any(lc_finite == -1))) 
-            _set(Y, t, "lc_right_present", float(np.any(lc_finite == +1)))
-
-            # lane boundary distances; NaNs are ignored.
-            if "d_left_lane_mean" in out_idx or "d_left_lane_min" in out_idx:
-                dl = win[:, in_idx["d_left_lane"]]
-                _set(Y, t, "d_left_lane_mean", _nanmean(dl))
-                _set(Y, t, "d_left_lane_min",  _nanmin(dl))
-
-            if "d_right_lane_mean" in out_idx or "d_right_lane_min" in out_idx:
-                dr = win[:, in_idx["d_right_lane"]]
-                _set(Y, t, "d_right_lane_mean", _nanmean(dr))
-                _set(Y, t, "d_right_lane_min",  _nanmin(dr))
-
-            # risk summaries
-            def fill_risk(colname): 
-                # Compute mean, min, vfrac for a risk feature
-                r = win[:, in_idx[colname]].astype(np.float64, copy=False) # extracts the W values for the risk feature.
-                valid = risk_valid_mask(r)
-                if has_front_exists:
-                    ex = win[:, in_idx["front_exists"]] 
-                    valid = valid & (ex > 0.5) # only consider frames where the front vehicle exists.
-                vfrac = float(np.mean(valid)) if valid.size else 0.0 # fraction of valid frames
-                rv = r[valid] # list of valid risk values.
-                _set(Y, t, f"{colname}_mean", (float(rv.mean()) if rv.size else np.nan))
-                _set(Y, t, f"{colname}_min",  (float(rv.min())  if rv.size else np.nan))
-                _set(Y, t, f"{colname}_vfrac", vfrac)
-
-            for r in ["front_thw", "front_ttc", "front_dhw"]: 
-                if f"{r}_mean" in out_idx or f"{r}_min" in out_idx or f"{r}_vfrac" in out_idx:
-                    fill_risk(r) 
-
-            # existence fractions
-            for c in exists_cols:
-                out_name = f"{c}_frac"
-                if out_name in out_idx:
-                    ex = win[:, in_idx[c]]
-                    _set(Y, t, out_name, float(np.mean(np.isfinite(ex) & (ex > 0.5)))) # fraction of frames where neighbor exists
+            _compute_kinematics(win, Y, t, in_idx, out_idx)        # compute mean/std of vx, ax, vy, ay
+            _compute_jerk(win, Y, t, in_idx, out_idx)              # compute mean/std of jerk_x
+            _compute_lane_change_flags(win, Y, t, in_idx, out_idx) # lane change presence flags
+            _compute_lane_boundaries(win, Y, t, in_idx, out_idx)   # lane boundary distances
+            _compute_risk(win, Y, t, in_idx, out_idx, has_front_exists)  # risk summaries
+            _compute_existence_fracs(win, Y, t, in_idx, out_idx, exists_cols) # existence fractions
+        
+        frames = seq.frames
+        out_frames = frames[starts]  # window start frame numbers
 
         out.append(TrajectorySequence(
             vehicle_id=seq.vehicle_id,
-            frames=starts, # now equals starts (window start indices), not original frame numbers
+            frames=out_frames, # window start frames
             obs=Y,         # now window-level matrix Y of shape (Tw, F_out)
             obs_names=win_names,
             recording_id=seq.recording_id,
@@ -283,3 +360,56 @@ def windowize_sequences(sequences, W=150, stride=10):
         pbar.set_postfix(skipped=skipped, out=len(out), windows=total_windows,)
 
     return out
+
+
+def window_cache_paths(cache_dir, exp_name, W, stride, S, A):
+    """
+    Get cache file paths for windowized sequences.
+
+    Parameters
+    cache_dir : Path
+        Directory where cache files are stored.
+    exp_name : str
+        Experiment name.
+    W : int
+        Window size.
+    stride : int
+        Window stride.
+    S : int
+        Number of hidden styles.
+    A : int
+        Number of action types.
+
+    Returns
+    (Path, Path)
+        Paths to the joblib and json cache files.
+    """
+    base = cache_dir / f"{exp_name}_W{W}_S{stride}_S{S}A{A}"
+    return base.with_suffix(".joblib"), base.with_suffix(".json")
+
+def load_or_build_windowized(sequences, cache_dir, W, stride, S, A, exp_name, force_rebuild=False):
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True) # ensure cache directory exists else create it
+
+    p_joblib, p_meta = window_cache_paths(cache_dir, exp_name, W, stride, S, A)
+
+    if p_joblib.exists() and (not force_rebuild):
+        print(f"[window-cache] Loading: {p_joblib}")
+        return joblib.load(p_joblib)
+
+    print(f"[window-cache] Building windowized sequences (W={W}, stride={stride})")
+    win_seqs = windowize_sequences(sequences, W=W, stride=stride)
+
+    joblib.dump(win_seqs, p_joblib, compress=3) # save to cache
+    meta = {
+        "experiment_name": exp_name,
+        "W": int(W),
+        "stride": int(stride),
+        "S": int(S),
+        "A": int(A),
+        "num_sequences": int(len(win_seqs)),
+        "win_names": list(WINDOW_FEATURE_COLS),
+    }
+    p_meta.write_text(json.dumps(meta, indent=2))
+    print(f"[window-cache] Saved: {p_joblib}")
+    return win_seqs

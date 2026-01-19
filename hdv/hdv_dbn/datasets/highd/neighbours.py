@@ -148,66 +148,70 @@ def add_direction_aware_context_features(df):
 
 def add_front_thw_ttc_dhw_from_tracks(df):
     """
-    Map highD-provided thw/ttc columns (tracks.csv) to our standard names:
-        front_thw, front_ttc
+    Rename highD tracks.csv front-interaction metrics to standardized names.
 
-    Rationale:
-      - highD thw/ttc are typically defined w.r.t. the preceding vehicle (same-lane leader).
-      - keep values finite (training/emissions do not use NaN masks).
+    Renames (if present):
+        thw -> front_thw
+        ttc -> front_ttc
+        dhw -> front_dhw
+
+    Does not create new data or modify values.
     """
-    out = df
+    out = df.copy()
 
-    # if these columns don't exist (older caches / different preprocessing), default to 0.0
-    if "thw" in out.columns:
-        out["front_thw"] = out["thw"].astype(np.float64)
-    else:
-        out["front_thw"] = np.nan
+    rename_map = {
+        "thw": "front_thw",
+        "ttc": "front_ttc",
+        "dhw": "front_dhw",
+    }
 
-    if "dhw" in out.columns:
-        out["front_dhw"] = out["dhw"].astype(np.float64)
-    else:
-        out["front_dhw"] = np.nan
-
-    if "ttc" in out.columns:
-        out["front_ttc"] = out["ttc"].astype(np.float64)
-    else:
-        out["front_ttc"] = np.nan
+    existing = {k: v for k, v in rename_map.items() if k in out.columns} 
+    if existing:
+        out = out.rename(columns=existing) # rename only existing columns
 
     return out
-
 
 def add_ego_speed_and_jerk(df):
     """
     Add:
-      - speed  = sqrt(vx^2 + vy^2)
-      - jerk_x = ax[t] - ax[t-1] computed groupwise per (recording_id, vehicle_id)
+        - speed  = sqrt(vx^2 + vy^2)
+        - jerk_x = ax[t] - ax[t-1] computed groupwise per (recording_id, vehicle_id)
 
-    Always finite; first frame of each vehicle -> jerk_x = 0.0.
+    Conventions:
+        - speed is NaN if vx or vy is missing
+        - jerk_x = 0.0 for the first frame of each vehicle
+        - jerk_x = NaN if ax[t] or ax[t-1] is NaN
     """
-    out = df
+    out = df.copy()
 
     # speed
     if ("vx" in out.columns) and ("vy" in out.columns):
-        vx = out["vx"].to_numpy(dtype=np.float64)
-        vy = out["vy"].to_numpy(dtype=np.float64)
+        vx = out["vx"].to_numpy(dtype=np.float64, copy=False)
+        vy = out["vy"].to_numpy(dtype=np.float64, copy=False)
         out["speed"] = np.sqrt(vx * vx + vy * vy)
     else:
-       out["speed"] = 0.0
+        out["speed"] = np.nan
 
     # jerk_x (groupwise)
     if "ax" in out.columns:
-        out = out.sort_values(["recording_id", "vehicle_id", "frame"], kind="mergesort")
-        ax = out["ax"].to_numpy(dtype=np.float64)
-        rec = out["recording_id"].to_numpy()
-        vid = out["vehicle_id"].to_numpy()
+        out = out.sort_values(["recording_id", "vehicle_id", "frame"], kind="mergesort") # sorted so that all frames of a vehicle in a recording are contiguous and in time order
+        ax = out["ax"].to_numpy(dtype=np.float64, copy=False)
+        rec = out["recording_id"].to_numpy(copy=False)
+        vid = out["vehicle_id"].to_numpy(copy=False)
 
-        same = (rec == np.roll(rec, 1)) & (vid == np.roll(vid, 1))
-        jerk = np.zeros_like(ax)
-        idx = np.where(same)[0]
+        same = (rec == np.roll(rec, 1)) & (vid == np.roll(vid, 1)) # same vehicle as previous row
+        
+        jerk = np.zeros_like(ax, dtype=np.float64)
+        idx = np.where(same)[0] # valid indices where we can compute jerk
         jerk[idx] = ax[idx] - ax[idx - 1]
+
+        # NaN-safe: if ax[t] or ax[t-1] is NaN, jerk becomes NaN at t
+        bad = ~np.isfinite(jerk)
+        jerk[bad] = np.nan
+
         out["jerk_x"] = jerk
     else:
-        out["jerk_x"] = 0.0
+        out["jerk_x"] = 0.0 
 
     return out
 

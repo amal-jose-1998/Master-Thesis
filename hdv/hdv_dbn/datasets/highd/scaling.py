@@ -1,7 +1,7 @@
 import numpy as np
 from ..dataset import TrajectorySequence
 
-def compute_feature_scaler_masked(sequences, scale_idx):
+def compute_feature_scaler(sequences, scale_idx):
     """
     Compute per-feature mean/std for selected features (scale_idx), ignoring NaNs/Infs.
     If a feature has a companion "<prefix>_vfrac", statistics are computed only on
@@ -21,9 +21,9 @@ def compute_feature_scaler_masked(sequences, scale_idx):
         clamped to 1.0 to avoid division by near-zero during scaling.
     """
     if len(sequences) == 0:
-        raise ValueError("[compute_feature_scaler_masked] No sequences provided.")
+        raise ValueError("[compute_feature_scaler] No sequences provided.")
     
-    obs_names = sequences[0].obs_names # list of feature names from the first sequence.
+    obs_names = list(sequences[0].obs_names) # list of feature names from the first sequence.
     name_to_idx = {n: i for i, n in enumerate(obs_names)} # dict mapping feature name → column index.
 
     F = int(sequences[0].obs.shape[1]) # number of features
@@ -32,33 +32,73 @@ def compute_feature_scaler_masked(sequences, scale_idx):
     mean = np.zeros(F, dtype=np.float64)
     std = np.ones(F, dtype=np.float64)
 
-    X = np.vstack([np.asarray(seq.obs, dtype=np.float64) for seq in sequences]) # Stack all observations across sequences. Shape: (total_timesteps, F)
+    # Prepare vfrac gating info
+    gated = []                                              # list of (j, vf_idx_or_None)
+    for j in scale_idx:
+        fname = obs_names[j]                                # name of this feature
+        vf_idx = None
+        if fname.endswith(("_mean", "_min", "_std")):
+            vfrac_name = fname.rsplit("_", 1)[0] + "_vfrac" # corresponding vfrac feature name
+            vf_idx = name_to_idx.get(vfrac_name)            # index of vfrac feature, or None if not found
+        gated.append((int(j), vf_idx))                      # store index and vfrac index (or None)
 
-    for j in scale_idx: # Loop over features to scale
-        col = X[:, j] # Extracts the entire feature column across all stacked rows.
-        mask = np.isfinite(col) # True where col is not NaN and not ±Inf.
+    # Pass 1: mean 
+    sum_j = np.zeros(F, dtype=np.float64) # sum accumulator per feature
+    cnt_j = np.zeros(F, dtype=np.int64)   # count of valid entries per feature
 
-        fname = obs_names[j] # name of this feature
-        if fname.endswith(("_mean", "_min", "_std")): # Only apply vfrac gating to summary-style window features.
-            vfrac_name = fname.rsplit("_", 1)[0] + "_vfrac"
-            vf_idx = name_to_idx.get(vfrac_name)
-            if vf_idx is not None:
-                vf = X[:, vf_idx] 
+    for seq in sequences:
+        X = np.asarray(seq.obs, dtype=np.float64)  # (T, F)
+        for j, vf_idx in gated:     # Loop over features to scale with vfrac info
+            col = X[:, j]           # Extracts the entire feature column across all stacked rows.
+            mask = np.isfinite(col) # True where col is not NaN and not ±Inf.
+
+            if vf_idx is not None: 
+                vf = X[:, vf_idx]                    # corresponding vfrac column for those features that have it
                 mask &= np.isfinite(vf) & (vf > 0.0) # Update mask to include only rows where vfrac > 0.
 
-        vals = col[mask] # Select only valid entries for this feature.
-        if vals.size == 0:
-            mean[j] = 0.0
-            std[j] = 1.0
-            continue
+            if np.any(mask): 
+                vals = col[mask]              # Select only valid entries for this feature.
+                sum_j[j] += float(vals.sum()) # accumulate sum
+                cnt_j[j] += int(vals.size)    # accumulate count
 
-        mean[j] = float(vals.mean())
-        s = float(vals.std())
-        std[j] = 1.0 if s < 1e-6 else s
+    # finalize mean only for requested features
+    for j in scale_idx:
+        j = int(j)
+        if cnt_j[j] > 0:
+            mean[j] = sum_j[j] / cnt_j[j]
+        else:
+            mean[j] = 0.0  # keep identity scaling
+
+
+    # Pass 2: std (uses computed mean)
+    ssq_j = np.zeros(F, dtype=np.float64) # sum of squares accumulator per feature
+
+    for seq in sequences:
+        X = np.asarray(seq.obs, dtype=np.float64)
+        for j, vf_idx in gated:
+            col = X[:, j]
+            mask = np.isfinite(col)
+
+            if vf_idx is not None:
+                vf = X[:, vf_idx]
+                mask &= np.isfinite(vf) & (vf > 0.0)
+
+            if np.any(mask):
+                vals = col[mask] - mean[j]
+                ssq_j[j] += float(np.dot(vals, vals))  # sum of squares
+
+    for j in scale_idx:
+        j = int(j)
+        if cnt_j[j] > 0:
+            var = ssq_j[j] / cnt_j[j]  # matches numpy std with ddof=0
+            s = float(np.sqrt(var))
+            std[j] = 1.0 if s < 1e-6 else s
+        else:
+            std[j] = 1.0
 
     return mean, std
 
-def compute_classwise_feature_scalers_masked(sequences, scale_idx, class_key="meta_class"):
+def compute_classwise_feature_scalers(sequences, scale_idx, class_key="meta_class"):
     """
     Compute one *masked* scaler per class: {class_name: (mean, std)}.
 
@@ -72,20 +112,20 @@ def compute_classwise_feature_scalers_masked(sequences, scale_idx, class_key="me
     
     Returns
     dict
-        Mapping: class_name -> (mean, std)
+        Mapping: class_name -> (mean_vec, std_vec)
     """
-    buckets = {}
+    buckets = {} # to hold sequences per class
     for seq in sequences:
         if seq.meta and class_key in seq.meta:
-            buckets.setdefault(str(seq.meta[class_key]), []).append(seq)
+            buckets.setdefault(str(seq.meta[class_key]), []).append(seq) # vehicle sequence assigned to its class bucket
 
-    # Returns: { "car": (mean,std), "truck": (mean,std), ... }
+    # Returns: { "car": (mean_vec,std_vec), "truck": (mean_vec,std_vec), ... }
     return {
-        cls: compute_feature_scaler_masked(seqs, scale_idx)
+        cls: compute_feature_scaler(seqs, scale_idx)
         for cls, seqs in buckets.items()
     }
 
-def _scale_obs_masked(x, mean, std):
+def _scale_obs(x, mean, std):
     """
     Scale only finite entries in x. NaNs/Infs are preserved exactly.
     """
@@ -127,7 +167,7 @@ def scale_sequences(sequences, mean, std):
 
     out = []
     for seq in sequences:
-        obs_scaled = _scale_obs_masked(seq.obs, mean, std)
+        obs_scaled = _scale_obs(seq.obs, mean, std)
         out.append(TrajectorySequence(
             vehicle_id=seq.vehicle_id,
             frames=seq.frames,
@@ -167,7 +207,7 @@ def scale_sequences_classwise(sequences, scalers, class_key="meta_class"):
             raise ValueError(f"[scale_sequences_classwise] No scaler for class '{cls}'.")
 
         mean, std = scalers[cls]
-        obs_scaled = _scale_obs_masked(seq.obs, mean, std)
+        obs_scaled = _scale_obs(seq.obs, mean, std)
 
         out.append(TrajectorySequence(
             vehicle_id=seq.vehicle_id,

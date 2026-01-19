@@ -21,8 +21,8 @@ class DBNStates:
 
 # Define the DBN states
 DBN_STATES = DBNStates(
-    #driving_style=("style_0", "style_1", "style_2",),
-    driving_style=("dummy",),
+    driving_style=("style_0", "style_1", "style_2",),
+    #driving_style=("dummy",),
     action=("action_0", "action_1", "action_2", "action_3", "action_4")
     #action=("dummy")
     )
@@ -98,7 +98,16 @@ class TrainingConfig:
 
     disable_discrete_obs: bool = False     
     bern_weight: float = 1                     
-    lc_weight: float = 25                  
+    lc_weight: float = 25   
+    # Lane-change imbalance handling in EM
+    #   - 'none': no special weighting
+    #   - 'A'   : likelihood tempering (logB[t] *= w_t) before forward-backward. This can distort inference more strongly.
+    #   - 'B'   : weighted sufficient statistics (gamma and xi) after forward-backward. This is usually safer and more interpretable. 
+    lc_weight_mode: Literal["none", "A", "B"] = "B"       
+    # How to weight xi_t (transition counts) in mode 'B'
+    #   - 'next': use w_{t+1}
+    #   - 'avg' : use 0.5*(w_t + w_{t+1})
+    lc_xi_weight: Literal['next', 'avg'] = 'next'  
 
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
@@ -125,7 +134,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "Experiment 1.0"
+    wandb_run_name: Optional[str] = "demo"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
@@ -135,6 +144,9 @@ class TrainingConfig:
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123
+
+    EPSILON: float = 1e-6 # small constant for numerical stability
+    debug_asserts: bool = True
 
 TRAINING_CONFIG = TrainingConfig()
 

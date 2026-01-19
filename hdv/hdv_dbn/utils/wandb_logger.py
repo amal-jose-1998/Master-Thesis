@@ -118,9 +118,6 @@ class WandbLogger:
         
         # π diagnostics
         pi_s_entropy = float(-np.sum(pi_s0 * np.log(pi_s0 + 1e-15)))
-        pi_z_entropy = float(-np.sum(pi_z_np * np.log(pi_z_np + 1e-15))) # Shannon entropy
-        pi_z_max = float(pi_z_np.max())
-        pi_z_min = float(pi_z_np.min())
 
         metrics = {
             "em_iter": int(it + 1),
@@ -278,30 +275,34 @@ class WandbLogger:
                     sem_feat_names,
                     S=int(trainer.S),
                     A=int(trainer.A),
-                    stds=sem_stds_raw,                 # optional: shows mean±std if available
-                    title_prefix="Semantics (raw) table",
-                    max_cols=12,                       # adjust if you want wider/narrower tables
-                    fmt="{:.2f}",                      # change precision here
+                    stds=sem_stds_raw,
+                    title_prefix="Semantics (raw)",
+                    max_cols=8,
+                    fmt="{:.2f}",
+                    wrap_header_at=20,
+                    header_rotation=0,
+                    header_fontsize=8,
+                    cell_fontsize=8,
                 )
                 for k, fig in figs.items():
                     metrics[f"semantics_raw/table_by_style/{k}"] = wandb.Image(fig)
                     WandbLogger._safe_close(fig)
 
             # Scaled semantics -> log numeric tables (values), split by style
-            if sem_means is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
-                figs = plot_semantics_table_by_style(
-                    sem_means,
-                    sem_feat_names,
-                    S=int(trainer.S),
-                    A=int(trainer.A),
-                    stds=sem_stds,                    # optional: shows mean±std if available
-                    title_prefix="Semantics (scaled) table",
-                    max_cols=12,                       # adjust if you want wider/narrower tables
-                    fmt="{:.2f}",                      # change precision here
-                )
-                for k, fig in figs.items():
-                    metrics[f"semantics_scaled/table_by_style/{k}"] = wandb.Image(fig)
-                    WandbLogger._safe_close(fig)
+            #if sem_means is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
+            #    figs = plot_semantics_table_by_style(
+            #        sem_means,
+            #        sem_feat_names,
+            #        S=int(trainer.S),
+            #        A=int(trainer.A),
+            #        stds=sem_stds,                    # optional: shows mean±std if available
+            #        title_prefix="Semantics (scaled) table",
+            #        max_cols=12,                       # adjust if you want wider/narrower tables
+            #        fmt="{:.2f}",                      # change precision here
+            #    )
+            #    for k, fig in figs.items():
+            #        metrics[f"semantics_scaled/table_by_style/{k}"] = wandb.Image(fig)
+            #        WandbLogger._safe_close(fig)
 
         except Exception as e:
             if int(getattr(trainer, "verbose", 0)) >= 0:

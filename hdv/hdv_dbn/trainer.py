@@ -5,259 +5,44 @@ import torch
 from sklearn.cluster import MiniBatchKMeans
 from tqdm.auto import tqdm
 import time
-import math
+from dataclasses import dataclass
+from typing import Optional
 
 from .model import HDVDBN
 from .emissions import MixedEmissionModel, GaussianParams
 from .config import TRAINING_CONFIG
 from .utils.wandb_logger import WandbLogger
+from .utils.trainer_diagnostics import _run_lengths_from_gamma_argmax, _posterior_entropy_from_gamma, _posterior_weighted_key_feature_stats
+from .forward_backward import forward_backward_torch
+from .utils.transitions import build_structured_transition_params
+
+# -----------------------------------------------------------------------------
+# Data containers
+# -----------------------------------------------------------------------------
+@dataclass
+class EStepResult:
+    gamma_all: list           # list[torch.Tensor] (T,N)
+    xi_s_all: list            # list[torch.Tensor] (S,S)
+    xi_a_all: list            # list[torch.Tensor] (S,A,A)
+    total_loglik: float
+    obs_used: list            # list[np.ndarray] (T,obs_dim)
+    obs_used_raw: Optional[list]  # list[np.ndarray] | None (T,obs_dim)
+    skipped_empty: int
+    skipped_bad_logB: int
+    skipped_bad_ll: int
+
+@dataclass
+class TransitionUpdate:
+    delta_pi: float
+    delta_A: float
+    A_prev: dict
+    A_new: dict
 
 # -----------------------------------------------------------------------------
 # Numerical stability constants
 # -----------------------------------------------------------------------------
-EPSILON = 1e-6
+EPSILON = TRAINING_CONFIG.EPSILON if hasattr(TRAINING_CONFIG, "EPSILON") else 1e-6
 
-# =============================================================================
-# Transition matrix builder 
-# =============================================================================
-def build_structured_transition_params(hdv_dbn):
-    """
-    Extract structured transition parameters from the pgmpy DBN CPDs.
-    We represent:
-        pi_s0[s]              = P(s_0 = s)
-        pi_a0_given_s0[s,a]  = P(a_0 = a | s_0 = s)
-        A_s[s_prev, s]       = P(s_t = s | s_{t-1} = s_prev)
-        A_a[s, a_prev, a]    = P(a_t = a | a_{t-1} = a_prev, s_t = s)
-
-    Parameters
-    hdv_dbn : HDVDBN
-        DBN model with CPDs for Style and Action at time 0 and 1.
-
-    Returns
-    pi_s0 : np.ndarray, shape (S,)
-    pi_a0_given_s0 : np.ndarray, shape (S, A)
-    A_s : np.ndarray, shape (S, S)
-    A_a : np.ndarray, shape (S, A, A)
-        Interpreted as A_a[s_cur, a_prev, a_cur].
-    """
-    S = int(hdv_dbn.num_style)
-    A = int(hdv_dbn.num_action)
-
-    cpd_style0 = hdv_dbn.model.get_cpds(("Style", 0))
-    cpd_action0 = hdv_dbn.model.get_cpds(("Action", 0))
-    cpd_style1 = hdv_dbn.model.get_cpds(("Style", 1))
-    cpd_action1 = hdv_dbn.model.get_cpds(("Action", 1))
-
-    # -----------------------------
-    # pi_s0
-    # -----------------------------
-    pi_s0 = np.asarray(cpd_style0.values, dtype=float).reshape(S)  # (S,)
-    pi_s0_sum = float(pi_s0.sum())
-    if not np.isfinite(pi_s0_sum) or pi_s0_sum <= 0.0:
-        pi_s0 = np.full((S,), 1.0 / S, dtype=float)
-    else:
-        pi_s0 = pi_s0 / pi_s0_sum
-
-    # -----------------------------
-    # pi_a0_given_s0
-    # cpd_action0.values is typically (A, S) = P(a0 | s0) with rows=a, cols=s
-    # We transpose to (S, A).
-    # -----------------------------
-    P_a0_given_s0 = np.asarray(cpd_action0.values, dtype=float).reshape(A, S).T  # (S,A)
-    # normalize per S
-    row = P_a0_given_s0.sum(axis=1, keepdims=True)
-    row[row <= 0.0] = 1.0
-    pi_a0_given_s0 = P_a0_given_s0 / row
-
-    # -----------------------------
-    # A_s
-    # cpd_style1.values is (S_new, S_old). Convert to (S_old, S_new) and normalize rows.
-    # -----------------------------
-    P_snew_given_sold = np.asarray(cpd_style1.values, dtype=float).reshape(S, S)  # rows=new, cols=old
-    A_s = P_snew_given_sold.T  # (s_old, s_new) => (s_prev, s)
-    row = A_s.sum(axis=1, keepdims=True)
-    row[row <= 0.0] = 1.0
-    A_s = A_s / row
-
-    # -----------------------------
-    # A_a
-    # CPD: P(Action_1 | Action_0, Style_1)
-    #
-    # We reshape to vals[a_cur, a_prev, s_cur] and then fill:
-    #   A_a[s_cur, a_prev, a_cur] = vals[a_cur, a_prev, s_cur]
-    # (then normalize over a_cur per (s_cur, a_prev)).
-    # -----------------------------
-    vals = np.asarray(cpd_action1.values, dtype=float)
-    # pgmpy may provide (A_cur, A_prev*S) or already multi-dim; handle both robustly
-    if vals.ndim == 2:
-        # (A_cur, A_prev*S) -> (A_cur, A_prev, S)
-        vals = vals.reshape(A, A, S)
-    elif vals.ndim == 3:
-        # expected (A_cur, A_prev, S)
-        if vals.shape != (A, A, S):
-            vals = vals.reshape(A, A, S)
-    else:
-        # very unexpected; last-resort reshape
-        vals = vals.reshape(A, A, S)
-
-    A_a = np.zeros((S, A, A), dtype=float)  # (s_cur, a_prev, a_cur)
-    for s_cur in range(S):
-        for a_prev in range(A):
-            probs = vals[:, a_prev, s_cur]  # (A_cur,)
-            psum = float(probs.sum())
-            if not np.isfinite(psum) or psum <= 0.0:
-                A_a[s_cur, a_prev, :] = 1.0 / A
-            else:
-                A_a[s_cur, a_prev, :] = probs / psum
-
-    return pi_s0, pi_a0_given_s0, A_s, A_a
-
-# =============================================================================
-# Torch forward-backward 
-# =============================================================================
-def forward_backward_torch(pi_s0, pi_a0_given_s0, A_s, A_a, logB_s_a):
-    """
-    Structured forward–backward in log-domain for z_t = (s_t, a_t), using factorized transitions:
-        P(s_t | s_{t-1}) = A_s[s_prev, s]
-        P(a_t | a_{t-1}, s_t) = A_a[s, a_prev, a]
-    Emissions are provided over the joint state:
-        logB_s_a[t, s, a] = log p(o_t | s_t=s, a_t=a)
-
-    Parameters
-    pi_s0 : torch.Tensor
-        Initial style distribution, shape (S,). P(s_0 = s).
-    pi_a0_given_s0 : torch.Tensor
-        Initial action distribution given style, shape (S, A). P(a_0 = a | s_0 = s).
-    A_s : torch.Tensor
-        Style transition matrix, shape (S, S). Row-stochastic over s given s_prev.
-        A_s[s_prev, s] = P(s_t = s | s_{t-1} = s_prev).
-    A_a : torch.Tensor
-        Action transition matrix, shape (S, A, A). Row-stochastic over a given (s, a_prev).
-        A_a[s, a_prev, a] = P(a_t = a | a_{t-1} = a_prev, s_t = s).
-    logB_s_a : torch.Tensor
-        Emission log-likelihoods, shape (T, S, A).
-        logB_s_a[t, s, a] = log p(o_t | s_t=s, a_t=a).
-
-    Returns
-    gamma_s_a : torch.Tensor
-        Posterior marginal over joint states, shape (T, S, A).
-        gamma_s_a[t, s, a] = P(s_t=s, a_t=a | O).
-    xi_s_sum : torch.Tensor
-        Expected style transition counts summed over time, shape (S, S).
-        xi_s_sum[s_prev, s] = sum_t P(s_t=s_prev, s_{t+1}=s | O).
-    xi_a_sum : torch.Tensor
-        Expected action transition counts summed over time, shape (S, A, A).
-        xi_a_sum[s, a_prev, a] = sum_t P(s_{t+1}=s, a_t=a_prev, a_{t+1}=a | O).
-    loglik : torch.Tensor
-        Log-likelihood of the observation sequence. Scalar.
-        loglik = log p(O_0:T-1).
-    """
-    T, S, A = logB_s_a.shape
-    device = logB_s_a.device
-    dtype = logB_s_a.dtype
-
-    if T == 0:
-        gamma = torch.empty((0, S, A), device=device, dtype=dtype)
-        xi_s_sum = torch.zeros((S, S), device=device, dtype=dtype)
-        xi_a_sum = torch.zeros((S, A, A), device=device, dtype=dtype)
-        loglik = torch.tensor(0.0, device=device, dtype=dtype)
-        return gamma, xi_s_sum, xi_a_sum, loglik
-
-    log_pi_s0 = torch.log(pi_s0 + EPSILON)                      # (S,)
-    log_pi_a0_given_s0 = torch.log(pi_a0_given_s0 + EPSILON)    # (S,A)
-    logAs = torch.log(A_s + EPSILON)                            # (S_prev,S_cur)
-    logAa = torch.log(A_a + EPSILON)                            # (S_cur,A_prev,A_cur)
-
-    # Helpful pre-permute:
-    # For forward: need logAa indexed as (S_cur, A_prev, A_cur) already OK.
-    # For xi vectorization: need (A_prev, S_cur, A_cur)
-    logAa_ap_s_a = logAa.permute(1, 0, 2)                       # (A_prev, S_cur, A_cur)
-    # For forward style addition: use logAs^T so we can broadcast (S_cur,S_prev,...)
-    logAs_T = logAs.transpose(0, 1)                             # (S_cur,S_prev)
-
-    # ------------------------------------------------------------------
-    # Forward pass 
-    # ------------------------------------------------------------------
-    # alpha[t,s,a] normalized by c[t]
-    alpha = torch.empty((T, S, A), device=device, dtype=dtype)
-    c = torch.empty((T,), device=device, dtype=dtype)
-
-    # t=0
-    alpha0 = log_pi_s0[:, None] + log_pi_a0_given_s0 + logB_s_a[0] # (S,A)
-    c[0] = torch.logsumexp(alpha0.reshape(-1), dim=0)
-    alpha[0] = alpha0 - c[0]
-
-    # forward recursion
-    for t in range(1, T):
-        prev = alpha[t - 1]  # (S_prev,A_prev)
-
-        # tmp = prev + logAa for all s_cur:
-        # prev[None, S_prev, A_prev, 1] + logAa[S_cur, 1, A_prev, A_cur]
-        tmp = prev[None, :, :, None] + logAa[:, None, :, :]     # (S_cur, S_prev, A_prev, A_cur)
-        m = torch.logsumexp(tmp, dim=2)     # sum over a_prev -> (S_cur, S_prev, A_cur)
-
-        tmp2 = m + logAs_T[:, :, None]                # add style -> (S_cur, S_prev, A_cur)
-        next_alpha = torch.logsumexp(tmp2, dim=1)     # sum over s_prev -> (S_cur, A_cur)
-
-        a = next_alpha + logB_s_a[t]                  # (S,A)
-        c[t] = torch.logsumexp(a.reshape(-1), dim=0)
-        alpha[t] = a - c[t]
-
-    loglik = c.sum()
-
-    # ------------------------------------------------------------------
-    # Backward pass 
-    # ------------------------------------------------------------------
-    beta = torch.zeros((T, S, A), device=device, dtype=dtype)
-    beta[T - 1] = 0.0
-
-    for t in range(T - 2, -1, -1):
-        nb = logB_s_a[t + 1] + beta[t + 1]         # (S_cur, A_cur)
-
-        # h[s_cur, a_prev] = logsumexp_{a_cur}( logAa[s_cur,a_prev,a_cur] + nb[s_cur,a_cur] )
-        h = torch.logsumexp(logAa + nb[:, None, :], dim=2)           # (S_cur, A_prev)
-
-        # beta[t, s_prev, a_prev] = logsumexp_{s_cur}( logAs[s_prev,s_cur] + h[s_cur,a_prev] ) - c[t+1]
-        # Build (A_prev, S_prev, S_cur): logAs[None,S_prev,S_cur] + h.T[:,None,S_cur]
-        tmp = logAs[None, :, :] + h.transpose(0, 1)[:, None, :]      # (A_prev, S_prev, S_cur)
-        bt = torch.logsumexp(tmp, dim=2).transpose(0, 1)             # (S_prev, A_prev)
-
-        beta[t] = bt - c[t + 1]
-
-    # ------------------------------------------------------------------
-    # Gamma
-    # ------------------------------------------------------------------
-    log_gamma = alpha + beta
-    log_gamma = log_gamma - torch.logsumexp(log_gamma.reshape(T, -1), dim=1).view(T, 1, 1)
-    gamma = torch.exp(log_gamma)                                     # (T,S,A)
-
-    # ------------------------------------------------------------------
-    # Xi sums
-    # ------------------------------------------------------------------
-    xi_s_sum = torch.zeros((S, S), device=device, dtype=dtype)
-    xi_a_sum = torch.zeros((S, A, A), device=device, dtype=dtype)
-
-    if T > 1:
-        for t in range(T - 1):
-            nb = logB_s_a[t + 1] + beta[t + 1]        # (S_cur, A_cur)
-
-            # log_xi: (S_prev, A_prev, S_cur, A_cur)
-            log_xi = (
-                alpha[t][:, :, None, None]                           # (S, A, 1, 1)
-                + logAs[:, None, :, None]                            # (S, 1, S, 1)
-                + logAa_ap_s_a[None, :, :, :]                        # (1, A, S, A)
-                + nb[None, None, :, :]                               # (1, 1, S, A)
-            )
-
-            # normalize
-            Z = torch.logsumexp(log_xi.reshape(-1), dim=0)
-            xi = torch.exp(log_xi - Z)                               # (S,A,S,A)
-
-            # accumulate structured counts
-            xi_s_sum += xi.sum(dim=(1, 3))          # sum over a_prev,a_cur -> (s_prev,s_cur)
-            xi_a_sum += xi.sum(dim=0).permute(1, 0, 2)  # sum over s_prev -> (A_prev,s_cur,A_cur) => permute -> (s_cur,A_prev,A_cur)
-
-    return gamma, xi_s_sum, xi_a_sum, loglik
 
 # =============================================================================
 # Trainer
@@ -309,6 +94,10 @@ class HDVTrainer:
         self.A = self.hdv_dbn.num_action
         self.num_states = self.S * self.A
 
+        self.obs_index = {n: i for i, n in enumerate(self.obs_names)}
+        self.lc_idx = [self.obs_index.get("lc_left_present"), self.obs_index.get("lc_right_present")] # indices of lane change indicators
+        self.lc_idx = [i for i in self.lc_idx if i is not None] # filter out None
+
         pi_s0_np, pi_a0_given_s0_np, As_np, Aa_np = build_structured_transition_params(self.hdv_dbn)
 
 
@@ -332,6 +121,7 @@ class HDVTrainer:
         self.scaler_std = None   # shape (obs_dim,)
 
         self.verbose = int(getattr(TRAINING_CONFIG, "verbose", 1))
+        self.lc_weight_invfreq = None  # to be initialized if needed
 
     # ------------------------------------------------------------------
     # EM training loop
@@ -363,7 +153,9 @@ class HDVTrainer:
         patience = getattr(TRAINING_CONFIG, "early_stop_patience", 3)
         min_delta = getattr(TRAINING_CONFIG, "early_stop_min_delta_per_obs", 1e-4)
         delta_A_thresh = getattr(TRAINING_CONFIG, "early_stop_delta_A_thresh", 1e-5)
-        bad_epochs = 0
+        bad_epochs = 0 # counter for early stopping
+        prev_criterion = None # for early stopping
+        history = {"train_loglik": [], "val_loglik": []} # store loglik per iteration
 
         # Precompute number of observations (total timesteps)
         train_num_obs = int(sum(seq.shape[0] for seq in train_obs_seqs))
@@ -375,13 +167,8 @@ class HDVTrainer:
             if self.verbose:
                 print(f"Validation sequences: {len(val_obs_seqs)}  |  Val total timesteps: {val_num_obs}")
 
-        history = {"train_loglik": [], "val_loglik": []}
-
         # Initialisation of emission parameters
         self._init_emissions(train_obs_seqs)
-        self.emissions.to_device(device=self.device, dtype=self.dtype)
-        
-        prev_criterion = None 
 
         if self.verbose:
             print("\n==================== EM TRAINING START ====================\n")
@@ -394,6 +181,9 @@ class HDVTrainer:
                 print(f"Validation sequences:    {len(val_obs_seqs)}")
             print("-----------------------------------------------------------\n")
 
+        if getattr(TRAINING_CONFIG, "lc_weight_mode", "none") != "none": # initialize lane-change weights only if needed
+            self._init_lc_weight_invfreq(train_obs_seqs)
+
         for it in range(num_iters):
             iter_start = time.perf_counter()
             if self.verbose:
@@ -404,38 +194,43 @@ class HDVTrainer:
             # ----------------------
             if self.verbose:
                 print("E-step (train):")
-            gamma_all, xi_s_all, xi_a_all, train_ll, obs_used, obs_used_raw = self._e_step(
-                                                                                            obs_seqs=train_obs_seqs,
-                                                                                            use_progress=use_progress,
-                                                                                            verbose=self.verbose,
-                                                                                            it=it,
-                                                                                            obs_seqs_raw=train_obs_seqs_raw,
-                                                                                        )
+            e = self._e_step(
+                    obs_seqs=train_obs_seqs,
+                    use_progress=use_progress,
+                    verbose=self.verbose,
+                    it=it,
+                    obs_seqs_raw=train_obs_seqs_raw,
+                )
+            
+            gamma_all, xi_s_all, xi_a_all = e.gamma_all, e.xi_s_all, e.xi_a_all
+            train_ll, obs_used, obs_used_raw = e.total_loglik, e.obs_used, e.obs_used_raw
+
             train_ll_per_obs = train_ll / max(train_num_obs, 1)
 
             # -----------------------------------------------------------
             # Trajectory-level diagnostics (from posteriors)
             # -----------------------------------------------------------
-            run_lengths_train, runlen_median_per_traj = self._run_lengths_from_gamma_argmax(gamma_all)
-            ent_all_train, ent_mean_per_traj = self._posterior_entropy_from_gamma(gamma_all)
+            run_lengths_train, runlen_median_per_traj = _run_lengths_from_gamma_argmax(gamma_all)
+            ent_all_train, ent_mean_per_traj = _posterior_entropy_from_gamma(self.num_states, gamma_all) 
             # Semantics (scaled-space) for relative comparisons
-            sem_feat_names, sem_means, sem_stds = self._posterior_weighted_key_feature_stats(obs_used, gamma_all)
+            sem_feat_names, sem_means, sem_stds = _posterior_weighted_key_feature_stats(self.num_states, self.obs_names, obs_used, gamma_all)
             # Semantics (raw-space) for physical interpretation (meters, m/s, etc.)
             sem_means_raw, sem_stds_raw = None, None
             if obs_used_raw is not None:
-                _, sem_means_raw, sem_stds_raw = self._posterior_weighted_key_feature_stats(obs_used_raw, gamma_all)
+                _, sem_means_raw, sem_stds_raw = _posterior_weighted_key_feature_stats(self.num_states, self.obs_names, obs_used_raw, gamma_all)
 
             # ----------------------
             # M-step: update pi_s0, pi_a0|s0, A_s, A_a
             # ----------------------
             if self.verbose:
                 print("M-step: updating pi_s0, pi_a0|s0, A_s, A_a...")
-            delta_pi, delta_A, A_prev, A_new = self._m_step_transitions(
-                                                    gamma_all=gamma_all,
-                                                    xi_s_all=xi_s_all,
-                                                    xi_a_all=xi_a_all,
-                                                    verbose=self.verbose,
-                                                )
+            m = self._m_step_transitions(
+                    gamma_all=gamma_all,
+                    xi_s_all=xi_s_all,
+                    xi_a_all=xi_a_all,
+                    verbose=self.verbose,
+                )
+            delta_pi, delta_A, A_prev, A_new = m.delta_pi, m.delta_A, m.A_prev, m.A_new
             # ----------------------
             # M-step: update emission parameters
             # ----------------------
@@ -483,7 +278,7 @@ class HDVTrainer:
                 WandbLogger.log_iteration(
                     trainer=self,
                     wandb_run=wandb_run,
-                    it=it,
+                    it=it+1,
                     iter_start=iter_start,
                     total_train_loglik=train_ll,
                     total_val_loglik=val_ll,
@@ -538,7 +333,7 @@ class HDVTrainer:
             WandbLogger.log_iteration(
                 trainer=self,
                 wandb_run=wandb_run,
-                it=it,
+                it=it+1,
                 iter_start=iter_start,
                 total_train_loglik=train_ll,
                 total_val_loglik=val_ll,
@@ -571,9 +366,8 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     def _compute_lc_weights(self, obs):
         """
-        compute per-timestep weights based on lane change indicator features.
-        If either "lc_left_present" or "lc_right_present" is > 0.5, weight is TRAINING_CONFIG.lc_weight, else 1.0.
-
+        Compute per-timestep weights based on lane-change indicator features.
+    
         Parameters
         obs : np.ndarray
             Observation sequence, shape (T, obs_dim).
@@ -582,37 +376,136 @@ class HDVTrainer:
         w : torch.Tensor
             Weights per timestep, shape (T,), on self.device.
         """
-        name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
-        idx = []
-        for k in ("lc_left_present", "lc_right_present"):
-            if k in name_to_idx:
-                idx.append(name_to_idx[k])
+        T = obs.shape[0]
 
-        if not idx:
-            return torch.ones((obs.shape[0],), device=self.device, dtype=self.dtype)
+        # No LC features present in this dataset
+        if not self.lc_idx:
+            return torch.ones((T,), device=self.device, dtype=self.dtype)
 
-        x = torch.as_tensor(obs, device=self.device, dtype=self.dtype)
-        lc_active = (x[:, idx] > 0.5).any(dim=1)
+        obs_np = np.asarray(obs)
+        lc_cols = obs_np[:, self.lc_idx]  # (T, L)
+        lc_active_np = np.any(lc_cols > 0.5, axis=1)  # (T,) bool
 
-        w = torch.ones_like(lc_active, dtype=self.dtype)
-        w[lc_active] = float(TRAINING_CONFIG.lc_weight)
-        return w
+        # Base weights
+        w = torch.ones((T,), device=self.device, dtype=self.dtype)
 
+        # Which LC weight to use
+        w_lc = self.lc_weight_invfreq
+        w_lc = float(w_lc) if (w_lc is not None) else float(TRAINING_CONFIG.lc_weight)
 
-    def _compute_logB_for_sequence(self, obs):
-        """
-        Compute emission log-likelihoods for one trajectory:
-            logB[t, z] = log p(o_t | Z_t=z)
+        if lc_active_np.any():
+            lc_active = torch.from_numpy(lc_active_np).to(device=self.device)
+            w[lc_active] = w_lc
 
-        Parameters
-        obs : np.ndarray
-            Observation sequence, shape (T, obs_dim).
+        return w # (T,) where lc timesteps have higher weights and non -lc timesteps have weight 1.0
+
+    def _compute_logB(self, obs, skipped_bad_logB, i):
+        # emissions are joint-indexed: (T, N). N = S * A
+        logB_flat = self.emissions.loglikelihood(obs)  # (T, N); Compute emission log-likelihoods logB[t,z] = log p(o_t | z)
         
-        Returns
-        logB : torch.Tensor
-            Emission log-likelihoods, shape (T, num_states), on self.device.
+        if logB_flat.ndim != 2 or logB_flat.shape[1] != self.num_states or logB_flat.shape[0] != obs.shape[0]:
+            raise ValueError(
+                f"logB_flat has shape {tuple(logB_flat.shape)}, expected ({obs.shape[0]},{self.num_states}). "
+                f"Check emission model vs num_states (S={self.S}, A={self.A})."
+            )
+        if not torch.isfinite(logB_flat).all(): # Skip if emissions contain non-finite values (avoids NaNs later)
+            skipped_bad_logB += 1
+            if self.verbose >= 2:
+                bad = (~torch.isfinite(logB_flat)).sum().item()
+                print(f"  Seq {i:03d}: logB has {bad} non-finite entries, skipping.")
+            return None, skipped_bad_logB
+        
+        # Reshape logB to (T, S, A) for structured FB
+        logB_s_a = logB_flat.view(obs.shape[0], self.S, self.A)   # logB[t,s,a] = log p(o_t | s,a); shape (T, S, A)
+
+        return logB_s_a, skipped_bad_logB
+    
+    def _run_forward_backward(self, logB_s_a, mode):
         """
-        return self.emissions.loglik_all_states(obs)
+        Wrapper around forward_backward_torch that returns a uniform signature.
+
+        Returns
+        gamma_s_a : torch.Tensor  # (T,S,A)
+        xi_s_sum  : torch.Tensor  # (S,S)
+        xi_a_sum  : torch.Tensor  # (S,A,A)
+        loglik    : torch.Tensor  # scalar
+        xi_s_t    : torch.Tensor | None  # (T-1,S,S) if mode=="B" else None
+        xi_a_t    : torch.Tensor | None  # (T-1,S,A,A) if mode=="B" else None
+        """
+        if mode == "B":
+            gamma_s_a, xi_s_sum, xi_a_sum, loglik, xi_s_t, xi_a_t = forward_backward_torch(
+                self.pi_s0,
+                self.pi_a0_given_s0,
+                self.A_s,
+                self.A_a,
+                logB_s_a,
+                return_xi_t=True,
+            )
+            return gamma_s_a, xi_s_sum, xi_a_sum, loglik, xi_s_t, xi_a_t
+
+        gamma_s_a, xi_s_sum, xi_a_sum, loglik = forward_backward_torch(
+            self.pi_s0,
+            self.pi_a0_given_s0,
+            self.A_s,
+            self.A_a,
+            logB_s_a,
+            return_xi_t=False,
+        )
+        return gamma_s_a, xi_s_sum, xi_a_sum, loglik, None, None
+
+
+    def _apply_mode_B_weighting(self, gamma_s_a, xi_s_sum, xi_a_sum, xi_s_t, xi_a_t, w_t, T, xi_mode):
+        """
+        Apply lane-change weighting in mode == "B" to sufficient statistics.
+
+        This modifies:
+        - gamma_flat: node weights (T,N)
+        - xi_s_sum  : edge-weighted expected style transition counts (S,S)
+        - xi_a_sum  : edge-weighted expected action transition counts (S,A,A)
+
+        Inputs (shapes):
+        gamma_s_a : (T,S,A)
+        xi_s_sum  : (S,S)          (unweighted sum from FB)
+        xi_a_sum  : (S,A,A)        (unweighted sum from FB)
+        xi_s_t    : (T-1,S,S)      (per-edge, only if T>=2)
+        xi_a_t    : (T-1,S,A,A)    (per-edge, only if T>=2)
+        w_t       : (T,)
+        xi_mode   : "next" or "avg"
+
+        Returns
+        gamma_flat_weighted : (T,N)
+        xi_s_sum_weighted   : (S,S)
+        xi_a_sum_weighted   : (S,A,A)
+        """
+        if w_t is None:
+            raise ValueError("mode=='B' requires w_t, got None")
+        if xi_s_t is None or xi_a_t is None:
+            raise ValueError("mode=='B' requires xi_*_t, got None")
+
+        # 0) flatten gamma for emission updates
+        gamma_flat = gamma_s_a.reshape(T, self.num_states)
+
+        # 1) weight gamma per time step (DO NOT renormalize)
+        gamma_flat = gamma_flat * w_t[:, None]  # (T,N); only those time steps with lc have higher weights, and hence higher responsibilities.
+
+        # 2) weight xi per transition step
+        if T >= 2:
+            # edge weights have shape (T-1,)
+            if xi_mode == "avg":
+                w_edge = 0.5 * (w_t[:-1] + w_t[1:])  # (T-1,); treats the edge as equally “owned” by both endpoints.
+            else:
+                w_edge = w_t[1:]  # (T-1,); weight of the destination timestep controls the transition leading into it.
+
+            # weighted expected transition counts
+            xi_s_sum = (xi_s_t * w_edge[:, None, None]).sum(dim=0)               # (S,S)
+            xi_a_sum = (xi_a_t * w_edge[:, None, None, None]).sum(dim=0)         # (S,A,A)
+        else:
+            # no transitions
+            xi_s_sum = xi_s_sum * 0.0
+            xi_a_sum = xi_a_sum * 0.0
+
+        return gamma_flat, xi_s_sum, xi_a_sum
+
 
     def _e_step(self, obs_seqs, use_progress, verbose, it, obs_seqs_raw=None):
         """
@@ -651,13 +544,16 @@ class HDVTrainer:
         A = int(self.A)
         N = int(self.num_states)
 
+        # per sequence list of tensors
         gamma_all = []
         xi_s_all = []
         xi_a_all = []
-        obs_used = []
-        obs_used_raw = [] if (obs_seqs_raw is not None) else None
+
+        obs_used = [] # sequences that weren’t skipped.
+        obs_used_raw = [] if (obs_seqs_raw is not None) else None # same as obs_used but raw-scale, only if provided.
         total_loglik = 0.0
 
+        # to track why sequences were skipped
         skipped_empty = 0
         skipped_bad_logB = 0
         skipped_bad_ll = 0
@@ -666,43 +562,77 @@ class HDVTrainer:
         if use_progress:
             iterator = tqdm(iterator, total=len(obs_seqs), desc=f"E-step train (iter {it+1})", leave=False,)
 
+        mode = getattr(TRAINING_CONFIG, "lc_weight_mode", "none")
+        # choose edge weight scheme
+        xi_mode = getattr(TRAINING_CONFIG, "lc_xi_weight", "next")
+
+        debug_asserts = bool(getattr(TRAINING_CONFIG, "debug_asserts", False))
+
         with torch.no_grad():
-            for i, obs in iterator:
-        
-                if obs is None or obs.shape[0] == 0:
+            for i, obs in iterator: # iterates through each vehicle trajectory
+                if obs is None or obs.shape[0] == 0: # no time steps in this sequence
                     skipped_empty += 1
                     continue
 
-                # emissions are joint-indexed: (T, N). Reshape to (T, S, A) for structured FB.
-                logB_flat = self._compute_logB_for_sequence(obs)  # (T, N); Compute emission log-likelihoods logB[t,z] = log p(o_t | z)
-                
-                if logB_flat.ndim != 2 or logB_flat.shape[1] != N:
-                    raise ValueError(
-                        f"logB_flat has shape {tuple(logB_flat.shape)}, expected (T,{N}). "
-                        f"Check emission model vs num_states (S={S}, A={A})."
-                    )
-                if not torch.isfinite(logB_flat).all(): # Skip if emissions contain non-finite values (avoids NaNs later)
-                    skipped_bad_logB += 1
-                    if verbose >= 2:
-                        bad = (~torch.isfinite(logB_flat)).sum().item()
-                        print(f"  Seq {i:03d}: logB has {bad} non-finite entries, skipping.")
+                T = obs.shape[0] # number of timesteps
+
+                logB_s_a, skipped_bad_logB = self._compute_logB(obs, skipped_bad_logB, i)
+                if logB_s_a is None:
                     continue
 
-                T = int(logB_flat.shape[0])
+                w_t = self._compute_lc_weights(obs) if mode in ("A", "B") else None # (T,) where lc timesteps have higher weights and non -lc timesteps have weight 1.0
                 
-                if T <= 0:
-                    skipped_empty += 1
-                    continue
+                # tempered likelihood (affects inference) 
+                if mode == "A":
+                    # logB[t,s,a] *= w_t[t]
+                    logB_s_a = logB_s_a * w_t[:, None, None] # tempered likelihood, power likelihood, or annealed inference.
+                
+                # Run forward-backward 
+                gamma_s_a, xi_s_sum, xi_a_sum, loglik, xi_s_t, xi_a_t = self._run_forward_backward(logB_s_a=logB_s_a, mode=mode)
+                
+                if mode == "B" and debug_asserts:
+                    if xi_s_t is None or xi_a_t is None:
+                        raise ValueError("mode=='B' requires xi_*_t, got None")
 
-                logB_s_a = logB_flat.view(T, S, A)  # (T,S,A)
-            
-                gamma_s_a, xi_s_sum, xi_a_sum, loglik = forward_backward_torch(
-                                                                        self.pi_s0, self.pi_a0_given_s0, self.A_s, self.A_a, logB_s_a
-                                                                    )
+                    if T >= 2:
+                        exp_xi_s_t_shape = (T - 1, S, S)
+                        exp_xi_a_t_shape = (T - 1, S, A, A)
+
+                        if xi_s_t.shape != exp_xi_s_t_shape:
+                            raise ValueError(
+                                f"xi_s_t has shape {tuple(xi_s_t.shape)}, expected {exp_xi_s_t_shape}"
+                            )
+                        if xi_a_t.shape != exp_xi_a_t_shape:
+                            raise ValueError(
+                                f"xi_a_t has shape {tuple(xi_a_t.shape)}, expected {exp_xi_a_t_shape}"
+                            )
+                        # Finite checks (avoid poisoning weighted sums)
+                        if not torch.isfinite(xi_s_t).all():
+                            raise ValueError("xi_s_t contains non-finite values")
+                        if not torch.isfinite(xi_a_t).all():
+                            raise ValueError("xi_a_t contains non-finite values")
+
+                        xi_s_sum_from_t = xi_s_t.sum(dim=0)
+                        if not torch.allclose(xi_s_sum, xi_s_sum_from_t, rtol=1e-4, atol=1e-6):
+                            max_abs = (xi_s_sum - xi_s_sum_from_t).abs().max().item()
+                            raise ValueError(
+                                f"xi_s_sum != xi_s_t.sum(0) (max_abs_diff={max_abs:.3e})"
+                            )
+
+                        xi_a_sum_from_t = xi_a_t.sum(dim=0)
+                        if not torch.allclose(xi_a_sum, xi_a_sum_from_t, rtol=1e-4, atol=1e-6):
+                            max_abs = (xi_a_sum - xi_a_sum_from_t).abs().max().item()
+                            raise ValueError(
+                                f"xi_a_sum != xi_a_t.sum(0) (max_abs_diff={max_abs:.3e})"
+                            )
+                    else:
+                        if xi_s_t.numel() != 0 or xi_a_t.numel() != 0:
+                            raise ValueError("Expected empty xi_*_t tensors when T < 2")
+
                 if loglik.ndim != 0:
                     raise ValueError(f"loglik must be scalar, got shape {tuple(loglik.shape)}")
                 
-                if (not torch.isfinite(loglik)) or torch.isnan(loglik):
+                if not torch.isfinite(loglik):
                     skipped_bad_ll += 1
                     if verbose >= 2:
                         print(f"  Seq {i:03d}: loglik is non-finite, skipping.")
@@ -717,19 +647,27 @@ class HDVTrainer:
                 if xi_a_sum.shape != (S, A, A):
                     raise ValueError(f"xi_a_sum has shape {tuple(xi_a_sum.shape)}, expected {(S, A, A)}")
 
-
-                gamma_flat = gamma_s_a.reshape(T, N)
-
-                # Apply lane-change weighting to gamma if specified
-                w_t = self._compute_lc_weights(obs)   # (T,)
-                gamma_flat = gamma_flat * w_t[:, None]
-
-                gamma_all.append(gamma_flat)
-                xi_s_all.append(xi_s_sum)
-                xi_a_all.append(xi_a_sum)      
+                if mode == "B":
+                    # weighted sufficient statistics (fractional counts) 
+                    gamma_flat, xi_s_sum, xi_a_sum = self._apply_mode_B_weighting(
+                        gamma_s_a=gamma_s_a,
+                        xi_s_sum=xi_s_sum,
+                        xi_a_sum=xi_a_sum,
+                        xi_s_t=xi_s_t,
+                        xi_a_t=xi_a_t,
+                        w_t=w_t,
+                        T=T,
+                        xi_mode=xi_mode
+                    )
+                else:
+                    gamma_flat = gamma_s_a.reshape(T, N) #  # flattened gamma for emission updates
+                    
+                gamma_all.append(gamma_flat) # (T,N) responsibilities per timestep over joint latent state; for emission M-step
+                xi_s_all.append(xi_s_sum)    # (S,S) expected counts of style transitions; for A_s update
+                xi_a_all.append(xi_a_sum)    # (S,A,A) expected counts of action transitions; for A_a update
 
                 obs_used.append(obs)
-                if obs_used_raw is not None:
+                if obs_used_raw is not None: # to track which observations were used
                     obs_used_raw.append(obs_seqs_raw[i])
 
                 ll_i = float(loglik.detach().cpu().item())
@@ -745,92 +683,17 @@ class HDVTrainer:
                 f"skipped_empty={skipped_empty}, skipped_bad_logB={skipped_bad_logB}, skipped_bad_ll={skipped_bad_ll}"
             )
 
-        return gamma_all, xi_s_all, xi_a_all, total_loglik, obs_used, obs_used_raw
-
-    def _run_lengths_from_gamma_argmax(self, gamma_all):
-        """
-        Compute run-lengths (segment durations) from hard labels:
-            z_hat[t] = argmax_k gamma[t,k]
-
-        Returns
-        run_lengths : np.ndarray, shape (num_segments,)
-            Lengths of contiguous segments across all trajectories.
-        per_traj_median : np.ndarray, shape (num_traj,)
-            Median run length within each trajectory (NaN if T==0).
-        """
-        all_runs = []
-        traj_medians = []
-
-        for gamma in gamma_all:
-            T = int(gamma.shape[0])
-            if T <= 0:
-                traj_medians.append(np.nan)
-                continue
-
-            # hard path from marginals
-            z_hat = torch.argmax(gamma, dim=1).detach().cpu().numpy().astype(np.int64)
-
-            # compute contiguous run lengths
-            runs = []
-            cur = 1
-            for t in range(1, T):
-                if z_hat[t] == z_hat[t - 1]:
-                    cur += 1
-                else:
-                    runs.append(cur)
-                    cur = 1
-            runs.append(cur)
-
-            runs_np = np.asarray(runs, dtype=np.int64)
-            all_runs.append(runs_np)
-            traj_medians.append(float(np.median(runs_np)) if runs_np.size > 0 else np.nan)
-
-        if len(all_runs) == 0:
-            run_lengths = np.asarray([], dtype=np.int64)
-        else:
-            run_lengths = np.concatenate(all_runs, axis=0)
-
-        return run_lengths.astype(np.int64), np.asarray(traj_medians, dtype=np.float64)
-    
-    def _posterior_entropy_from_gamma(self, gamma_all):
-        """
-        Compute normalized posterior entropy from gamma per timestep.
-
-        Returns
-        -------
-        ent_all : np.ndarray, shape (sum_T,)
-            Normalized entropies pooled over all timesteps in all trajectories. In [0,1].
-        ent_mean_per_traj : np.ndarray, shape (num_traj,)
-            Mean normalized entropy per trajectory (NaN if T==0).
-        """
-        K = int(self.num_states)
-        logK = float(np.log(max(K, 2)))  # avoid divide-by-zero; K>=2 in practice
-
-        ent_list = []
-        ent_mean_traj = []
-
-        for gamma in gamma_all:
-            T = int(gamma.shape[0])
-            if T <= 0:
-                ent_mean_traj.append(np.nan)
-                continue
-
-            # gamma: (T,K). Ensure numerical stability.
-            g = gamma.detach().cpu().numpy().astype(np.float64)
-            g = np.clip(g, 1e-15, 1.0)
-            g = g / g.sum(axis=1, keepdims=True)
-
-            # H_t = -sum_k g*log(g)  -> (T,)
-            H = -np.sum(g * np.log(g), axis=1)
-
-            # normalized entropy in [0,1]
-            Hn = H / logK
-            ent_list.append(Hn)
-            ent_mean_traj.append(float(np.mean(Hn)))
-
-        ent_all = np.concatenate(ent_list, axis=0) if len(ent_list) else np.asarray([], dtype=np.float64)
-        return ent_all.astype(np.float64), np.asarray(ent_mean_traj, dtype=np.float64)
-
+        return EStepResult(
+            gamma_all=gamma_all,
+            xi_s_all=xi_s_all,
+            xi_a_all=xi_a_all,
+            total_loglik=total_loglik,
+            obs_used=obs_used,
+            obs_used_raw=obs_used_raw,
+            skipped_empty=skipped_empty,
+            skipped_bad_logB=skipped_bad_logB,
+            skipped_bad_ll=skipped_bad_ll,
+        )
 
     def _total_loglik_on_dataset(self, obs_seqs, use_progress, desc):
         """
@@ -859,7 +722,7 @@ class HDVTrainer:
                 if obs is None or obs.shape[0] == 0:
                     continue
 
-                logB_flat = self._compute_logB_for_sequence(obs)  # (T,N)
+                logB_flat = self.emissions.loglikelihood(obs)  # (T,N)
                 if logB_flat.ndim != 2 or logB_flat.shape[1] != int(self.num_states):
                     raise ValueError(
                         f"logB_flat has shape {tuple(logB_flat.shape)}, expected (T,{int(self.num_states)})."
@@ -997,7 +860,12 @@ class HDVTrainer:
             "A_a": self.A_a.detach().cpu().numpy().copy(),
         }
 
-        return delta_pi, delta_A, A_prev, A_new
+        return TransitionUpdate(
+            delta_pi=delta_pi,
+            delta_A=delta_A,
+            A_prev=A_prev,
+            A_new=A_new,
+        )
     
     def _m_step_emissions(self, train_obs_seqs, gamma_all, use_progress, verbose):
         """
@@ -1042,101 +910,182 @@ class HDVTrainer:
         max_samples = TRAINING_CONFIG.max_kmeans_samples
         seed = TRAINING_CONFIG.seed
         print("[HDVTrainer] Initialising emissions with (subsampled) k-means...")
+        K = int(self.num_states) # total joint states
+        rng = np.random.default_rng(seed)
 
-        # Stack all time steps from all trajectories
-        X_all = np.vstack(train_obs_seqs)  # (N_total, obs_dim)
-        N_total = int(X_all.shape[0])
-        K = int(self.num_states)
 
-        # -----------------------------
-        # Continuous part (Gaussian)
-        # -----------------------------
-        cont_idx = np.asarray(self.emissions.cont_idx, dtype=int)  
+        cont_idx = np.asarray(self.emissions.cont_idx, dtype=np.int64)  
         if cont_idx.size == 0:
             raise RuntimeError("MixedEmissionModel has no continuous dimensions to initialise.")  
 
-        X_all_cont = X_all[:, cont_idx]  # (N_total, cont_dim)
-        cont_dim = int(X_all_cont.shape[1])
+        bin_idx = np.asarray(getattr(self.emissions, "bin_idx", []), dtype=np.int64)
+        
+        # -----------------------------
+        # Continuous part (Gaussian)
+        # -----------------------------
+        pool = [] # to store a small sample of continuous rows for clustering (size ≤ max_samples)
+        pool_n = 0 # counter of total rows seen so far
+        cont_dim = None # no of continuous dims
 
-        # Drop rows with non-finite continuous values (window stats may be NaN by design).
-        finite_rows = np.all(np.isfinite(X_all_cont), axis=1)
-        X_all_cont_f = X_all_cont[finite_rows]
-        if X_all_cont_f.shape[0] < max(10 * K, cont_dim + 1):
-            # Fallback: replace non-finite with column medians (robust) then proceed.
-            Xc_tmp = X_all_cont.copy()
-            col_med = np.nanmedian(np.where(np.isfinite(Xc_tmp), Xc_tmp, np.nan), axis=0)
-            col_med = np.where(np.isfinite(col_med), col_med, 0.0)
-            bad = ~np.isfinite(Xc_tmp)
-            Xc_tmp[bad] = np.take(col_med, np.where(bad)[1])
-            X_all_cont_f = Xc_tmp
+        def try_add_rows(Xc_rows):
+            """
+            Add rows to reservoir pool up to max_samples (uniform reservoir sampling).
+            The rows are added only with a probabiity of max_samples / total_rows_seen_so_far,
+            ensuring that at the end, each row has equal probability of being included in the pool. 
+            
+            parameters
+            Xc_rows : np.ndarray
+                Continuous data rows to consider adding, shape (M, cont_dim).
+            """
+            nonlocal pool, pool_n
+            for row in Xc_rows:
+                pool_n += 1
+                if len(pool) < max_samples: # pool not full yet
+                    pool.append(row) # The first max_samples rows are always kept
+                else: # pool is full => probabilistic replacement
+                    j = rng.integers(0, pool_n)
+                    if j < max_samples:
+                        pool[j] = row
 
-        # Choose a random subset for clustering
-        rng = np.random.default_rng(seed)
-        N_f = int(X_all_cont_f.shape[0])
-        if N_f > max_samples:
-            idx = rng.choice(N_f, size=max_samples, replace=False)
-            Xc = X_all_cont_f[idx]
-            print(f"  Using subsample of {max_samples} out of {N_f} finite/filled points for k-means initialisation.")
+        for seq in train_obs_seqs:
+            X = np.asarray(seq)
+            Xc = X[:, cont_idx] # continuous part
+            if cont_dim is None:
+                cont_dim = int(Xc.shape[1])
+
+            # Prefer fully-finite rows
+            finite_rows = np.isfinite(Xc).all(axis=1)
+            Xc_f = Xc[finite_rows]
+            if Xc_f.size:
+                try_add_rows(Xc_f)
+
+        # If pool is empty (all rows had NaNs), fall back to partially-finite rows
+        if len(pool) == 0:
+            # Simple safe fallback: replace non-finite with 0.0 *per row* (no giant copies)
+            for seq in train_obs_seqs:
+                X = np.asarray(seq)
+                Xc = X[:, cont_idx].copy()
+                bad = ~np.isfinite(Xc)
+                if bad.any():
+                    Xc[bad] = 0.0
+                try_add_rows(Xc)
+
+        Xc = np.asarray(pool, dtype=np.float64) # shape (n_pool, cont_dim)
+        if Xc.ndim != 2 or Xc.shape[0] < max(10 * K, (Xc.shape[1] if Xc.ndim == 2 else 1) + 1): # check if we have enough data
+            # Extremely small data support: just use global mean/var on whatever we have.
+            mu = np.nanmean(Xc, axis=0) if Xc.size else np.zeros((cont_idx.size,), dtype=np.float64)
+            var = np.nanvar(Xc, axis=0) + 1e-6 if Xc.size else np.ones((cont_idx.size,), dtype=np.float64)
+            var = np.where(np.isfinite(var), var, 1.0)
+            var = np.maximum(var, 1e-6)
+            for z in range(K): # assign all joint states to have same params for gaussian emissions
+                s, a = self.emissions.gauss._z_to_sa(z)
+                self.emissions.gauss.params[s, a] = GaussianParams(mean=mu, var=var)
         else:
-            Xc = X_all_cont_f
-            print(f"  Using all {N_f} finite/filled points for k-means initialisation.")
+            # Global variance fallback
+            global_var = np.var(Xc, axis=0) + 1e-6
+            global_var = np.where(np.isfinite(global_var), global_var, 1.0)
+            global_var = np.maximum(global_var, 1e-6)
 
-        # global variance (diag) as fallback
-        global_var = np.var(Xc, axis=0) + 1e-6  
-        global_var = np.where(np.isfinite(global_var), global_var, 1.0) 
-        global_var = np.maximum(global_var, 1e-6)  
-
-        # ---- Fast clustering ----
-        mbk = MiniBatchKMeans(
-                n_clusters=K,
+            mbk = MiniBatchKMeans(
+                n_clusters=K, # one cluster per joint state (S×A)
                 batch_size=2048,
                 max_iter=100,
                 n_init=5,
-                random_state=seed
+                random_state=seed,
             )
-        labels = mbk.fit_predict(Xc)
-        centers = mbk.cluster_centers_  # (K, cont_dim)
+            labels = mbk.fit_predict(Xc) # Fits KMeans and returns a label for each sampled row. shape (n_pool,)
+            centers = mbk.cluster_centers_ # Centers for each cluster. shape (K, cont_dim)
 
-        # For each cluster (joint state index z)
-        for z in range(K):
-            mask = (labels == z)
-            num_points = int(mask.sum())
+            # Assign per-cluster Gaussian params
+            for z in range(K):
+                mask = (labels == z) # boolean mask for rows assigned to cluster z
+                num_points = int(mask.sum())
+                if num_points < Xc.shape[1] + 1: # not enough points to compute a valid covariance
+                    mean_z = centers[z]
+                    var_z = global_var.copy() # use global variance as fallback
+                else: # enough points to compute mean/var
+                    X_z = Xc[mask]
+                    mean_z = X_z.mean(axis=0) # shape (cont_dim,)
+                    var_z = np.var(X_z, axis=0) + 1e-6
+                    var_z = np.where(np.isfinite(var_z), var_z, global_var)
+                    var_z = np.maximum(var_z, 1e-6) #shape (cont_dim,)
 
-            if num_points < cont_dim + 1:
-                mean_z = centers[z]
-                var_z = global_var.copy() 
-                if TRAINING_CONFIG.verbose >= 1:
-                    print(f"  Cluster z={z:02d}: only {num_points} points -> using global var fallback.")  
-            else:
-                X_z = Xc[mask]
-                mean_z = X_z.mean(axis=0)
-                var_z = np.var(X_z, axis=0) + 1e-6  # diagonal var
-
-                # stability clamp
-                var_z = np.where(np.isfinite(var_z), var_z, global_var)
-                var_z = np.maximum(var_z, 1e-6)
-
-            s, a = self.emissions.gauss._z_to_sa(z)
-            self.emissions.gauss.params[s, a] = GaussianParams(mean=mean_z, var=var_z)  
+                s, a = self.emissions.gauss._z_to_sa(z)
+                self.emissions.gauss.params[s, a] = GaussianParams(mean=mean_z, var=var_z) # each joint state gets its own Gaussian params for continuous dims
         
         # -----------------------------
         # Discrete parts (Bernoulli)
         # -----------------------------
-        if self.emissions.bin_dim > 0:  
-            xb = X_all[:, self.emissions.bin_idx]
-            # finite-mask for safety
-            finite_b = np.isfinite(xb)
-            xb_bin = (xb > 0.5).astype(np.float64)
-            xb_bin[~finite_b] = np.nan
-            p0 = np.nanmean(xb_bin, axis=0)
-            p0 = np.where(np.isfinite(p0), p0, 0.5)
-            p0 = np.clip(p0, 1e-3, 1.0 - 1e-3)
-            self.emissions.bern_p = np.tile(p0[None, :], (K, 1))  
+        if getattr(self.emissions, "bin_dim", 0) > 0 and bin_idx.size > 0:
+            sum_b = np.zeros((bin_idx.size,), dtype=np.float64) # number of “1”s observed
+            cnt_b = np.zeros((bin_idx.size,), dtype=np.float64) # number of finite observations
 
-        self.emissions.invalidate_cache()
-        self.emissions.to_device(device=self.device, dtype=self.dtype)
+            for seq in train_obs_seqs:
+                X = np.asarray(seq) # shape (T, obs_dim)
+                xb = X[:, bin_idx] 
+                finite = np.isfinite(xb)
+                xb_bin = (xb > 0.5) # binary 0/1
+
+                # accumulate per-dim
+                sum_b += (xb_bin & finite).sum(axis=0).astype(np.float64) # count of 1s
+                cnt_b += finite.sum(axis=0).astype(np.float64) # count of finite entries
+
+            p0 = np.divide(sum_b, np.maximum(cnt_b, 1.0)) # empirical mean per binary dim = P(X=1) = sum_b[d] / cnt_b[d]
+            p0 = np.where(np.isfinite(p0), p0, 0.5) # fallback to 0.5 if division was invalid
+            p0 = np.clip(p0, 1e-3, 1.0 - 1e-3) # avoid exact 0 or 1
+            self.emissions.bern_p = np.tile(p0[None, :], (K, 1)) # same Bernoulli params for all joint states.
+
+        self.emissions.invalidate_cache() # clear any cached values
+        self.emissions.to_device(device=self.device, dtype=self.dtype) # move to device
 
         print("[HDVTrainer] k-means initialisation done.")
+
+    def _init_lc_weight_invfreq(self, train_obs_seqs, clip=10.0):
+        """
+        Initialize the inverse frequency weight for left/right turn indicators.
+
+        Parameters
+        train_obs_seqs : list[np.ndarray]
+            Training observation sequences, each of shape (T_n, obs_dim).
+        clip : float
+            Maximum allowed weight.
+        """
+        if not self.lc_idx:
+            self.lc_weight_invfreq = 1.0
+            return
+
+        total = 0 # total number of timesteps seen
+        lc = 0    # number of timesteps with any LC indicator active
+        for obs in train_obs_seqs: # Iterate over vehicle trajectories
+            if obs is None or obs.shape[0] == 0:
+                continue
+            x = torch.as_tensor(obs, device="cpu")  # on CPU for counting
+            active = (x[:, self.lc_idx] > 0.5).any(dim=1) # check if any LC indicator is active at each timestep
+            total += active.numel() # total timesteps
+            lc += int(active.sum()) # timesteps with LC active
+
+        if total == 0:
+            self.lc_weight_invfreq = 1.0
+            return
+
+        p_lc = lc / total            # proportion of timesteps with LC active
+        w = 1.0 / max(p_lc, EPSILON) # inverse frequency weighting
+
+        # normalize so average weight ~ 1. Done to avoid overall scaling of log-likelihoods.
+        w = w / (p_lc * w + (1.0 - p_lc))
+
+        self.lc_weight_invfreq = float(min(w, clip))
+
+        if self.verbose:
+            print(
+                f"[LC weighting] "
+                f"total_timesteps={total}, "
+                f"lc_timesteps={lc}, "
+                f"p_lc={p_lc:.6e}, "
+                f"raw_invfreq={1.0 / max(p_lc, EPSILON):.3f}, "
+                f"normalized_w_lc={w:.3f}, "
+                f"clipped_w_lc={self.lc_weight_invfreq:.3f}"
+            )
 
 
     def save(self, path):
@@ -1329,116 +1278,4 @@ class HDVTrainer:
         print(f"[HDVTrainer] Loaded model parameters from {path}")
         return trainer
     
-    def _posterior_weighted_key_feature_stats(self, obs_used, gamma_all):
-        """
-        Compute posterior-weighted mean ± std per state for a small set of derived key features (semantics).
     
-        Returns
-        feat_names : list[str]
-        means : np.ndarray, shape (K, F)
-        stds  : np.ndarray, shape (K, F)
-        """
-        K = int(self.num_states)
-
-        # indices in obs vector
-        name_to_idx = {n: i for i, n in enumerate(self.obs_names)}
-
-        def idx(name: str):
-            return name_to_idx.get(name, None)
-
-        # ego indices
-        i_vx, i_vy = idx("vx_mean"), idx("vy_mean")
-        i_ax, i_ay = idx("ax_mean"), idx("ay_mean")
-        compute_speed_mag = (i_vx is not None and i_vy is not None)
-        compute_acc_mag = (i_ax is not None and i_ay is not None)
-
-        feat_specs = []  # (label, j, special)
-
-        if compute_speed_mag:
-            feat_specs.append(("speed_mag_mean", None, "ego_speed_mag"))
-        if compute_acc_mag:
-            feat_specs.append(("acc_mag_mean", None, "ego_acc_mag"))
-        
-        candidate_names = [
-            "vx_mean","vx_std","vy_mean","vy_std",
-            "ax_mean","ax_std","ay_mean","ay_std",
-            "jerk_mean","jerk_std",
-            "d_left_lane_mean","d_left_lane_min",
-            "d_right_lane_mean","d_right_lane_min",
-            "front_thw_mean","front_thw_min","front_thw_vfrac",
-            "front_ttc_mean","front_ttc_min","front_ttc_vfrac",
-            "front_dhw_mean","front_dhw_min","front_dhw_vfrac",
-            "lc_left_present","lc_right_present",
-            "front_exists_frac","rear_exists_frac",
-            "left_front_exists_frac","left_side_exists_frac","left_rear_exists_frac",
-            "right_front_exists_frac","right_side_exists_frac","right_rear_exists_frac",
-        ]
-        for n in candidate_names:
-            j = idx(n)
-            if j is not None:
-                feat_specs.append((n, j, "direct")) 
-
-        feat_names = [fs[0] for fs in feat_specs]
-        F = len(feat_names)
-
-        means = np.full((K, F), np.nan, dtype=np.float64)
-        stds  = np.full((K, F), np.nan, dtype=np.float64)
-
-        sum_w   = np.zeros((K, F), dtype=np.float64)
-        sum_wx  = np.zeros((K, F), dtype=np.float64)
-        sum_wx2 = np.zeros((K, F), dtype=np.float64)
-
-        for obs, gamma in zip(obs_used, gamma_all):
-            x = np.asarray(obs, dtype=np.float64)  # (T, D)
-            g = gamma.detach().cpu().numpy().astype(np.float64)  # (T, K)
-
-            # defensive normalization
-            g = np.clip(g, 1e-15, 1.0)
-            g = g / g.sum(axis=1, keepdims=True)
-
-            # Precompute derived ego vectors once per trajectory
-            v_mag = None
-            a_mag = None
-            if compute_speed_mag:
-                v_mag = np.sqrt(x[:, i_vx] ** 2 + x[:, i_vy] ** 2)
-            if compute_acc_mag:
-                a_mag = np.sqrt(x[:, i_ax] ** 2 + x[:, i_ay] ** 2)
-
-        # Accumulate posterior-weighted moments with finite masking
-            for col, (label, j, special) in enumerate(feat_specs):
-                if special == "ego_speed_mag":
-                    val = v_mag
-                elif special == "ego_acc_mag":
-                    val = a_mag
-                else:
-                    val = x[:, j]
-
-                finite = np.isfinite(val)
-                if not np.any(finite):
-                    continue
-
-                v = np.where(finite, val, 0.0).astype(np.float64)
-                fm = finite.astype(np.float64)
-
-                for k in range(K):
-                    w = g[:, k] * fm
-                    sw = w.sum()
-                    if sw <= 0.0:
-                        continue
-                    sum_w[k, col] += sw
-                    sum_wx[k, col] += (w * v).sum()
-                    sum_wx2[k, col] += (w * v * v).sum()
- 
-        # finalize mean/std
-        for k in range(K):
-            for col in range(F):
-                sw = sum_w[k, col]
-                if sw <= 0.0:
-                    continue
-                m = sum_wx[k, col] / sw
-                ex2 = sum_wx2[k, col] / sw
-                var = max(ex2 - m*m, 0.0)
-                means[k, col] = m
-                stds[k, col] = math.sqrt(var)
-
-        return feat_names, means, stds
