@@ -126,16 +126,6 @@ def plot_state_line(values, title, ylabel):
     return fig
 
 
-def plot_lane_heatmap(lane_p):
-    """Heatmap of p(lane_pos | z). Rows: z, cols: lane category."""
-    fig, ax = plt.subplots()
-    im = ax.imshow(lane_p, aspect="auto")
-    ax.set_title("Lane categorical p(lane_pos | z)")
-    ax.set_xlabel("lane_pos category")
-    ax.set_ylabel("joint state z")
-    fig.colorbar(im, ax=ax)
-    return fig
-
 def plot_bernoulli_means_per_state(values, num_states, title="Bernoulli features: mean p(x=1) per state", ylabel="mean p(x=1) across Bernoulli dims",):
     """Line plot of a single Bernoulli summary statistic per joint state."""
     fig, ax = plt.subplots()
@@ -194,41 +184,6 @@ def plot_run_length_distribution(run_lengths, title="Run-length distribution", x
     ax.set_xlabel(xlabel)
     ax.set_ylabel("# segments")
     return fig
-
-def plot_entropy_distribution(ent, title="Posterior entropy (normalized)", xlabel="H / log(K)"):
-    e = np.asarray(ent, dtype=np.float64).ravel()
-    e = e[np.isfinite(e)]
-    fig, ax = plt.subplots()
-    if e.size == 0:
-        ax.text(0.5, 0.5, "No entropy values", ha="center", va="center")
-        ax.set_axis_off()
-        return fig
-    ax.hist(e, bins=30)
-    ax.set_title(title)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel("# timesteps")
-    ax.set_xlim(0.0, 1.0)
-    return fig
-
-
-def plot_key_feature_per_feature(means, stds, feat_names, title_prefix="Posterior-weighted"):
-    means = np.asarray(means, dtype=np.float64)
-    stds  = np.asarray(stds, dtype=np.float64)
-    K, F = means.shape
-
-    figs = {}
-    x = np.arange(K)
-
-    for j in range(F):
-        fname = str(feat_names[j])
-        fig, ax = plt.subplots()
-        ax.errorbar(x, means[:, j], yerr=stds[:, j], marker="o", linestyle="-", capsize=3)
-        ax.set_title(f"{title_prefix}: {fname}")
-        ax.set_xlabel("joint state z")
-        ax.set_ylabel("value (mean ± std)")
-        figs[fname] = fig
-
-    return figs
 
 
 def joint_grid_from_flat(values_flat, S, A):
@@ -330,83 +285,6 @@ def plot_joint_index_grid(S, A, title="Joint index grid z = s*A + a"):
     idx = np.arange(S * A, dtype=np.int64)
     return plot_joint_grid_annotated(idx, S, A, title=title, fmt="{:d}")
 
-
-def plot_lc_heatmap(lc_p):
-    """Heatmap of p(lc | z). Rows: z, cols: lc category (left, none, right)."""
-    fig, ax = plt.subplots()
-    im = ax.imshow(lc_p, aspect="auto")
-    ax.set_title("Lane-change categorical p(lc | z)")
-    ax.set_xlabel("lc category (left / none / right)")
-    ax.set_ylabel("joint state z")
-    ax.set_xticks([0, 1, 2])
-    ax.set_xticklabels(["left(-1)", "none(0)", "right(+1)"])
-    fig.colorbar(im, ax=ax)
-    return fig
-
-
-#def plot_semantics_heatmap(means, feat_names, title="Semantics heatmap (means)"):
-#    """
-#    Heatmap of posterior-weighted semantic means.
-#    Rows: joint state z
-#    Cols: semantic feature
-#    """
-#    M = np.asarray(means, dtype=np.float64)
-#    fig_w = max(8.0, 0.45 * M.shape[1])   # expand width with #features
-#    fig_h = max(4.0, 0.35 * M.shape[0])   # expand height with #states
-#    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-#
-#    im = ax.imshow(M, aspect="auto")
-#    ax.set_title(title)
-#    ax.set_xlabel("semantic feature")
-#    ax.set_ylabel("joint state z")
-#
-#    ax.set_xticks(np.arange(len(feat_names)))
-#    ax.set_xticklabels([str(f) for f in feat_names], rotation=60, ha="right", fontsize=7)
-#    ax.set_yticks(np.arange(M.shape[0]))
-#    ax.tick_params(axis="y", labelsize=8)
-#
-#    fig.colorbar(im, ax=ax)
-#    fig.tight_layout()
-#    return fig
-
-
-#def plot_semantics_by_style(means, feat_names, S, A, title_prefix="Semantics heatmap"):
-#    """
-#    Plot semantics heatmaps split by style.
-#    For each style s, rows = action a, cols = semantic features.
-#    Returns dict: {"style_0": fig0, ...}
-#    """
-#    M = np.asarray(means, dtype=np.float64)
-#    K, F = M.shape
-#    assert K == S * A, "Expected K = S * A"
-#
-#    figs = {}
-#    for s in range(S):
-#        rows = []
-#        for a in range(A):
-#            z = s * A + a
-#            rows.append(M[z])
-#        grid = np.vstack(rows)  # (A, F)
-#
-#        fig_w = max(8.0, 0.45 * F)
-#        fig_h = max(3.0, 0.35 * A)
-#        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-#
-#        im = ax.imshow(grid, aspect="auto")
-#        ax.set_title(f"{title_prefix} (style s={s})")
-#        ax.set_xlabel("semantic feature")
-#        ax.set_ylabel("action a")
-#
-#        ax.set_xticks(np.arange(F))
-#        ax.set_xticklabels(feat_names, rotation=60, ha="right", fontsize=7)
-#        ax.set_yticks(np.arange(A))
-#
-#        fig.colorbar(im, ax=ax)
-#        fig.tight_layout()
-#        figs[f"style_{s}"] = fig
-#
-#    return figs
-
 def _format_cell(mean, std=None, fmt="{:.2f}", pm="±"):
     if std is None:
         try:
@@ -426,18 +304,18 @@ def plot_semantics_table_by_style(
     A,
     stds=None,
     title_prefix="Semantics (raw) table",
-    max_cols=10,
+    max_cols=8,
     fmt="{:.2f}",
-    wrap_header_at=14,          # wrap feature names at ~N chars per line
-    header_rotation="auto",     # "auto" | 0 | 30 | 45 | 60 | 90
-    header_fontsize=8,
+    wrap_header_at=10,          # wrap feature names at ~N chars per line
+    header_rotation=0,     # "auto" | 0 | 30 | 45 | 60 | 90
+    header_fontsize=7,
     cell_fontsize=8,
     rowlabel_fontsize=8,
-    base_col_width=0.75,        # inches per column baseline
+    base_col_width=0.65,        # inches per column baseline
     min_fig_w=10.0,
     max_fig_w=28.0,
     fig_h_per_row=0.55,
-    extra_top_margin=0.18,      # increases room for wrapped headers
+    extra_top_margin=0.12,      # increases room for wrapped headers
 ):
     """
     Render numeric tables (matplotlib table) for semantics.
@@ -549,18 +427,7 @@ def plot_semantics_table_by_style(
             tbl.scale(1.0, 1.35)
 
             # ---------- style header row ----------
-            # Decide rotation if "auto"
-            if header_rotation == "auto":
-                # rotate if still too dense after wrapping or too many columns
-                rot = 0
-                if ncol >= 9:
-                    rot = 45
-                if max_len >= 22:
-                    rot = 45
-                if ncol >= 11:
-                    rot = 60
-            else:
-                rot = int(header_rotation)
+            rot = int(header_rotation)
 
             # Set per-column widths (longer headers get slightly wider)
             # Table columns indices are 0..ncol-1 for header/data cols.
@@ -580,7 +447,7 @@ def plot_semantics_table_by_style(
                 cell = tbl[(0, ci)]
                 cell.get_text().set_rotation(rot)
                 cell.get_text().set_fontsize(header_fontsize)
-                cell.get_text().set_fontweight("bold")
+                cell.get_text().set_fontweight("normal")
                 cell.get_text().set_va("center")
                 cell.get_text().set_ha("center")
 
