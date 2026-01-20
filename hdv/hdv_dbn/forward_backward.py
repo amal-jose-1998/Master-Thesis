@@ -63,6 +63,7 @@ def forward_backward_torch(pi_s0, pi_a0_given_s0, A_s, A_a, logB_s_a, return_xi_
     assert A_a.shape == (S, A, A), f"A_a shape {A_a.shape} != ({S},{A},{A})"
     assert pi_a0_given_s0.shape == (S, A)
     assert A_s.shape == (S, S)
+    assert pi_s0.shape == (S,)
 
     # Smoothing with epsilon: additional numerical stability to avoid log(0)
     log_pi_s0 = torch.log(pi_s0 + EPSILON)                           # (S,)
@@ -70,7 +71,7 @@ def forward_backward_torch(pi_s0, pi_a0_given_s0, A_s, A_a, logB_s_a, return_xi_
     logAs = torch.log(A_s + EPSILON)                                 # (S,S) : s_prev -> s_next
     logAa = torch.log(A_a + EPSILON)                                 # (S,A,A): a_t depends on (s_t,a_{t-1})
 
-    # Transpose logAa for easier indexing: (s_next, a_prev, a_next) -> (a_prev, s_next, a_next)
+    # For easier indexing: (s_next, a_prev, a_next) -> (a_prev, s_next, a_next)
     logAa_ap_s_a = logAa.permute(1, 0, 2).contiguous()  # (A, S, A); we want to sum over a_prev easily
 
     assert logAa_ap_s_a.shape == (A, S, A), (
