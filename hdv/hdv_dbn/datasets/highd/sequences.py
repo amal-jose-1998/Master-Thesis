@@ -5,7 +5,7 @@ import joblib
 import json
 
 from ..dataset import TrajectorySequence
-from ...config import WINDOW_FEATURE_COLS
+from ...config import (FRAME_FEATURE_COLS, META_COLS, WINDOW_FEATURE_COLS)
 
 def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame",  meta_cols=None):
     """
@@ -139,6 +139,10 @@ def _nanmin(x):
     x = x[np.isfinite(x)]
     return float(x.min()) if x.size else np.nan
 
+def _nanmax(x):
+    x = x[np.isfinite(x)]
+    return float(x.max()) if x.size else np.nan
+
 def _seti(Y, t, j, v):
     """
     Set Y[t, j] if j is not None.
@@ -158,6 +162,54 @@ def _seti(Y, t, j, v):
 
 def _risk_valid_mask(r):
     return np.isfinite(r) & (r > 0.0)
+
+def _sign_fractions(x):
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        return np.nan, np.nan, np.nan
+
+    n = float(x.size)
+
+    neg = float((x < 0.0).sum()) / n
+    pos = float((x > 0.0).sum()) / n
+    zer = float((x == 0.0).sum()) / n
+
+    return neg, pos, zer
+
+def _compute_minmax_and_sign_fracs(win, Y, t, in_idx, out, c):
+    """
+    For c in {"ax","ay"} compute (if requested in out):
+      {c}_min, {c}_max
+      {c}_neg_frac: frac(c < 0)
+      {c}_pos_frac: frac(c > 0)
+      {c}_zero_frac: frac(c == 0) 
+    """
+    jmin = out.get(f"{c}_min")
+    jmax = out.get(f"{c}_max")
+    jneg = out.get(f"{c}_neg_frac")
+    jpos = out.get(f"{c}_pos_frac")
+    jzer = out.get(f"{c}_zero_frac")
+
+    # nothing requested → do nothing
+    if jmin is None and jmax is None and jneg is None and jpos is None and jzer is None:
+        return
+
+    col = win[:, in_idx[c]].astype(np.float64, copy=False)
+    finite = np.isfinite(col)
+    if not np.any(finite):
+        return
+
+    v = col[finite]  # finite only
+
+    # min/max (use your nan-style helpers)
+    _seti(Y, t, jmin, _nanmin(v))
+    _seti(Y, t, jmax, _nanmax(v))
+
+    # fractions (compute once, set only those requested)
+    neg, pos, zer = _sign_fractions(v)
+    _seti(Y, t, jneg, neg)
+    _seti(Y, t, jpos, pos)
+    _seti(Y, t, jzer, zer)
 
 def _compute_kinematics(win, Y, t, in_idx, out):
     """
@@ -179,6 +231,8 @@ def _compute_kinematics(win, Y, t, in_idx, out):
         col = win[:, in_idx[c]]
         _seti(Y, t, out.get(f"{c}_mean"), _nanmean(col))
         _seti(Y, t, out.get(f"{c}_std"),  _nanstd(col))
+        if c == "ax" or c == "ay":
+            _compute_minmax_and_sign_fracs(win, Y, t, in_idx, out, c)
 
 def _compute_jerk(win, Y, t, in_idx, out):
     """
@@ -362,7 +416,7 @@ def windowize_sequences(sequences, W=150, stride=10):
     return out
 
 
-def window_cache_paths(cache_dir, exp_name, W, stride, S, A):
+def window_cache_paths(cache_dir, W, stride):
     """
     Get cache file paths for windowized sequences.
 
@@ -384,32 +438,36 @@ def window_cache_paths(cache_dir, exp_name, W, stride, S, A):
     (Path, Path)
         Paths to the joblib and json cache files.
     """
-    base = cache_dir / f"{exp_name}_W{W}_S{stride}_S{S}A{A}"
+    base = cache_dir / f"W{W}_Stride{stride}"
     return base.with_suffix(".joblib"), base.with_suffix(".json")
 
-def load_or_build_windowized(sequences, cache_dir, W, stride, S, A, exp_name, force_rebuild=False):
+def load_or_build_windowized(df, cache_dir, W, stride, force_rebuild=False):
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True) # ensure cache directory exists else create it
 
-    p_joblib, p_meta = window_cache_paths(cache_dir, exp_name, W, stride, S, A)
+    p_joblib, p_meta = window_cache_paths(cache_dir, W, stride)
 
     if p_joblib.exists() and (not force_rebuild):
         print(f"[window-cache] Loading: {p_joblib}")
         return joblib.load(p_joblib)
+    
+    frame_feature_cols = list(FRAME_FEATURE_COLS)
+    meta_cols = list(META_COLS)
+    
+    # Build per-vehicle frame sequences 
+    frame_sequences = df_to_sequences(df, feature_cols=frame_feature_cols, meta_cols=meta_cols)
+    print(f"[load_or_build_windowized] Total FRAME sequences (vehicles) loaded: {len(frame_sequences)}")
 
-    print(f"[window-cache] Building windowized sequences (W={W}, stride={stride})")
-    win_seqs = windowize_sequences(sequences, W=W, stride=stride)
+    print(f"[load_or_build_windowized] Building windowized sequences (W={W}, stride={stride})")
+    win_seqs = windowize_sequences(frame_sequences, W=W, stride=stride)
 
     joblib.dump(win_seqs, p_joblib, compress=3) # save to cache
     meta = {
-        "experiment_name": exp_name,
         "W": int(W),
         "stride": int(stride),
-        "S": int(S),
-        "A": int(A),
         "num_sequences": int(len(win_seqs)),
         "win_names": list(WINDOW_FEATURE_COLS),
     }
     p_meta.write_text(json.dumps(meta, indent=2))
-    print(f"[window-cache] Saved: {p_joblib}")
+    print(f"[load_or_build_windowized] Saved: {p_joblib}")
     return win_seqs

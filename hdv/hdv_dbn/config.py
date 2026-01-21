@@ -21,9 +21,9 @@ class DBNStates:
 
 # Define the DBN states
 DBN_STATES = DBNStates(
-    driving_style=("style_0", "style_1", "style_2",),
+    driving_style=("style_0", "style_1",),
     #driving_style=("dummy",),
-    action=("action_0", "action_1", "action_2", "action_3", "action_4")
+    action=("action_0", "action_1", "action_2", "action_3",)
     #action=("dummy")
     )
 
@@ -96,8 +96,10 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 100
 
+    learn_pi0: bool = False  
+    pi0_alpha: float = 0.0
     disable_discrete_obs: bool = False     
-    bern_weight: float = 1                     
+    bern_weight: float = 1     #(dont change)                
     lc_weight: float = 25   
     # Lane-change imbalance handling in EM
     #   - 'none': no special weighting
@@ -107,11 +109,12 @@ class TrainingConfig:
     # How to weight xi_t (transition counts) in mode 'B'
     #   - 'next': use w_{t+1}
     #   - 'avg' : use 0.5*(w_t + w_{t+1})
-    lc_xi_weight: Literal['next', 'avg'] = 'next'  
+    lc_xi_weight: Literal['next', 'avg'] = 'avg'  
 
     early_stop_patience: int = 3
     early_stop_min_delta_per_obs: float = 5e-3
     early_stop_delta_A_thresh: float = 1e-3
+    early_stop_delta_pi_thresh: float = 1e-3
 
     # Transition MAP priors (Dirichlet + stickiness)
     alpha_A_s: float = 0.01   # smoothing for style rows
@@ -200,10 +203,12 @@ WINDOW_CONFIG = WindowConfig()
 # Window-level columns produced by windowize_sequences() 
 WINDOW_EGO_FEATURES: List[str] = [
     "vx_mean", "vx_std",
-    "ax_mean", "ax_std",
-    "vy_mean", "vy_std",
-    "ay_mean", "ay_std",
-    "jerk_mean", "jerk_std"
+    "ax_mean", "ax_std", "ax_min", "ax_max",
+    "ax_neg_frac", "ax_pos_frac", "ax_zero_frac",
+    #"vy_mean", "vy_std",
+    "ay_mean", "ay_std", "ay_min", "ay_max",
+    "ay_neg_frac", "ay_pos_frac", "ay_zero_frac",
+    #"jerk_mean", "jerk_std"
 ]
 
 WINDOW_LC_FEATURES: List[str] = [
