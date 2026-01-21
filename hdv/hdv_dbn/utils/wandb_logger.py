@@ -1,13 +1,43 @@
+"""
+W&B logger for the structured Style/Action DBN trainer (Pattern A).
+
+Key design:
+- Trainer calls: WandbLogger.log_iteration(**log_kwargs)
+- Logger tolerates missing keys and extra keys.
+- Uses .get(...) everywhere, never requires exact signature alignment.
+"""
+
+
 import time
+from typing import Any, Dict, Tuple
+
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from .wandb_plots import *
+from .wandb_plots import (
+    plot_pi_s0,
+    plot_pi_a0_given_s0,
+    plot_A_s,
+    plot_A_s_diag,
+    plot_A_a_per_style,
+    plot_A_a_diag_per_style,
+    plot_joint_grid,
+    plot_joint_index_grid,
+    plot_bar,
+    plot_line,
+    plot_hist,
+    plot_heatmap,
+    plot_semantics_tables_by_style,
+    plot_semantics_tables_by_action,
+)
 
 
 class WandbLogger:
+    # -------------------------------------------------------------------------
+    # helpers
+    # -------------------------------------------------------------------------
     @staticmethod
     def _safe_close(fig):
         try:
@@ -16,18 +46,30 @@ class WandbLogger:
             pass
 
     @staticmethod
-    def _joint_from_structured(pi_s0, pi_a0_given_s0, A_s, A_a):
+    def _as_np(x, dtype=np.float64):
+        if x is None:
+            return None
+        return np.asarray(x, dtype=dtype)
+
+    @staticmethod
+    def _entropy(p: np.ndarray, eps: float = 1e-15) -> float:
+        p = np.asarray(p, dtype=np.float64).reshape(-1)
+        p = np.clip(p, 0.0, 1.0)
+        s = float(p.sum())
+        if s <= 0:
+            return float("nan")
+        p = p / s
+        return float(-np.sum(p * np.log(p + eps)))
+
+    @staticmethod
+    def _joint_from_structured(pi_s0, pi_a0_given_s0, A_s, A_a) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Build joint-form diagnostics from structured parameters.
+        Diagnostic-only conversion to joint z=(s,a) using z=s*A + a:
 
-        z = (s, a) with flattening z = s*A + a.
-
-        pi_z[z] = pi_s0[s] * pi_a0_given_s0[s,a]
-
-        A_zz[z_prev, z_cur] = P(s_cur,a_cur | s_prev,a_prev)
-                           = A_s[s_prev,s_cur] * A_a[s_cur,a_prev,a_cur]
+          pi_z[z]     = pi_s0[s] * pi_a0_given_s0[s,a]
+          A_zz[zp,zc]  = A_s[s_prev, s_cur] * A_a[s_cur, a_prev, a_cur]
         """
-        pi_s0 = np.asarray(pi_s0, dtype=np.float64).ravel()
+        pi_s0 = np.asarray(pi_s0, dtype=np.float64).reshape(-1)
         pi_a0_given_s0 = np.asarray(pi_a0_given_s0, dtype=np.float64)
         A_s = np.asarray(A_s, dtype=np.float64)
         A_a = np.asarray(A_a, dtype=np.float64)
@@ -36,278 +78,240 @@ class WandbLogger:
         A = int(pi_a0_given_s0.shape[1])
 
         pi_z = (pi_s0[:, None] * pi_a0_given_s0).reshape(S * A)
-        
-        # (s_prev, s_cur, a_prev, a_cur)
         A_joint = A_s[:, :, None, None] * A_a[None, :, :, :]
         A_zz = A_joint.reshape(S * A, S * A)
         return pi_z, A_zz
 
-    # -----------------------------
-    # Main logging entry point
-    # -----------------------------
+    # -------------------------------------------------------------------------
+    # main entry
+    # -------------------------------------------------------------------------
     @staticmethod
-    def log_iteration(trainer, wandb_run, it, iter_start, total_train_loglik, total_val_loglik, improvement,
-        criterion_for_stop, val_num_obs, train_num_obs, delta_pi, delta_A, state_weights_flat, total_responsibility_mass,
-        state_weights_frac, val_obs_seqs, A_prev, A_new, run_lengths_train, runlen_median_per_traj,
-        ent_all_train, ent_mean_per_traj, sem_feat_names=None, sem_means=None, sem_stds=None, sem_means_raw=None, sem_stds_raw=None):
+    def log_iteration(**kwargs):
         """
-        Log per-iteration metrics to Weights & Biases.
+        Pattern A: accept any kwargs dict from trainer.
 
-        Parameters
-        trainer: HDVTrainer instance 
-        wandb_run : wandb.sdk.wandb_run.Run | None
-            WandB run object.
-        it : int
-            EM iteration index (0-based).
-        iter_start : float
-            Start time (perf_counter) of this EM iteration.
-        total_train_loglik : float
-            Total train log-likelihood for this iteration.
-        total_val_loglik : float
-            Total validation log-likelihood (np.nan if no validation).
-        improvement : float
-            Improvement in early-stop criterion (average log-likelihood per timestep) vs previous iteration.
-        criterion_for_stop : float
-            Early-stopping criterion value used in this EM iteration. Defined as the average log-likelihood per timestep, computed on the
-            validation set if available, otherwise on the training set.
-        val_num_obs : int | None
-            Total number of timesteps in the validation dataset. 
-        train_num_obs : int
-            Total number of timesteps in the training dataset. 
-        delta_pi, delta_A : float
-            Transition parameter deltas.
-        state_weights_flat : np.ndarray
-            Responsibility mass per state.
-        total_responsibility_mass : float
-            Sum of responsibilities (diagnostic).
-        state_weights_frac : np.ndarray
-            Responsibility fractions per state.
-        val_obs_seqs : list[np.ndarray] | None
-            Validation set (used only to decide what to log).
-        A_prev, A_new : np.ndarray | None
-            Previous and updated A matrices for delta plotting.
+        Expected common keys (but all optional):
+          wandb_run, trainer, it, iter_start,
+          total_train_ll, train_ll_per_obs, total_val_ll, val_ll_per_obs,
+          criterion_for_stop, criterion_source, improvement, bad_epochs,
+          transitions_stable, pi_stable,
+          train_total_seqs, train_used_seqs, skipped_empty, skipped_bad_logB, skipped_bad_ll,
+          delta_pi_s0, delta_pi_a0_given_s0, delta_A_s, delta_A_a, delta_pi, delta_A,
+          pi_s0, pi_a0_given_s0, A_s, A_a,
+          state_weights_sa, state_frac_sa, total_responsibility_mass,
+          run_lengths_train, ent_all_train, runlen_median_per_traj, ent_mean_per_traj,
+          sem_feat_names, sem_means, sem_stds, sem_means_raw, sem_stds_raw
         """
+        wandb_run = kwargs.get("wandb_run", None)
         if wandb_run is None:
             return
 
+        # import wandb lazily so training can run without it
         import wandb
 
-        iter_time = time.perf_counter() - iter_start
+        trainer = kwargs.get("trainer", None)
+        it = int(kwargs.get("it", -1))
+        iter_start = kwargs.get("iter_start", None)
+        if iter_start is None:
+            iter_time = np.nan
+        else:
+            try:
+                iter_time = float(time.perf_counter() - float(iter_start))
+            except Exception:
+                iter_time = np.nan
 
-        # convert tensors to numpy for logging + plotting
-        pi_s0 = trainer.pi_s0.detach().cpu().numpy()
-        pi_a0_given_s0 = trainer.pi_a0_given_s0.detach().cpu().numpy()
-        A_s = trainer.A_s.detach().cpu().numpy()
-        A_a = trainer.A_a.detach().cpu().numpy()
+        pi_s0 = WandbLogger._as_np(kwargs.get("pi_s0", None))
+        pi_a0_given_s0 = WandbLogger._as_np(kwargs.get("pi_a0_given_s0", None))
+        A_s = WandbLogger._as_np(kwargs.get("A_s", None))
+        A_a = WandbLogger._as_np(kwargs.get("A_a", None))
 
-        print("[debug] pi_s0", pi_s0.shape,
-                "pi_a0_given_s0", pi_a0_given_s0.shape,
-                "A_s", A_s.shape,
-                "A_a", A_a.shape)
+        # determine S,A if possible
+        S = None
+        A = None
+        if trainer is not None:
+            S = getattr(trainer, "S", None)
+            A = getattr(trainer, "A", None)
 
-        # Joint-form diagnostics 
-        pi_z_np, A_zz_np = WandbLogger._joint_from_structured(pi_s0, pi_a0_given_s0, A_s, A_a)
+        metrics: Dict[str, Any] = {
+            "em/iter": it+1,
+            "time/iter_seconds": iter_time,
+            "train/total_train_ll": float(kwargs.get("total_train_ll", np.nan)),
+            "train/train_ll_per_obs": float(kwargs.get("train_ll_per_obs", np.nan)),
+            "val/total_val_ll": float(kwargs.get("total_val_ll", np.nan)),
+            "val/val_ll_per_obs": float(kwargs.get("val_ll_per_obs", np.nan)),
 
-        # Emission stats 
-        g_means, g_vars = trainer.emissions.gauss.to_arrays()
-        cont_dim = int(trainer.emissions.cont_dim)
-        means_2d = g_means.reshape(trainer.num_states, cont_dim) if cont_dim > 0 else np.zeros((trainer.num_states, 0))
-        vars_2d  = g_vars.reshape(trainer.num_states, cont_dim) if cont_dim > 0 else np.zeros((trainer.num_states, 0))
-        cov_traces = vars_2d.sum(axis=1) # "trace" analogue for diagonal covariance is sum of variances
-        mean_norms = np.linalg.norm(means_2d, axis=1) 
-        
-        # π diagnostics
-        pi_s_entropy = float(-np.sum(pi_s0 * np.log(pi_s0 + 1e-15)))
+            "early_stop/criterion": float(kwargs.get("criterion_for_stop", np.nan)),
+            "early_stop/source": str(kwargs.get("criterion_source", "")),
+            "early_stop/improvement": float(kwargs.get("improvement", np.nan)),
+            "early_stop/bad_epochs": int(kwargs.get("bad_epochs", 0)),
+            #"early_stop/transitions_stable": kwargs.get("transitions_stable", np.nan),
+            #"early_stop/pi_stable": kwargs.get("pi_stable", np.nan),
 
-        metrics = {
-            "em_iter": int(it + 1),
-            "time/iter_seconds": float(iter_time),
+            "e_step/train_total_seqs": int(kwargs.get("train_total_seqs", 0)),
+            "e_step/train_used_seqs": int(kwargs.get("train_used_seqs", 0)),
+            "e_step/skipped_empty": int(kwargs.get("skipped_empty", 0)),
+            "e_step/skipped_bad_logB": int(kwargs.get("skipped_bad_logB", 0)),
+            "e_step/skipped_bad_ll": int(kwargs.get("skipped_bad_ll", 0)),
 
-            "train/loglik": float(total_train_loglik), # Sum of log-likelihood over all training trajectories for that EM iteration.
-            "train/loglik_per_obs": float(total_train_loglik) / max(int(train_num_obs), 1),
-            #"train/delta_pi": float(delta_pi), # L1 change in initial state distribution
-            "train/delta_A": float(delta_A), # Mean absolute difference between old and new transition matrices
-            #"train/log_delta_A": float(np.log10(float(delta_A) + 1e-15)),
-            
-            "pi_s0/entropy": pi_s_entropy,
+            "delta/pi_s0": float(kwargs.get("delta_pi_s0", np.nan)),
+            "delta/pi_a0_given_s0": float(kwargs.get("delta_pi_a0_given_s0", np.nan)),
+            "delta/A_s": float(kwargs.get("delta_A_s", np.nan)),
+            "delta/A_a": float(kwargs.get("delta_A_a", np.nan)),
 
-            "early_stop/criterion": float(criterion_for_stop) if np.isfinite(criterion_for_stop) else np.nan,
-            "early_stop/source": "val" if val_obs_seqs is not None else "train",
-            "early_stop/improvement_per_obs": float(improvement) if np.isfinite(improvement) else np.nan,          
+            #"post/total_responsibility_mass": float(kwargs.get("total_responsibility_mass", np.nan)),
         }
 
-        if val_obs_seqs is not None:
-            metrics["val/loglik"] = float(total_val_loglik) # Sum of log-likelihood on the validation set
-            metrics["val/loglik_per_obs"] = float(total_val_loglik) / max(int(val_num_obs), 1)
-        else:
-            metrics["val/loglik"] = np.nan
-        
-        # Bernoulli features (window-level; e.g., lc_left_present / lc_right_present)
-        # - `bern_p` is (K, B) with B binary dims.
-        bern_p = None
-        bern_names = getattr(getattr(trainer, "emissions", None), "bernoulli_names", None)
-        if getattr(trainer.emissions, "bin_dim", 0) > 0 and getattr(trainer.emissions, "bern_p", None) is not None:
-            bern_p = trainer.emissions.bern_p
-            if hasattr(bern_p, "detach"):
-                bern_p = bern_p.detach().cpu().numpy()
-            bern_p = np.asarray(bern_p, dtype=np.float64)
+        # Extra posterior summaries
+        runlen_median_per_traj = kwargs.get("runlen_median_per_traj", None)
+        ent_mean_per_traj = kwargs.get("ent_mean_per_traj", None)
 
+        #try:
+        #    if runlen_median_per_traj is not None:
+        #        metrics["post/runlen_median_over_traj"] = float(np.nanmedian(np.asarray(runlen_median_per_traj, dtype=np.float64)))
+        #    else:
+        #        metrics["post/runlen_median_over_traj"] = np.nan
+        #except Exception:
+        #    metrics["post/runlen_median_over_traj"] = np.nan
 
-        # Figures 
-        try:
-            # Joint diagnostics (derived)
-            fig = plot_state_mass_bar(pi_z_np, "Derived π_z (diagnostic)", "probability")
-            metrics["pi_z/plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
+        #try:
+        #    if ent_mean_per_traj is not None:
+        #        metrics["post/entropy_mean_over_traj"] = float(np.nanmean(np.asarray(ent_mean_per_traj, dtype=np.float64)))
+        #    else:
+        #        metrics["post/entropy_mean_over_traj"] = np.nan
+        #except Exception:
+        #    metrics["post/entropy_mean_over_traj"] = np.nan
+    
 
-            fig = plot_A_heatmap(A_zz_np, title="Joint transition A_zz (diagnostic)")
-            metrics["A_zz/heatmap"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            fig = plot_A_diag(A_zz_np, title="diag(A_zz): stay probability per joint state")
-            metrics["A_zz/diag_plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            # Structured π plots
-            fig = plot_pi_s0_bar(pi_s0)
-            metrics["pi_s0/plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            fig = plot_pi_a0_given_s0_heatmap(pi_a0_given_s0)
-            metrics["pi_a0_given_s0/heatmap"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            # Structured transition plots
-            fig = plot_A_s_heatmap(A_s)
-            metrics["A_s/heatmap"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            fig = plot_A_s_diag(A_s)
-            metrics["A_s/diag_plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            figs = plot_A_a_heatmaps(A_a)
-            for key, fig in figs.items():
-                metrics[f"A_a/heatmap_{key}"] = wandb.Image(fig)
+        # ---------------------------------------------------------------------
+        # Plots 
+        # ---------------------------------------------------------------------
+        try:                                               
+            if pi_s0 is not None:
+                fig = plot_pi_s0(pi_s0)
+                metrics["plots/pi_s0"] = wandb.Image(fig)
                 WandbLogger._safe_close(fig)
 
-            # Joint state interpretability grid (S × A)
-            # Show which (style,action) cells carry probability/mass.
-            fig = plot_joint_sa_grid(
-                state_weights_frac,
-                S=int(trainer.S),
-                A=int(trainer.A),
-                title="State responsibility fraction on (Style × Action) grid",
-            )
-            metrics["emissions/state_frac_sa_grid"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            fig = plot_joint_index_grid(
-                S=int(trainer.S),
-                A=int(trainer.A),
-                title="Joint state index z = s*A + a (Style × Action)",
-            )
-            metrics["debug/joint_index_grid"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            # Structured deltas 
-            if isinstance(A_prev, dict) and isinstance(A_new, dict) and ("A_s" in A_prev) and ("A_s" in A_new):
-                fig = plot_A_s_delta(A_prev["A_s"], A_new["A_s"])
-                metrics["A_s/delta_heatmap"] = wandb.Image(fig)
+            if pi_a0_given_s0 is not None:
+                fig = plot_pi_a0_given_s0(pi_a0_given_s0)
+                metrics["plots/pi_a0_given_s0"] = wandb.Image(fig)
                 WandbLogger._safe_close(fig)
 
-                if ("A_a" in A_prev) and ("A_a" in A_new):
-                    figs = plot_A_a_delta_per_style(A_prev["A_a"], A_new["A_a"])
-                    for key, fig in figs.items():
-                        metrics[f"A_a/delta_{key}"] = wandb.Image(fig)
-                        WandbLogger._safe_close(fig)
+            if A_s is not None:
+                fig = plot_A_s(A_s)
+                metrics["plots/A_s"] = wandb.Image(fig)
+                WandbLogger._safe_close(fig)
 
-            # responsibility fraction per joint state
-            fig = plot_state_mass_bar(state_weights_frac, "State responsibility fraction", "fraction of total γ")
-            metrics["emissions/state_responsibility_frac_plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
+                fig = plot_A_s_diag(A_s)
+                metrics["plots/A_s_diag"] = wandb.Image(fig)
+                WandbLogger._safe_close(fig)
 
-            # responsibility mass per joint state
-            fig = plot_state_mass_bar(state_weights_flat, "State responsibility mass", "total γ mass")
-            metrics["emissions/state_responsibility_mass_plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            # mean norms per joint state
-            fig = plot_state_line(mean_norms, "Emission mean norms ||μ_{s,a}||", "L2 norm")
-            metrics["emissions/mean_norms_plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            # variance sum per joint state
-            fig = plot_state_line(cov_traces, "Diagonal variance sum per joint state Σ var", "sum of variances")
-            metrics["emissions/var_sum_plot"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            if bern_p is not None:
-                try:
-                    fig = plot_bernoulli_feature_means_per_state(bern_p, bern_names=bern_names)
-                    metrics["bern/features_per_state_plot"] = wandb.Image(fig)
-                    WandbLogger._safe_close(fig)
-                except Exception:
-                    # Fallback: plot mean across Bernoulli dims if labels mismatch
-                    bern_mean_per_state = np.asarray(bern_p, dtype=np.float64).mean(axis=1)
-                    fig = plot_bernoulli_means_per_state(
-                        bern_mean_per_state,
-                        trainer.num_states,
-                        title="Bernoulli mean p(x=1) per joint state",
-                        ylabel="mean p(x=1) across Bernoulli dims",
-                    )
-                    metrics["bern/mean_per_state_plot"] = wandb.Image(fig)
-                    WandbLogger._safe_close(fig)
-
-            # Run-length + entropy distributions
-            fig = plot_run_length_distribution(
-                run_lengths_train,
-                title="Run-length distribution (argmax gamma)",
-                xlabel="segment length (timesteps)",
-            )
-            metrics["traj/runlen_dist"] = wandb.Image(fig)
-            WandbLogger._safe_close(fig)
-
-            # Raw (physical-unit) semantics -> log numeric tables (values), split by style
-            if sem_means_raw is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
-                figs = plot_semantics_table_by_style(
-                    sem_means_raw,
-                    sem_feat_names,
-                    S=int(trainer.S),
-                    A=int(trainer.A),
-                    stds=sem_stds_raw,
-                    title_prefix="Semantics (raw)",
-                    max_cols=8,
-                    fmt="{:.2f}",
-                    wrap_header_at=20,
-                    header_rotation=0,
-                    header_fontsize=8,
-                    cell_fontsize=8,
-                )
+            if A_a is not None:
+                figs = plot_A_a_per_style(A_a)
                 for k, fig in figs.items():
-                    metrics[f"semantics_raw/table_by_style/{k}"] = wandb.Image(fig)
+                    metrics[f"plots/A_a/{k}"] = wandb.Image(fig)
                     WandbLogger._safe_close(fig)
 
-            # Scaled semantics -> log numeric tables (values), split by style
-            #if sem_means is not None and sem_feat_names is not None and len(sem_feat_names) > 0:
-            #    figs = plot_semantics_table_by_style(
-            #        sem_means,
-            #        sem_feat_names,
-            #        S=int(trainer.S),
-            #        A=int(trainer.A),
-            #        stds=sem_stds,                    # optional: shows mean±std if available
-            #        title_prefix="Semantics (scaled) table",
-            #        max_cols=12,                       # adjust if you want wider/narrower tables
-            #        fmt="{:.2f}",                      # change precision here
-            #    )
-            #    for k, fig in figs.items():
-            #        metrics[f"semantics_scaled/table_by_style/{k}"] = wandb.Image(fig)
-            #        WandbLogger._safe_close(fig)
+                figs = plot_A_a_diag_per_style(A_a)
+                for k, fig in figs.items():
+                    metrics[f"plots/A_a_diag/{k}"] = wandb.Image(fig)
+                    WandbLogger._safe_close(fig)
+
+            # --- semantics tables ---
+            sem_feat_names = kwargs.get("sem_feat_names", None)
+
+            sem_means = kwargs.get("sem_means", None)
+            sem_stds = kwargs.get("sem_stds", None)
+
+            sem_means_raw = kwargs.get("sem_means_raw", None)
+            sem_stds_raw = kwargs.get("sem_stds_raw", None)
+
+            if sem_feat_names is not None and S is not None and A is not None:
+                S = int(S)
+                A = int(A)
+
+                #if sem_means is not None:
+                #    try:
+                 #       figs = plot_semantics_tables_by_style(
+                #            sem_means, sem_feat_names, S=S, A=A,
+                #            stds=sem_stds,
+                #            title_prefix="Semantics (scaled)",
+                #            max_cols=10,
+                #            fmt="{:.2f}",
+                #            wrap_header_at=18,
+                 #       )
+                #        for k, fig in figs.items():
+                #            metrics[f"plots/semantics_scaled/by_style/{k}"] = wandb.Image(fig)
+                 #           WandbLogger._safe_close(fig)
+                 #   except Exception:
+                 #       pass
+#
+#                    try:
+#                        figs = plot_semantics_tables_by_action(
+#                            sem_means, sem_feat_names, S=S, A=A,
+ #                           stds=sem_stds,
+ #                           title_prefix="Semantics (scaled)",
+ #                           max_cols=10,
+ #                           fmt="{:.2f}",
+ #                           wrap_header_at=18,
+ #                       )
+ #                       for k, fig in figs.items():
+  #                          metrics[f"plots/semantics_scaled/by_action/{k}"] = wandb.Image(fig)
+  #                          WandbLogger._safe_close(fig)
+  #                  except Exception:
+  #                      pass
+
+                if sem_means_raw is not None:
+                    # sem_means_raw: (S,A,F)  -> (S*A,F)
+                    M = np.asarray(sem_means_raw, dtype=np.float64)
+                    SD = np.asarray(sem_stds_raw, dtype=np.float64) if sem_stds_raw is not None else None
+
+                    if M.ndim == 3:
+                        M2 = M.reshape(S * A, M.shape[2])
+                        SD2 = SD.reshape(S * A, SD.shape[2]) if (SD is not None and SD.ndim == 3) else None
+                    elif M.ndim == 2:
+                        M2 = M
+                        SD2 = SD if (SD is not None and SD.ndim == 2) else None
+                    else:
+                        raise ValueError(f"Unexpected sem_means_raw shape: {M.shape}")
+
+                    try:
+                        figs = plot_semantics_tables_by_style(
+                            M2, sem_feat_names, S=S, A=A,
+                            stds=SD2,
+                            title_prefix="Semantics (raw units)",
+                            max_cols=10,
+                            fmt="{:.2f}",
+                            wrap_header_at=18,
+                        )
+                        for k, fig in figs.items():
+                            metrics[f"plots/semantics_raw/by_style/{k}"] = wandb.Image(fig)
+                            WandbLogger._safe_close(fig)
+                    except Exception:
+                        print(f"[WandbLogger] semantics plotting failed: {e}")
+                        pass
+
+                    #try:
+                    #    figs = plot_semantics_tables_by_action(
+                    #        M2, sem_feat_names, S=S, A=A,
+                    #        stds=SD2,
+                    #        title_prefix="Semantics (raw units)",
+                    #        max_cols=10,
+                    #        fmt="{:.2f}",
+                    #        wrap_header_at=18,
+                    #    )
+                    #    for k, fig in figs.items():
+                    #        metrics[f"plots/semantics_raw/by_action/{k}"] = wandb.Image(fig)
+                    #        WandbLogger._safe_close(fig)
+                    #except Exception:
+                    #    print(f"[WandbLogger] semantics plotting failed: {e}")
+                    #    pass
 
         except Exception as e:
-            if int(getattr(trainer, "verbose", 0)) >= 0:
-                print(f"[WandbLogger] Plotting failed at iter {it+1}: {e}")
+            # Never crash training because of plotting/logging
+            try:
+                if int(getattr(trainer, "verbose", 1)) >= 1:
+                    print(f"[WandbLogger] logging failed at iter={it}: {e}")
+            except Exception:
+                pass
 
         wandb_run.log(metrics)
-
-    
