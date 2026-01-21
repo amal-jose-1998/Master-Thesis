@@ -1,6 +1,6 @@
 import torch
 
-from hdv.hdv_dbn.config import TRAINING_CONFIG
+from .config import TRAINING_CONFIG
 
 # -----------------------------------------------------------------------------
 # Numerical stability constants
