@@ -3,11 +3,10 @@ import torch
 import math
 
 
-def _run_lengths_from_gamma_argmax(gamma_all):
+def run_lengths_from_gamma_sa_argmax(gamma_sa_seqs):
     """
     Compute run-lengths (segment durations) from hard labels:
-        z_hat[t] = argmax_k gamma[t,k]
-    It is a per-timestep MAP assignment from the marginals
+        (s_hat[t], a_hat[t]) = argmax_{s,a} gamma[t,s,a]
 
     Returns
     run_lengths : np.ndarray, shape (num_segments,)
@@ -18,20 +17,25 @@ def _run_lengths_from_gamma_argmax(gamma_all):
     all_runs = []
     traj_medians = []
 
-    for gamma in gamma_all:
+    for gamma in gamma_sa_seqs:
+        if gamma is None:
+            traj_medians.append(np.nan)
+            continue
+
         T = int(gamma.shape[0])
         if T <= 0:
             traj_medians.append(np.nan)
             continue
 
-        # hard path from marginals
-        z_hat = torch.argmax(gamma, dim=1).detach().cpu().numpy().astype(np.int64)
+        # argmax over (s,a) jointly
+        flat = gamma.reshape(T, -1)                          # (T, S*A)
+        idx = torch.argmax(flat, dim=1).detach().cpu().numpy().astype(np.int64)  # (T,)
 
         # compute contiguous run lengths
         runs = []
         cur = 1
         for t in range(1, T):
-            if z_hat[t] == z_hat[t - 1]:
+            if idx[t] == idx[t - 1]:
                 cur += 1
             else:
                 runs.append(cur)
@@ -42,69 +46,71 @@ def _run_lengths_from_gamma_argmax(gamma_all):
         all_runs.append(runs_np)
         traj_medians.append(float(np.median(runs_np)) if runs_np.size > 0 else np.nan)
 
-    if len(all_runs) == 0:
-        run_lengths = np.asarray([], dtype=np.int64)
-    else:
-        run_lengths = np.concatenate(all_runs, axis=0)
-
+    run_lengths = np.concatenate(all_runs, axis=0) if len(all_runs) else np.asarray([], dtype=np.int64)
     return run_lengths.astype(np.int64), np.asarray(traj_medians, dtype=np.float64)
 
-def _posterior_entropy_from_gamma(num_states, gamma_all):
+def posterior_entropy_from_gamma(gamma_sa_seqs, eps=1e-15):
     """
     Compute normalized Shannon entropy of the posterior from gamma per timestep.
+        H_t = -Σ_{s,a} p_t(s,a) log p_t(s,a)
+        Hn_t = H_t / log(S*A)  in [0,1] (approximately)
+
         0 → totally confident (posterior is ~one-hot)
         1 → totally uncertain (posterior ~uniform)
 
     Returns
-    -------
     ent_all : np.ndarray, shape (sum_T,)
         Normalized entropies pooled over all timesteps in all trajectories. In [0,1].
     ent_mean_per_traj : np.ndarray, shape (num_traj,)
         Mean normalized entropy per trajectory (NaN if T==0).
     """
-    K = int(num_states)
-    logK = float(np.log(max(K, 2)))  # avoid divide-by-zero; K>=2 in practice
-
     ent_list = []
     ent_mean_traj = []
 
-    for gamma in gamma_all:
-        T = int(gamma.shape[0])
+    for gamma in gamma_sa_seqs:
+        if gamma is None:
+            ent_mean_traj.append(np.nan)
+            continue
+
+        T, S, A = map(int, gamma.shape)
         if T <= 0:
             ent_mean_traj.append(np.nan)
             continue
 
-        # gamma: (T,K). Ensure numerical stability.
-        g = gamma.detach().cpu().numpy().astype(np.float64)
-        g = np.clip(g, 1e-15, 1.0)
-        g = g / g.sum(axis=1, keepdims=True)
+        K = max(S * A, 2)
+        logK = float(np.log(K))
+
+        # gamma: (T,S,A). Ensure numerical stability.
+        g = gamma.detach().cpu().numpy().astype(np.float64)  # (T,S,A)
+        g = np.clip(g, eps, 1.0)
+        g = g / g.sum(axis=(1, 2), keepdims=True)
 
         # H_t = -sum_k g*log(g)  -> (T,)
-        H = -np.sum(g * np.log(g), axis=1)
+        H = -np.sum(g * np.log(g), axis=(1, 2))     # (T,)
 
         # normalized entropy in [0,1]
-        Hn = H / logK
+        Hn = H / logK                               # (T,)
+        
         ent_list.append(Hn)
-        ent_mean_traj.append(float(np.mean(Hn)))
+        ent_mean_traj.append(float(np.mean(Hn)) if Hn.size else np.nan)
 
     ent_all = np.concatenate(ent_list, axis=0) if len(ent_list) else np.asarray([], dtype=np.float64)
     return ent_all.astype(np.float64), np.asarray(ent_mean_traj, dtype=np.float64)
 
-def _posterior_weighted_key_feature_stats(num_states, obs_names, obs_used, gamma_all):
+def posterior_weighted_feature_stats(obs_names, obs_seqs, gamma_sa_seqs, S=None, A=None):
     """
     Compute posterior-weighted mean ± std per state for a small set of derived key features (semantics).
 
     Returns
     feat_names : list[str]
-    means : np.ndarray, shape (K, F)
-    stds  : np.ndarray, shape (K, F)
+    means : np.ndarray, shape (S,A,F)
+    stds  : np.ndarray, shape (S,A,F)
     """
-    _assert_obs_gamma_aligned(obs_used, gamma_all)
+    _assert_obs_gamma_aligned(obs_seqs, gamma_sa_seqs)
 
-    K = int(num_states)
     # indices in obs vector
     name_to_idx = {n: i for i, n in enumerate(obs_names)}
-
+    
     def idx(name: str):
         return name_to_idx.get(name, None)
 
@@ -114,13 +120,12 @@ def _posterior_weighted_key_feature_stats(num_states, obs_names, obs_used, gamma
     compute_speed_mag = (i_vx is not None and i_vy is not None)
     compute_acc_mag = (i_ax is not None and i_ay is not None)
 
-    feat_specs = []  # (label, j, special)
-
+    feat_specs = []
     if compute_speed_mag:
         feat_specs.append(("speed_mag_mean", None, "ego_speed_mag"))
     if compute_acc_mag:
         feat_specs.append(("acc_mag_mean", None, "ego_acc_mag"))
-    
+
     candidate_names = [
         "vx_mean","vx_std","vy_mean","vy_std",
         "ax_mean","ax_std","ay_mean","ay_std",
@@ -138,25 +143,52 @@ def _posterior_weighted_key_feature_stats(num_states, obs_names, obs_used, gamma
     for n in candidate_names:
         j = idx(n)
         if j is not None:
-            feat_specs.append((n, j, "direct")) 
+            feat_specs.append((n, j, "direct"))
 
     feat_names = [fs[0] for fs in feat_specs]
     F = len(feat_names)
 
-    means = np.full((K, F), np.nan, dtype=np.float64)
-    stds  = np.full((K, F), np.nan, dtype=np.float64)
+    # infer S,A from first non-empty gamma
+    infer_S = infer_A = None
+    for g in gamma_sa_seqs:
+        if g is not None and g.numel() > 0:
+            _, infer_S, infer_A = map(int, g.shape)
+            break
+    
+    if infer_S is None:
+        return feat_names, np.zeros((0, 0, F)), np.zeros((0, 0, F))
 
-    sum_w   = np.zeros((K, F), dtype=np.float64)
-    sum_wx  = np.zeros((K, F), dtype=np.float64)
-    sum_wx2 = np.zeros((K, F), dtype=np.float64)
+    if S is None:
+        S = infer_S
+    if A is None:
+        A = infer_A
 
-    for obs, gamma in zip(obs_used, gamma_all):
-        x = np.asarray(obs, dtype=np.float64)  # (T, D)
-        g = gamma.detach().cpu().numpy().astype(np.float64)  # (T, K)
+    if int(S) != int(infer_S) or int(A) != int(infer_A):
+        raise ValueError(f"Provided S,A=({S},{A}) but gamma has ({infer_S},{infer_A}).")
+
+    S = int(S)
+    A = int(A)
+
+    sum_w   = np.zeros((S, A, F), dtype=np.float64)
+    sum_wx  = np.zeros((S, A, F), dtype=np.float64)
+    sum_wx2 = np.zeros((S, A, F), dtype=np.float64)
+
+    for obs, gamma in zip(obs_seqs, gamma_sa_seqs):
+        if obs is None or len(obs) == 0:
+            continue
+
+        x = np.asarray(obs, dtype=np.float64)                # (T,D)
+        g = gamma.detach().cpu().numpy().astype(np.float64)  # (T,S,A)
+
+        if g.shape[0] != x.shape[0]:
+            raise ValueError(f"obs T={x.shape[0]} != gamma T={g.shape[0]}")
+
+        if g.shape[1] != S or g.shape[2] != A:
+            raise ValueError(f"gamma has shape {g.shape}, expected (T,{S},{A})")
 
         # defensive normalization
         g = np.clip(g, 1e-15, 1.0)
-        g = g / g.sum(axis=1, keepdims=True)
+        g = g / g.sum(axis=(1, 2), keepdims=True)
 
         # Precompute derived ego vectors once per trajectory
         v_mag = None
@@ -166,7 +198,7 @@ def _posterior_weighted_key_feature_stats(num_states, obs_names, obs_used, gamma
         if compute_acc_mag:
             a_mag = np.sqrt(x[:, i_ax] ** 2 + x[:, i_ay] ** 2)
 
-    # Accumulate posterior-weighted moments with finite masking
+        # Accumulate posterior-weighted moments with finite masking
         for col, (label, j, special) in enumerate(feat_specs):
             if special == "ego_speed_mag":
                 val = v_mag
@@ -179,33 +211,32 @@ def _posterior_weighted_key_feature_stats(num_states, obs_names, obs_used, gamma
             if not np.any(finite):
                 continue
 
-            v = np.where(finite, val, 0.0).astype(np.float64)
-            fm = finite.astype(np.float64)
+            v = np.where(finite, val, 0.0).astype(np.float64)   # (T,)
+            fm = finite.astype(np.float64)                      # (T,)
 
-            W = g * fm[:, None]                # (T,K)
-            sum_w[:, col]  += W.sum(axis=0)
-            sum_wx[:, col] += (W * v[:, None]).sum(axis=0)
-            sum_wx2[:, col]+= (W * (v*v)[:, None]).sum(axis=0)
+            # weight mask: g[t,s,a] * fm[t]
+            W = g * fm[:, None, None]                           # (T,S,A)
 
-    # finalize mean/std
-    for k in range(K):
-        for col in range(F):
-            sw = sum_w[k, col]
-            if sw <= 0.0:
-                continue
-            m = sum_wx[k, col] / sw
-            ex2 = sum_wx2[k, col] / sw
-            var = max(ex2 - m*m, 0.0)
-            means[k, col] = m
-            stds[k, col] = math.sqrt(var)
+            sum_w[:, :, col]  += W.sum(axis=0)                                  # (S,A)
+            sum_wx[:, :, col] += np.einsum("tsa,t->sa", W, v)                   # (S,A)
+            sum_wx2[:, :, col]+= np.einsum("tsa,t->sa", W, v * v)               # (S,A)
+
+    den = np.maximum(sum_w, 1e-15)
+    means = sum_wx / den
+    var = np.maximum(sum_wx2 / den - means * means, 0.0)
+    stds = np.sqrt(var)
+
+    # keep NaNs where no mass
+    means[sum_w <= 0.0] = np.nan
+    stds[sum_w <= 0.0] = np.nan
 
     return feat_names, means, stds
 
-def _assert_obs_gamma_aligned(obs_used, gamma_all):
-    if len(obs_used) != len(gamma_all):
-        raise ValueError(f"len(obs_used)={len(obs_used)} != len(gamma_all)={len(gamma_all)}")
+def _assert_obs_gamma_aligned(obs_seqs, gamma_sa_seqs):
+    if len(obs_seqs) != len(gamma_sa_seqs):
+        raise ValueError(f"len(obs_used)={len(obs_seqs)} != len(gamma_all)={len(gamma_sa_seqs)}")
 
-    for i, (obs, gamma) in enumerate(zip(obs_used, gamma_all)):
+    for i, (obs, gamma) in enumerate(zip(obs_seqs, gamma_sa_seqs)):
         if obs is None:
             raise ValueError(f"obs_used[{i}] is None (filter earlier or handle explicitly)")
         if gamma is None:
