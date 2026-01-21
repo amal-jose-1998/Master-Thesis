@@ -151,21 +151,10 @@ def main():
     # -----------------------------
     # Frame -> window pipeline -> train/val/test split
     # -----------------------------
-    frame_feature_cols = list(FRAME_FEATURE_COLS)
-    meta_cols = list(META_COLS)
-    
-    # Build per-vehicle frame sequences 
-    frame_sequences = df_to_sequences(df, feature_cols=frame_feature_cols, meta_cols=meta_cols)
-    print(f"[train_highd_dbn] Total FRAME sequences (vehicles) loaded: {len(frame_sequences)}")
-
-    # Convert frame sequences -> window sequences
-    S = len(DBN_STATES.driving_style)
-    A = len(DBN_STATES.action)
-    exp_name = _slug(TRAINING_CONFIG.wandb_run_name) if getattr(TRAINING_CONFIG, "wandb_run_name", None) else "unnamed_experiment"
     cache_dir = data_root / "cache"
     # trajectory windowing with caching. returns a list of TrajectorySequence objects
-    win_sequences = load_or_build_windowized(frame_sequences, cache_dir=cache_dir, W=int(WINDOW_CONFIG.W), 
-                                             stride=int(WINDOW_CONFIG.stride), S=S, A=A, exp_name=exp_name, force_rebuild=False) 
+    win_sequences = load_or_build_windowized(df, cache_dir=cache_dir, W=int(WINDOW_CONFIG.W), 
+                                             stride=int(WINDOW_CONFIG.stride), force_rebuild=False) 
     print(f"[train_highd_dbn] Total WINDOW sequences produced: {len(win_sequences)}")
 
     # Split by sequence (vehicle) to avoid leakage
@@ -261,20 +250,20 @@ def main():
         )
 
         # Log scaler stats to W&B once 
-        try:
-            if scaler_table_rows is not None:
-                if USE_CLASSWISE_SCALING:
-                    t = wandb.Table(columns=["class", "feature", "mean", "std"], data=scaler_table_rows)
-                    wandb_run.log({"scaler/classwise_mean_std": t})
-                else:
-                    t = wandb.Table(columns=["feature", "mean", "std"], data=scaler_table_rows)
-                    wandb_run.log({"scaler/global_mean_std": t})
+        #try:
+        #    if scaler_table_rows is not None:
+        #        if USE_CLASSWISE_SCALING:
+        #            t = wandb.Table(columns=["class", "feature", "mean", "std"], data=scaler_table_rows)
+        #            wandb_run.log({"scaler/classwise_mean_std": t})
+        #        else:
+        #            t = wandb.Table(columns=["feature", "mean", "std"], data=scaler_table_rows)
+        #            wandb_run.log({"scaler/global_mean_std": t})
 
-            if scalecheck_table_rows is not None:
-                t2 = wandb.Table(columns=["feature", "scaled_mean", "scaled_std", "n_finite"], data=scalecheck_table_rows)
-                wandb_run.log({"scaler/train_scaled_sanitycheck": t2})
-        except Exception as e:
-            print(f"[train_highd_dbn] WARNING: failed to log scaler tables to W&B: {e}", file=sys.stderr)
+        #    if scalecheck_table_rows is not None:
+        #        t2 = wandb.Table(columns=["feature", "scaled_mean", "scaled_std", "n_finite"], data=scalecheck_table_rows)
+        #        wandb_run.log({"scaler/train_scaled_sanitycheck": t2})
+        #except Exception as e:
+        #    print(f"[train_highd_dbn] WARNING: failed to log scaler tables to W&B: {e}", file=sys.stderr)
 
     # -----------------------------
     # Train + save
