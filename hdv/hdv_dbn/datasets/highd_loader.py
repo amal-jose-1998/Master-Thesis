@@ -21,7 +21,7 @@ except ImportError:
 
 from .highd.io import HIGHD_COL_MAP, _read_recording_bundle
 from .highd.normalise import normalize_vehicle_centric
-from .highd.neighbours import add_neighbor_exists_flags, add_front_thw_ttc_dhw_from_tracks, add_ego_speed_and_jerk
+from .highd.neighbours import add_neighbor_exists_flags, add_front_thw_ttc_dhw_from_tracks, add_ego_speed_and_jerk, add_direction_aware_context_features
 from .highd.lanes import add_lane_change_feature, add_lane_boundary_distance_features
 from .highd.sequences import prune_columns, df_to_sequences, windowize_sequences, train_val_test_split, load_or_build_windowized
 from .highd.scaling import compute_feature_scaler, scale_sequences, compute_classwise_feature_scalers, scale_sequences_classwise
@@ -192,7 +192,8 @@ def load_highd_folder(root, cache_path=None, force_rebuild=False, max_recordings
             else:
                 df["dir_sign"] = 1.0
         
-        df = add_neighbor_exists_flags(df)
+        #df = add_neighbor_exists_flags(df)
+        df = add_direction_aware_context_features(df)
         df = add_lane_boundary_distance_features(df, y_col="y_center")
         df = add_lane_change_feature(df, lane_col="lane_id", dir_sign_col="dir_sign")
         df = add_front_thw_ttc_dhw_from_tracks(df)

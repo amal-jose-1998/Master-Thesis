@@ -7,6 +7,8 @@ import json
 from ..dataset import TrajectorySequence
 from ...config import (FRAME_FEATURE_COLS, META_COLS, WINDOW_FEATURE_COLS)
 
+_REL_SUFFIXES = ("_dx", "_dy", "_dvx", "_dvy")
+
 def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame",  meta_cols=None):
     """
     Convert a per-frame table into per-vehicle sequences. Trajectory is defined by (recording_id, vehicle_id).
@@ -143,13 +145,49 @@ def _nanmax(x):
     x = x[np.isfinite(x)]
     return float(x.max()) if x.size else np.nan
 
-def _nanp95(x: np.ndarray):
+def _nanp95(x):
     x = x[np.isfinite(x)]
     return float(np.percentile(x, 95)) if x.size else np.nan
 
-def _nanrms(x: np.ndarray):
+def _nanrms(x):
     x = x[np.isfinite(x)]
     return float(np.sqrt(np.mean(x * x))) if x.size else np.nan
+
+def _nanlast(x):
+    x = np.asarray(x, dtype=np.float64)
+    idx = np.where(np.isfinite(x))[0]
+    if idx.size == 0:
+        return np.nan
+    return float(x[int(idx[-1])])
+
+def _nanslope(x):
+    x = np.asarray(x, dtype=np.float64)
+    idx = np.where(np.isfinite(x))[0]
+    if idx.size < 2:
+        return np.nan
+    i0, i1 = int(idx[0]), int(idx[-1])
+    if i1 == i0:
+        return np.nan
+    return float((x[i1] - x[i0]) / (i1 - i0))
+
+def _masked_nanlast(x, mask):
+    x = np.asarray(x, dtype=np.float64)
+    m = np.asarray(mask, dtype=bool)
+    idx = np.where(m & np.isfinite(x))[0]
+    if idx.size == 0:
+        return np.nan
+    return float(x[int(idx[-1])])
+
+def _masked_nanmin(x, mask):
+    x = np.asarray(x, dtype=np.float64)
+    m = np.asarray(mask, dtype=bool)
+    v = x[m & np.isfinite(x)]
+    return float(v.min()) if v.size else np.nan
+
+def _masked_vfrac(mask):
+    m = np.asarray(mask, dtype=bool)
+    return float(np.mean(m)) if m.size else 0.0
+
 
 def _seti(Y, t, j, v):
     """
@@ -237,8 +275,8 @@ def _compute_kinematics(win, Y, t, in_idx, out):
     """
     for c in ("vx", "ax", "vy", "ay"):
         col = win[:, in_idx[c]]
-        _seti(Y, t, out.get(f"{c}_mean"), _nanmean(col))
-        _seti(Y, t, out.get(f"{c}_std"),  _nanstd(col))
+        _seti(Y, t, out.get(f"{c}_last"),  _nanlast(col))
+        _seti(Y, t, out.get(f"{c}_slope"),  _nanslope(col))
         if c == "ax" or c == "ay":
             _compute_minmax_and_sign_fracs(win, Y, t, in_idx, out, c)
 
@@ -279,27 +317,25 @@ def _compute_lane_change_flags(win, Y, t, in_idx, out):
     _seti(Y, t, out.get("lc_right_present"), float(np.any(lc_f == +1))) # 1 if any right lane changes in window; else 0
 
 def _compute_lane_boundaries(win, Y, t, in_idx, out):
-    j = out.get("d_left_lane_mean")
-    k = out.get("d_left_lane_min")
-    if j is not None or k is not None:
+    # left
+    if "d_left_lane" in in_idx:
         dl = win[:, in_idx["d_left_lane"]]
-        _seti(Y, t, j, _nanmean(dl))
-        _seti(Y, t, k, _nanmin(dl))
+        _seti(Y, t, out.get("d_left_lane_last"), _nanlast(dl))
+        _seti(Y, t, out.get("d_left_lane_min"),  _nanmin(dl))
 
-    j = out.get("d_right_lane_mean")
-    k = out.get("d_right_lane_min")
-    if j is not None or k is not None:
+    # right
+    if "d_right_lane" in in_idx:
         dr = win[:, in_idx["d_right_lane"]]
-        _seti(Y, t, j, _nanmean(dr))
-        _seti(Y, t, k, _nanmin(dr))
+        _seti(Y, t, out.get("d_right_lane_last"), _nanlast(dr))
+        _seti(Y, t, out.get("d_right_lane_min"),  _nanmin(dr))
 
 def _compute_risk(win, Y, t, in_idx, out, has_front_exists):
     # Only compute if any risk outputs exist
     for colname in ("front_thw", "front_ttc", "front_dhw"):
-        j_mean = out.get(f"{colname}_mean")
+        j_last = out.get(f"{colname}_last")
         j_min  = out.get(f"{colname}_min")
         j_vfr  = out.get(f"{colname}_vfrac")
-        if j_mean is None and j_min is None and j_vfr is None:
+        if j_last is None and j_min is None and j_vfr is None:
             continue
 
         r = win[:, in_idx[colname]].astype(np.float64, copy=False)
@@ -308,11 +344,9 @@ def _compute_risk(win, Y, t, in_idx, out, has_front_exists):
             ex = win[:, in_idx["front_exists"]]
             valid = valid & (ex > 0.5)
 
-        vfrac = float(np.mean(valid)) if valid.size else 0.0
-        rv = r[valid]
-        _seti(Y, t, j_mean, (float(rv.mean()) if rv.size else np.nan))
-        _seti(Y, t, j_min,  (float(rv.min())  if rv.size else np.nan))
-        _seti(Y, t, j_vfr,  vfrac)
+        _seti(Y, t, j_last, _masked_nanlast(r, valid))
+        _seti(Y, t, j_min, _masked_nanmin(r, valid))
+        _seti(Y, t, j_vfr, _masked_vfrac(valid))
 
 def _compute_existence_fracs(win, Y, t, in_idx, out, exists_cols):
     for c in exists_cols:
@@ -323,28 +357,50 @@ def _compute_existence_fracs(win, Y, t, in_idx, out, exists_cols):
         _seti(Y, t, j, float(np.mean(np.isfinite(ex) & (ex > 0.5))))
 
 def _validate_required_columns(in_idx, out_idx):
-    required_frame = {"vx", "ax", "vy", "ay", "lc"}
+    """
+    Single source of truth for fail-fast input validation:
+    - core kinematics / lc
+    - jerk if requested
+    - lane boundary if requested
+    - risk if requested
+    - existence fracs if requested
+    - neighbor-relative last/min stats if requested (dx/dy/dvx/dvy), gated by *_exists
 
+    Returns
+    exists_cols : list[str]
+        All existence columns known to the pipeline (used by _compute_existence_fracs).
+    rel_tasks : list[tuple]
+        Tasks built from WINDOW_FEATURE_COLS (used by _compute_neighbor_rel).
+    """
+    required_frame = {"vx", "ax", "vy", "ay", "lc"}
+    # ---------------------------------------------------------------------
+    # jerk requirements (only if jerk outputs are requested)
+    # ---------------------------------------------------------------------
     jerk_out_keys = {
         "jerk_x_mean", "jerk_x_std", "jerk_x_rms", "jerk_x_p95",
         "jerk_y_mean", "jerk_y_std", "jerk_y_rms", "jerk_y_p95",
     }
     if any(k in out_idx for k in jerk_out_keys):
-        # require per-frame jerk columns only if you actually want jerk outputs
         if any(k.startswith("jerk_x_") for k in out_idx.keys() if k in jerk_out_keys):
             required_frame.add("jerk_x")
         if any(k.startswith("jerk_y_") for k in out_idx.keys() if k in jerk_out_keys):
             required_frame.add("jerk_y")
-
-    if "d_left_lane_mean" in out_idx or "d_left_lane_min" in out_idx:
+    # ---------------------------------------------------------------------
+    # lane boundaries
+    # ---------------------------------------------------------------------
+    if "d_left_lane_last" in out_idx or "d_left_lane_min" in out_idx:
         required_frame.add("d_left_lane")
-    if "d_right_lane_mean" in out_idx or "d_right_lane_min" in out_idx:
+    if "d_right_lane_last" in out_idx or "d_right_lane_min" in out_idx:
         required_frame.add("d_right_lane")
-
+    # ---------------------------------------------------------------------
+    # risk metrics (front_thw/front_ttc/front_dhw)
+    # ---------------------------------------------------------------------
     for r in ("front_thw", "front_ttc", "front_dhw"):
-        if (f"{r}_mean" in out_idx) or (f"{r}_min" in out_idx) or (f"{r}_vfrac" in out_idx):
+        if (f"{r}_last" in out_idx) or (f"{r}_min" in out_idx) or (f"{r}_vfrac" in out_idx):
             required_frame.add(r)
-
+    # ---------------------------------------------------------------------
+    # existence fracs: only require those exists columns if *_frac requested
+    # ---------------------------------------------------------------------
     exists_cols = [
         "front_exists", "rear_exists",
         "left_front_exists", "left_side_exists", "left_rear_exists",
@@ -353,12 +409,91 @@ def _validate_required_columns(in_idx, out_idx):
     for c in exists_cols:
         if f"{c}_frac" in out_idx:
             required_frame.add(c)
+    # ---------------------------------------------------------------------
+    # neighbor-relative last/min stats: derive requirements from out_idx
+    # ---------------------------------------------------------------------
+    rel_tasks = _build_neighbor_rel_tasks(in_idx, out_idx)
 
+    # If any rel_tasks exist, require their frame-level rel + exists columns
+    missing_neighbor = []
+    for _, rel_j, ex_j, _, rel_name, ex_name in rel_tasks:
+        if rel_j is None:
+            missing_neighbor.append(rel_name)
+        if ex_j is None:
+            missing_neighbor.append(ex_name)
+    # ---------------------------------------------------------------------
+    # final missing check
+    # ---------------------------------------------------------------------
     missing = [c for c in sorted(required_frame) if c not in in_idx]
-    if missing:
-        raise RuntimeError(f"[windowize_sequences] Missing required frame cols: {missing}")
+    if missing_neighbor:
+        missing.extend(sorted(set(missing_neighbor)))
 
-    return exists_cols
+    if missing:
+        raise RuntimeError(f"[windowize_sequences] Missing required frame cols: {sorted(set(missing))}")
+
+    return exists_cols, rel_tasks
+
+def _parse_neighbor_rel_out(out_name):
+    """
+    Parse window output names like:
+        <prefix>_<dx|dy|dvx|dvy>_<last|min>
+    Returns (rel_name, exists_name, stat) or None if not a neighbor-rel feature.
+    """
+    for stat in ("last", "min"):
+        suf = f"_{stat}"
+        if not out_name.endswith(suf):
+            continue
+        base = out_name[: -len(suf)]  # e.g. "left_front_dx"
+        comp = None
+        for c in _REL_SUFFIXES:
+            if base.endswith(c):
+                comp = c
+                break
+        if comp is None:
+            return None
+        prefix = base[: -len(comp)]          # e.g. "left_front"
+        rel_name = base                      # e.g. "left_front_dx"
+        ex_name = f"{prefix}_exists"         # e.g. "left_front_exists"
+        return rel_name, ex_name, stat
+    return None
+
+
+def _build_neighbor_rel_tasks(in_idx, out_idx):
+    """
+    Build a list of computation tasks for all requested neighbor-rel window outputs.
+    Each task: (out_j, rel_j, ex_j, stat, rel_name, ex_name)
+    """
+    tasks = []
+    for out_name, out_j in out_idx.items():
+        parsed = _parse_neighbor_rel_out(out_name)
+        if parsed is None:
+            continue
+        rel_name, ex_name, stat = parsed
+        tasks.append((
+            out_j,
+            in_idx.get(rel_name, None),
+            in_idx.get(ex_name, None),
+            stat,
+            rel_name,
+            ex_name,
+        ))
+    return tasks
+
+def _compute_neighbor_rel(win, Y, t, rel_tasks):
+    for out_j, rel_j, ex_j, stat, _, _ in rel_tasks:
+        if out_j is None or rel_j is None or ex_j is None:
+            continue
+
+        rel = win[:, rel_j].astype(np.float64, copy=False)
+        ex  = win[:, ex_j].astype(np.float64, copy=False)
+        valid = np.isfinite(rel) & (ex > 0.5)
+
+        if stat == "last":
+            v = _masked_nanlast(rel, valid)
+        else:  # "min"
+            v = _masked_nanmin(rel, valid)
+
+        _seti(Y, t, out_j, v)
 
 def windowize_sequences(sequences, W=150, stride=10):
     """
@@ -388,7 +523,7 @@ def windowize_sequences(sequences, W=150, stride=10):
     out_idx = {n: i for i, n in enumerate(win_names)}
 
     #strict input validation (fail fast) 
-    exists_cols = _validate_required_columns(in_idx, out_idx)
+    exists_cols, rel_tasks = _validate_required_columns(in_idx, out_idx)
 
     has_front_exists = "front_exists" in in_idx  
 
@@ -420,6 +555,7 @@ def windowize_sequences(sequences, W=150, stride=10):
             _compute_lane_boundaries(win, Y, t, in_idx, out_idx)   # lane boundary distances
             _compute_risk(win, Y, t, in_idx, out_idx, has_front_exists)  # risk summaries
             _compute_existence_fracs(win, Y, t, in_idx, out_idx, exists_cols) # existence fractions
+            _compute_neighbor_rel(win, Y, t, rel_tasks)
         
         frames = seq.frames
         out_frames = frames[starts]  # window start frame numbers

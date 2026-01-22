@@ -103,8 +103,8 @@ class TrainingConfig:
     # "linear" : additive log-likelihoods (no PoE logZ coupling)
     emission_model: Literal["poe", "linear"] = "poe"
     # Only used for "poe" if that implementation uses gradient M-step
-    poe_em_lr: float = 1e-2
-    poe_em_steps: int = 10
+    poe_em_lr: float = 3e-3
+    poe_em_steps: int = 20
 
     learn_pi0: bool = False  
     pi0_alpha: float = 0.0
@@ -143,7 +143,7 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = 1
+    max_highd_recordings: Optional[int] = 10
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
@@ -189,10 +189,19 @@ FRAME_FEATURE_COLS: List[str] = [
     "front_thw", "front_ttc", "front_dhw",
 
     # existence flags (frame-level, later windowised into fractions)
-    "front_exists",
-    "rear_exists",
-    "left_front_exists", "left_side_exists", "left_rear_exists",
-    "right_front_exists", "right_side_exists", "right_rear_exists",
+   "left_front_exists",  "front_exists",  "right_front_exists", 
+   "left_side_exists", "right_side_exists", 
+   "left_rear_exists", "rear_exists", "right_rear_exists",
+
+    # neighbor-relative interaction signals (frame-level) 
+    "front_dx", "front_dy", "front_dvx", "front_dvy",
+    "left_front_dx", "left_front_dy", "left_front_dvx", "left_front_dvy",
+    "right_front_dx", "right_front_dy", "right_front_dvx", "right_front_dvy",
+    "left_side_dx", "left_side_dy", "left_side_dvx", "left_side_dvy",
+    "right_side_dx", "right_side_dy", "right_side_dvx", "right_side_dvy",
+    "left_rear_dx", "left_rear_dy", "left_rear_dvx", "left_rear_dvy",
+    "right_rear_dx", "right_rear_dy", "right_rear_dvx", "right_rear_dvy",
+    "rear_dx", "rear_dy", "rear_dvx", "rear_dvy",
 ]
 
 
@@ -212,14 +221,14 @@ WINDOW_CONFIG = WindowConfig()
 
 # Window-level columns produced by windowize_sequences() 
 WINDOW_EGO_FEATURES: List[str] = [
-    "vx_mean", "vx_std",
-    "ax_mean", "ax_std", "ax_min", "ax_max",
+    "vx_last", "vx_slope",
+    "ax_last",
+    "vy_last", "vy_slope", 
+    "ay_last", 
     "ax_neg_frac", "ax_pos_frac", "ax_zero_frac",
-    #"vy_mean", "vy_std",
-    "ay_mean", "ay_std", "ay_min", "ay_max",
     "ay_neg_frac", "ay_pos_frac", "ay_zero_frac",
-    "jerk_x_mean", "jerk_x_std", "jerk_x_rms", "jerk_x_p95",
-    "jerk_y_mean", "jerk_y_std", "jerk_y_rms", "jerk_y_p95",
+    "jerk_x_p95",
+    "jerk_y_p95",
 ]
 
 WINDOW_LC_FEATURES: List[str] = [
@@ -228,32 +237,47 @@ WINDOW_LC_FEATURES: List[str] = [
 ]
 
 WINDOW_LANE_GEOM_FEATURES: List[str] = [
-    "d_left_lane_mean",  "d_left_lane_min",
-    "d_right_lane_mean", "d_right_lane_min",
+    "d_left_lane_last",  "d_left_lane_min", 
+    "d_right_lane_last", "d_right_lane_min", 
 ]
 
 # *_vfrac = fraction of frames where the signal was valid
 # if vfrac == 0 → mean and min are NaN (masked later in emissions / E-step)
 WINDOW_FRONT_RISK_FEATURES: List[str] = [
-    "front_thw_mean", "front_thw_min", "front_thw_vfrac", 
-    "front_ttc_mean", "front_ttc_min", "front_ttc_vfrac",
-    "front_dhw_mean", "front_dhw_min", "front_dhw_vfrac",
+    #"front_thw_slope", 
+    "front_thw_last", "front_thw_vfrac", 
+    #"front_ttc_slope", #"front_ttc_last", 
+    "front_ttc_min", "front_ttc_vfrac", 
+    #"front_dhw_mean", "front_dhw_min", "front_dhw_vfrac",
 ]
 
-# Existence fractions (window-level)
-WINDOW_EXISTS_FRAC_FEATURES: List[str] = [
+WINDOW_NEIGHBOR_REL_FEATURES: List[str] = [
+    "front_dx_min", #"front_dx_slope",
+    "front_dvx_min", #"front_dvx_slope",
     "front_exists_frac",
-    "rear_exists_frac",
-    "left_front_exists_frac", "left_side_exists_frac", "left_rear_exists_frac",
-    "right_front_exists_frac", "right_side_exists_frac", "right_rear_exists_frac",
+
+    #"left_side_dx_last", "left_side_dx_slope",
+    #"left_side_dvx_last", "left_side_dvx_slope",
+    "left_side_dy_last", "left_side_exists_frac",
+
+    #"right_side_dx_last", "right_side_dx_slope",
+    #"right_side_dvx_last", "right_side_dvx_slope",
+    "right_side_dy_last", "right_side_exists_frac",
+
+    "left_front_dx_last", "left_front_exists_frac", 
+    "left_rear_dx_last", "left_rear_exists_frac",
+
+    "right_front_dx_last", "right_front_exists_frac", 
+    "right_rear_dx_last", "right_rear_exists_frac",
 ]
+
 
 WINDOW_FEATURE_COLS: List[str] = (
     WINDOW_EGO_FEATURES
     + WINDOW_LC_FEATURES
     + WINDOW_LANE_GEOM_FEATURES
     + WINDOW_FRONT_RISK_FEATURES
-    + WINDOW_EXISTS_FRAC_FEATURES
+    + WINDOW_NEIGHBOR_REL_FEATURES
 )
 
 BERNOULLI_FEATURES: List[str] = [
