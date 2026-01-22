@@ -171,11 +171,12 @@ def add_front_thw_ttc_dhw_from_tracks(df):
 
     return out
 
-def add_ego_speed_and_jerk(df):
+def add_ego_speed_and_jerk(df, dt=1.0/25.0):
     """
     Add:
         - speed  = sqrt(vx^2 + vy^2)
-        - jerk_x = ax[t] - ax[t-1] computed groupwise per (recording_id, vehicle_id)
+        - jerk_x = (ax[t] - ax[t-1]) /dt computed groupwise per (recording_id, vehicle_id)
+        - jerk_y = d(ay)/dt
 
     Conventions:
         - speed is NaN if vx or vy is missing
@@ -192,26 +193,36 @@ def add_ego_speed_and_jerk(df):
     else:
         out["speed"] = np.nan
 
-    # jerk_x (groupwise)
-    if "ax" in out.columns:
-        out = out.sort_values(["recording_id", "vehicle_id", "frame"], kind="mergesort") # sorted so that all frames of a vehicle in a recording are contiguous and in time order
-        ax = out["ax"].to_numpy(dtype=np.float64, copy=False)
-        rec = out["recording_id"].to_numpy(copy=False)
-        vid = out["vehicle_id"].to_numpy(copy=False)
+    out = out.sort_values(["recording_id", "vehicle_id", "frame"], kind="mergesort") # sorted so that all frames of a vehicle in a recording are contiguous and in time order
+    rec = out["recording_id"].to_numpy(copy=False)
+    vid = out["vehicle_id"].to_numpy(copy=False)
 
-        same = (rec == np.roll(rec, 1)) & (vid == np.roll(vid, 1)) # same vehicle as previous row
-        
-        jerk = np.zeros_like(ax, dtype=np.float64)
-        idx = np.where(same)[0] # valid indices where we can compute jerk
-        jerk[idx] = ax[idx] - ax[idx - 1]
+    same = (rec == np.roll(rec, 1)) & (vid == np.roll(vid, 1))
+    same[0] = False  # prevent wrap-around artifact
 
-        # NaN-safe: if ax[t] or ax[t-1] is NaN, jerk becomes NaN at t
-        bad = ~np.isfinite(jerk)
-        jerk[bad] = np.nan
+    if dt is None or dt <= 0:
+        raise ValueError(f"dt must be > 0, got {dt}")
 
-        out["jerk_x"] = jerk
-    else:
-        out["jerk_x"] = 0.0 
+    # jerk (groupwise)
+    for a_col, j_col in (("ax", "jerk_x"), ("ay", "jerk_y")):
+        if a_col in out.columns:
+            a = out[a_col].to_numpy(dtype=np.float64, copy=False)
+
+            jerk = np.full_like(a, np.nan, dtype=np.float64)
+
+            idx = np.where(same)[0] # valid indices where we can compute jerk
+            a_now = a[idx]
+            a_prev = a[idx - 1]
+
+            ok = np.isfinite(a_now) & np.isfinite(a_prev)
+            jerk[idx[ok]] = (a_now[ok] - a_prev[ok]) / dt
+
+            # first frame per trajectory
+            jerk[~same] = 0.0
+
+            out[j_col] = jerk
+        else:
+            out[j_col] = 0.0 
 
     return out
 

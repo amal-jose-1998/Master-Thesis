@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 from .model import HDVDBN
-from .emissions import MixedEmissionModel
+from .additive_emissions import MixedEmissionModel as LinearMixedEmissionModel
+from .poe_emissions import MixedEmissionModel as PoEMixedEmissionModel
 from .config import TRAINING_CONFIG
 from .utils.wandb_logger import WandbLogger
 from .utils.trainer_diagnostics import (
@@ -86,7 +87,7 @@ class HDVTrainer:
             emission parameters updated from gamma (responsibilities)
     """
 
-    def __init__(self, obs_names):
+    def __init__(self, obs_names, emission_model="poe"):
         """
         Parameters
         obs_names : list[str]
@@ -94,7 +95,20 @@ class HDVTrainer:
         """
         self.hdv_dbn = HDVDBN()
         self.obs_names = list(obs_names)
-        self.emissions = MixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=bool(getattr(TRAINING_CONFIG, "disable_discrete_obs", False)))
+
+        em_mode = emission_model or getattr(TRAINING_CONFIG, "emission_model", "poe")
+        em_mode = str(em_mode).lower().strip()
+        disable_disc = bool(getattr(TRAINING_CONFIG, "disable_discrete_obs", False))
+
+        if em_mode == "poe":
+            self.emissions = PoEMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
+        elif em_mode == "linear":
+            self.emissions = LinearMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
+        else:
+            raise ValueError(f"Unknown emission_model='{em_mode}'. Use 'poe' or 'linear'.")
+
+        self.emission_model = em_mode
+        
         self.S = int(self.hdv_dbn.num_style)
         self.A = int(self.hdv_dbn.num_action)
         self.num_states = self.S * self.A
@@ -949,14 +963,24 @@ class HDVTrainer:
         state_frac_sa : np.ndarray (S,A)
             Normalized joint masses.
         """
-        masses = self.emissions.update_from_posteriors(
-            obs_seqs=train_obs_seqs,
-            gamma_sa_seqs=gamma_all,
-            lr=float(getattr(TRAINING_CONFIG, "poe_em_lr", 1e-2)),
-            steps=int(getattr(TRAINING_CONFIG, "poe_em_steps", 10)),
-            use_progress=use_progress,
-            verbose=verbose,
-        )
+        if self.emission_model == "poe":
+            masses = self.emissions.update_from_posteriors(
+                obs_seqs=train_obs_seqs,
+                gamma_sa_seqs=gamma_all,
+                lr=float(getattr(TRAINING_CONFIG, "poe_em_lr", 1e-2)),
+                steps=int(getattr(TRAINING_CONFIG, "poe_em_steps", 10)),
+                use_progress=use_progress,
+                verbose=verbose,
+            )
+        else:
+            # linear/additive: typically closed-form M-step; no lr/steps
+            masses = self.emissions.update_from_posteriors(
+                obs_seqs=train_obs_seqs,
+                gamma_sa_seqs=gamma_all,
+                use_progress=use_progress,
+                verbose=verbose,
+            )
+
         state_weights_sa = np.asarray(masses["mass_joint"], dtype=np.float64)  # (S,A)
         total_mass = float(state_weights_sa.sum())
         state_frac_sa = (state_weights_sa / total_mass) if total_mass > 0.0 else np.zeros_like(state_weights_sa)
@@ -1053,6 +1077,8 @@ class HDVTrainer:
             "pi_a0_given_s0": pi_a0_given_s0_np,
             "A_s": A_s_np,
             "A_a": A_a_np,
+
+            "emission_model": np.array([self.emission_model], dtype=object),
         }
 
         # -----------------------------
@@ -1132,7 +1158,12 @@ class HDVTrainer:
             raise ValueError("Checkpoint contains no emission payload (no keys starting with 'em__').")
 
         obs_names = list(np.asarray(em_payload["obs_names"], dtype=object).tolist())
-        trainer = cls(obs_names=obs_names)
+
+        em_mode = "poe"
+        if "emission_model" in data.files:
+            em_mode = str(np.asarray(data["emission_model"]).reshape(-1)[0])
+
+        trainer = cls(obs_names=obs_names, emission_model=em_mode)
 
         trainer.emissions.from_arrays(em_payload)
         trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)

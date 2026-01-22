@@ -96,6 +96,16 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 100
 
+    # -------------------------------------------------------------
+    # Emission model selection
+    # -------------------------------------------------------------
+    # "poe"    : Product-of-Experts emissions (your PoE module)
+    # "linear" : additive log-likelihoods (no PoE logZ coupling)
+    emission_model: Literal["poe", "linear"] = "poe"
+    # Only used for "poe" if that implementation uses gradient M-step
+    poe_em_lr: float = 1e-2
+    poe_em_steps: int = 10
+
     learn_pi0: bool = False  
     pi0_alpha: float = 0.0
     disable_discrete_obs: bool = False     
@@ -166,7 +176,7 @@ META_COLS: List[str] = [
 # Per-frame columns we keep in the dataframe (to build windows) 
 FRAME_FEATURE_COLS: List[str] = [
     # ego kinematics
-    "vx", "vy", "ax", "ay", "jerk_x",
+    "vx", "vy", "ax", "ay", "jerk_x", "jerk_y",
 
     # lane change evidence  ∈ { -1, 0, +1 }
     "lc",       
@@ -195,7 +205,7 @@ class WindowConfig:
     Controls conversion from per-frame trajectories to per-window timesteps.
     W and stride are in frames. 
     """
-    W: int = 150  # highD is 25 Hz (so 150 frames ~= 6s).
+    W: int = 50  # highD is 25 Hz (so 50 frames = 2s).
     stride: int = 10 # 10 frames ~= 0.4s between window starts
 
 WINDOW_CONFIG = WindowConfig()
@@ -208,7 +218,8 @@ WINDOW_EGO_FEATURES: List[str] = [
     #"vy_mean", "vy_std",
     "ay_mean", "ay_std", "ay_min", "ay_max",
     "ay_neg_frac", "ay_pos_frac", "ay_zero_frac",
-    #"jerk_mean", "jerk_std"
+    "jerk_x_mean", "jerk_x_std", "jerk_x_rms", "jerk_x_p95",
+    "jerk_y_mean", "jerk_y_std", "jerk_y_rms", "jerk_y_p95",
 ]
 
 WINDOW_LC_FEATURES: List[str] = [

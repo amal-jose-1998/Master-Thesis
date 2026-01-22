@@ -143,6 +143,14 @@ def _nanmax(x):
     x = x[np.isfinite(x)]
     return float(x.max()) if x.size else np.nan
 
+def _nanp95(x: np.ndarray):
+    x = x[np.isfinite(x)]
+    return float(np.percentile(x, 95)) if x.size else np.nan
+
+def _nanrms(x: np.ndarray):
+    x = x[np.isfinite(x)]
+    return float(np.sqrt(np.mean(x * x))) if x.size else np.nan
+
 def _seti(Y, t, j, v):
     """
     Set Y[t, j] if j is not None.
@@ -236,7 +244,7 @@ def _compute_kinematics(win, Y, t, in_idx, out):
 
 def _compute_jerk(win, Y, t, in_idx, out):
     """
-    Compute jerk summaries: mean/std of jerk_x.
+    Compute jerk summaries: mean/std/rms/p95 of jerk_x and jerk_y.
 
     Parameters
     win : np.ndarray
@@ -250,13 +258,18 @@ def _compute_jerk(win, Y, t, in_idx, out):
     out : dict
         Mapping from output feature names to their column indices in `Y`.
     """
-    jm = out.get("jerk_mean")
-    js = out.get("jerk_std")
-    if jm is None and js is None:
-        return
-    col = win[:, in_idx["jerk_x"]]
-    _seti(Y, t, jm, _nanmean(col))
-    _seti(Y, t, js, _nanstd(col))
+    # jerk_x stats
+    if "jerk_x" in in_idx:
+        _seti(Y, t, out.get("jerk_x_mean"), _nanmean(win[:, in_idx["jerk_x"]]))
+        _seti(Y, t, out.get("jerk_x_std"),  _nanstd(win[:, in_idx["jerk_x"]]))
+        _seti(Y, t, out.get("jerk_x_rms"),  _nanrms(win[:, in_idx["jerk_x"]]))
+        _seti(Y, t, out.get("jerk_x_p95"),  _nanp95(win[:, in_idx["jerk_x"]]))
+    # jerk_y stats
+    if "jerk_y" in in_idx:
+        _seti(Y, t, out.get("jerk_y_mean"), _nanmean(win[:, in_idx["jerk_y"]]))
+        _seti(Y, t, out.get("jerk_y_std"),  _nanstd(win[:, in_idx["jerk_y"]]))
+        _seti(Y, t, out.get("jerk_y_rms"),  _nanrms(win[:, in_idx["jerk_y"]]))
+        _seti(Y, t, out.get("jerk_y_p95"),  _nanp95(win[:, in_idx["jerk_y"]]))
 
 def _compute_lane_change_flags(win, Y, t, in_idx, out):
     # lc: -1 left, +1 right, 0 none, NaNs ignored
@@ -312,8 +325,16 @@ def _compute_existence_fracs(win, Y, t, in_idx, out, exists_cols):
 def _validate_required_columns(in_idx, out_idx):
     required_frame = {"vx", "ax", "vy", "ay", "lc"}
 
-    if "jerk_mean" in out_idx or "jerk_std" in out_idx:
-        required_frame.add("jerk_x")
+    jerk_out_keys = {
+        "jerk_x_mean", "jerk_x_std", "jerk_x_rms", "jerk_x_p95",
+        "jerk_y_mean", "jerk_y_std", "jerk_y_rms", "jerk_y_p95",
+    }
+    if any(k in out_idx for k in jerk_out_keys):
+        # require per-frame jerk columns only if you actually want jerk outputs
+        if any(k.startswith("jerk_x_") for k in out_idx.keys() if k in jerk_out_keys):
+            required_frame.add("jerk_x")
+        if any(k.startswith("jerk_y_") for k in out_idx.keys() if k in jerk_out_keys):
+            required_frame.add("jerk_y")
 
     if "d_left_lane_mean" in out_idx or "d_left_lane_min" in out_idx:
         required_frame.add("d_left_lane")

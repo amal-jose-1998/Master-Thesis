@@ -1,5 +1,5 @@
 """
-PoE (Product-of-Experts) emissions for a structured DBN with hidden nodes:
+Additive (unnormalized) expert emissions for a structured DBN:
 
   Style_t  in {0..S-1}
   Action_t in {0..A-1}
@@ -9,7 +9,7 @@ Each expert sees the full observation o_t:
   Style expert : p(o_t | s_t)
   Action expert: p(o_t | a_t)
 
-PoE combination:
+Emission combination:
   p(o_t | s,a) ∝ p(o_t | s) * p(o_t | a)
 
 In log-space:
