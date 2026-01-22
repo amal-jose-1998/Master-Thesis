@@ -89,14 +89,50 @@ def plot_line(values, title: str, xlabel: str, ylabel: str, marker: str = "o") -
     fig.tight_layout()
     return fig
 
+def _annotate_heatmap(ax, A, fmt="{:.3f}", fontsize=8, threshold=None):
+    """
+    Write numeric values into each heatmap cell.
 
-def plot_heatmap(M, title: str, xlabel: str, ylabel: str, aspect: str = "auto") -> plt.Figure:
+    Parameters
+    ax : matplotlib Axes
+    A : 2D array
+    fmt : str
+        Format string for each cell value.
+    fontsize : int
+    threshold : float or None
+        If set, use white text on cells with |val| >= threshold, else black.
+        (Helps readability on strong colors.)
+    """
+    A = np.asarray(A, dtype=np.float64)
+    for i in range(A.shape[0]):
+        for j in range(A.shape[1]):
+            v = A[i, j]
+            if not np.isfinite(v):
+                s = "nan"
+            else:
+                s = fmt.format(float(v))
+
+            color = "black"
+            if threshold is not None and np.isfinite(v):
+                color = "white" if abs(float(v)) >= float(threshold) else "black"
+
+            ax.text(j, i, s, ha="center", va="center", fontsize=fontsize, color=color)
+
+def plot_heatmap(M, title: str, xlabel: str, ylabel: str, aspect: str = "auto", annotate: bool = True, fmt: str = "{:.3f}", fontsize: int = 8,) -> plt.Figure:
     A = _as_2d(M)
     fig, ax = plt.subplots()
     im = ax.imshow(A, aspect=aspect)
     ax.set_title(title)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
+    if annotate:
+        # optional threshold heuristic for better contrast
+        finite = A[np.isfinite(A)]
+        thr = None
+        if finite.size:
+            thr = float(np.max(np.abs(finite))) * 0.6
+        _annotate_heatmap(ax, A, fmt=fmt, fontsize=fontsize, threshold=thr)
+
     fig.colorbar(im, ax=ax)
     fig.tight_layout()
     return fig
@@ -161,7 +197,7 @@ def plot_A_s_diag(A_s) -> plt.Figure:
     return plot_line(d, "diag(A_s): P(s_t=s | s_{t-1}=s)", "style s", "stay probability")
 
 
-def plot_A_a_per_style(A_a) -> Dict[str, plt.Figure]:
+def plot_A_a_per_style(A_a, annotate: bool = True, fmt: str = "{:.3f}", fontsize: int = 8) -> Dict[str, plt.Figure]:
     A = _as_3d(A_a)  # (S, Aprev, Acur)
     S = int(A.shape[0])
     figs: Dict[str, plt.Figure] = {}
@@ -171,6 +207,12 @@ def plot_A_a_per_style(A_a) -> Dict[str, plt.Figure]:
         ax.set_title(f"Action transition A_a for style s={s}\nP(a_t | a_{{t-1}}, s_t=s)")
         ax.set_xlabel("a_t")
         ax.set_ylabel("a_{t-1}")
+
+        if annotate:
+            finite = A[s][np.isfinite(A[s])]
+            thr = float(np.max(np.abs(finite))) * 0.6 if finite.size else None
+            _annotate_heatmap(ax, A[s], fmt=fmt, fontsize=fontsize, threshold=thr)
+
         fig.colorbar(im, ax=ax)
         fig.tight_layout()
         figs[f"style_{s}"] = fig
@@ -275,7 +317,7 @@ def plot_semantics_tables_by_style(
     A: int,
     stds=None,
     title_prefix: str = "Semantics",
-    max_cols: int = 10,
+    max_cols: int = 8,
     fmt: str = "{:.2f}",
     wrap_header_at: int = 18,
     header_rotation: int = 0,
