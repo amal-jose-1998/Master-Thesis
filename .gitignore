@@ -6,7 +6,6 @@ __pycache__/
 *.pyo
 *.pyd
 *.pkl
-*.npz
 
 # Virtual environments
 .venv/
@@ -27,7 +26,6 @@ hdv/data/highd/
 hdv/data/ngsim/
 
 # general file ignores
-*.csv
 *.txt
 *.png
 
@@ -39,10 +37,6 @@ hdv/data/*
 # ---------------------------
 # MODEL OUTPUTS
 # ---------------------------
-models/
-models/*
-
-checkpoints/
 logs/
 outputs/
 runs/
