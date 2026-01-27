@@ -21,9 +21,7 @@ ENV/
 # ---------------------------
 # HighD or other trajectory datasets
 # Ignore all datasets
-hdv/data/
 hdv/data/highd/
-hdv/data/ngsim/
 
 
 
