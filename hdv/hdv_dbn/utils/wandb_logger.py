@@ -6,7 +6,7 @@ Key design:
 - Logger tolerates missing keys and extra keys.
 - Uses .get(...) everywhere, never requires exact signature alignment.
 """
-
+from ..config import BERNOULLI_FEATURES
 
 import time
 from typing import Any, Dict, Tuple
@@ -157,6 +157,19 @@ class WandbLogger:
             "delta/pi_a0_given_s0": float(kwargs.get("delta_pi_a0_given_s0", np.nan)),
             "delta/A_s": float(kwargs.get("delta_A_s", np.nan)),
             "delta/A_a": float(kwargs.get("delta_A_a", np.nan)),
+            # aggregate
+            "delta/emission_mean": float(kwargs.get("log_emission_delta_mean", np.nan)),
+            # hierarchical emissions (keys exist only in hierarchical mode)
+            "delta/emission/gauss_mean": float(kwargs.get("log_delta_gauss_mean", np.nan)),
+            "delta/emission/gauss_var": float(kwargs.get("log_delta_gauss_var", np.nan)),
+            "delta/emission/bern_p": float(kwargs.get("log_delta_bern_p", np.nan)),
+            # PoE emissions (keys exist only in PoE mode)
+            "delta/emission/style_gauss_mean": float(kwargs.get("log_delta_style_gauss_mean", np.nan)),
+            "delta/emission/style_gauss_var": float(kwargs.get("log_delta_style_gauss_var", np.nan)),
+            "delta/emission/action_gauss_mean": float(kwargs.get("log_delta_action_gauss_mean", np.nan)),
+            "delta/emission/action_gauss_var": float(kwargs.get("log_delta_action_gauss_var", np.nan)),
+            "delta/emission/style_bern_p": float(kwargs.get("log_delta_style_bern_p", np.nan)),
+            "delta/emission/action_bern_p": float(kwargs.get("log_delta_action_bern_p", np.nan)),
 
             #"post/total_responsibility_mass": float(kwargs.get("total_responsibility_mass", np.nan)),
         }
@@ -273,7 +286,13 @@ class WandbLogger:
                         SD2 = SD if (SD is not None and SD.ndim == 2) else None
                     else:
                         raise ValueError(f"Unexpected sem_means_raw shape: {M.shape}")
-
+                    # Hide ±std for Bernoulli features in semantics tables (show probabilities only)
+                    if SD2 is not None and sem_feat_names is not None:
+                        bern = set(BERNOULLI_FEATURES)
+                        bern_idx = [j for j, name in enumerate(sem_feat_names) if name in bern]
+                        if bern_idx:
+                            SD2 = SD2.copy()
+                            SD2[:, bern_idx] = np.nan
                     try:
                         figs = plot_semantics_tables_by_style(
                             M2, sem_feat_names, S=S, A=A,
@@ -286,7 +305,7 @@ class WandbLogger:
                         for k, fig in figs.items():
                             metrics[f"plots/semantics_raw/by_style/{k}"] = wandb.Image(fig)
                             WandbLogger._safe_close(fig)
-                    except Exception:
+                    except Exception as e:
                         print(f"[WandbLogger] semantics plotting failed: {e}")
                         pass
 

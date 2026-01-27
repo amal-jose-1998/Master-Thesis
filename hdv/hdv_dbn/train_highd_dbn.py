@@ -7,13 +7,14 @@ Pipeline
 - Split sequences into train/val/test.
 - Fit a feature scaler (mean/std) on the training split only, then scale all splits.
 - Train the model with EM (optionally evaluating validation log-likelihood each iteration).
-- Save the trained parameters and the scaler to `models/<experiment>_S{S}_A{A}.npz`.
+- Save checkpoints to `models/<experiment>_S{S}_A{A}_{emission_model}/ckpt_iterXXXX.npz` and final to `final.npz`.
 """
 
 from pathlib import Path
 import sys
 import re
 import numpy as np
+import json
 from dataclasses import asdict
 
 from .datasets import (
@@ -108,6 +109,37 @@ def _slug(s):
     s = re.sub(r"-{2,}", "-", s)
     return s
 
+def _veh_key(seq):
+    return (getattr(seq, "recording_id", None), getattr(seq, "vehicle_id", None))
+
+def _seq_key(seq):
+    """Stable key for a vehicle sequence (split is vehicle-level)."""
+    rec_id = getattr(seq, "recording_id", None)
+    veh_id = getattr(seq, "vehicle_id", None)
+    return f"{rec_id}:{veh_id}"
+
+
+def save_split_json(path, train_seqs, val_seqs, test_seqs, seed, train_frac, val_frac):
+    payload = {
+        "seed": int(seed),
+        "train_frac": float(train_frac),
+        "val_frac": float(val_frac),
+        "test_frac": float(1.0 - train_frac - val_frac),
+
+        "W": int(WINDOW_CONFIG.W),
+        "stride": int(WINDOW_CONFIG.stride),
+        "max_highd_recordings": int(getattr(TRAINING_CONFIG, "max_highd_recordings", -1)),
+        "split_level": "vehicle",  
+
+        "keys": {
+            "train": [_seq_key(s) for s in train_seqs],
+            "val":   [_seq_key(s) for s in val_seqs],
+            "test":  [_seq_key(s) for s in test_seqs],
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2))
+
 
 def build_model_filename(cfg, wandb_run=None):
     """
@@ -157,9 +189,23 @@ def main():
                                              stride=int(WINDOW_CONFIG.stride), force_rebuild=False) 
     print(f"[train_highd_dbn] Total WINDOW sequences produced: {len(win_sequences)}")
 
+    # ensure the windowized list is vehicle-unique (i.e., not one element per window)
+    keys_all = [_veh_key(s) for s in win_sequences]
+    assert len(keys_all) == len(set(keys_all)), "windowized output has duplicate (recording_id,vehicle_id) => likely window-level list!"
+    assert all(k[0] is not None and k[1] is not None for k in keys_all), "Missing recording_id/vehicle_id in sequences"
+
     # Split by sequence (vehicle) to avoid leakage
     train_seqs, val_seqs, test_seqs = train_val_test_split(win_sequences, train_frac=0.7, val_frac=0.1, seed=TRAINING_CONFIG.seed)
 
+    # ensure no leakage across splits
+    train_keys = set(_veh_key(s) for s in train_seqs)
+    val_keys   = set(_veh_key(s) for s in val_seqs)
+    test_keys  = set(_veh_key(s) for s in test_seqs)
+
+    assert train_keys.isdisjoint(val_keys)
+    assert train_keys.isdisjoint(test_keys)
+    assert val_keys.isdisjoint(test_keys)
+    
     # -----------------------------
     # Choose scaling strategy
     # -----------------------------
@@ -269,21 +315,45 @@ def main():
     # Train + save
     # -----------------------------
     try:
+        # -----------------------------
+        # Experiment folder for checkpoints
+        # -----------------------------
+        S = len(DBN_STATES.driving_style)
+        A = len(DBN_STATES.action)
+        em_mode = str(getattr(TRAINING_CONFIG, "emission_model", "poe")).lower().strip()
+
+        if wandb_run is not None and getattr(wandb_run, "name", None):
+            exp_name = wandb_run.name
+        elif getattr(TRAINING_CONFIG, "wandb_run_name", None):
+            exp_name = TRAINING_CONFIG.wandb_run_name
+        else:
+            exp_name = "unnamed_experiment"
+
+        exp_folder = model_dir / f"{_slug(exp_name)}_S{S}_A{A}_{em_mode}"
+        exp_folder.mkdir(parents=True, exist_ok=True)
+        print(f"[train_highd_dbn] Experiment folder: {exp_folder}")
+
+        # Save split (vehicle-level keys) for reproducible evaluation
+        split_path = exp_folder / "split.json"
+        save_split_json(split_path, train_seqs=train_seqs, val_seqs=val_seqs, test_seqs=test_seqs, seed=TRAINING_CONFIG.seed, train_frac=0.7, val_frac=0.1)
+        print(f"[train_highd_dbn] Saved split to: {split_path}")
+
         # Run EM training. 
         history = trainer.em_train(
             train_obs_seqs=train_obs_seqs,
             val_obs_seqs=val_obs_seqs,
             wandb_run=wandb_run,
             train_obs_seqs_raw=train_obs_seqs_raw,
+            checkpoint_dir=exp_folder,
+            checkpoint_every=5,
         )
 
         # -----------------------------
-        # Save model with config-based name
+        # Save FINAL model (in the experiment folder)
         # -----------------------------
-        model_filename = build_model_filename(TRAINING_CONFIG, wandb_run=wandb_run)
-        model_path = model_dir / model_filename 
-        trainer.save(model_path)
-        print(f"[train_highd_dbn] Model saved to: {model_path}") 
+        final_path = exp_folder / "final.npz"
+        trainer.save(final_path)
+        print(f"[train_highd_dbn] Model saved to: {final_path}")
         print(f"[train_highd_dbn] Training finished.")
     except Exception as e:
         print(f"[train_highd_dbn] ERROR during training: {e}", file=sys.stderr)

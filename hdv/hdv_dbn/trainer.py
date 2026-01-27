@@ -6,15 +6,16 @@ from tqdm.auto import tqdm
 import time
 from dataclasses import dataclass
 from typing import Optional
+from pathlib import Path
 
 from .model import HDVDBN
-from .additive_emissions import MixedEmissionModel as LinearMixedEmissionModel
+from .hierarchical_emissions import MixedEmissionModel as HierarchicalMixedEmissionModel
 from .poe_emissions import MixedEmissionModel as PoEMixedEmissionModel
 from .config import TRAINING_CONFIG
 from .utils.wandb_logger import WandbLogger
 from .utils.trainer_diagnostics import (
-    run_lengths_from_gamma_sa_argmax,
-    posterior_entropy_from_gamma,
+    #run_lengths_from_gamma_sa_argmax,
+    #posterior_entropy_from_gamma,
     posterior_weighted_feature_stats
 )
 from .forward_backward import forward_backward_torch
@@ -102,10 +103,10 @@ class HDVTrainer:
 
         if em_mode == "poe":
             self.emissions = PoEMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
-        elif em_mode == "linear":
-            self.emissions = LinearMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
+        elif em_mode == "hierarchical":
+            self.emissions = HierarchicalMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
         else:
-            raise ValueError(f"Unknown emission_model='{em_mode}'. Use 'poe' or 'linear'.")
+            raise ValueError(f"Unknown emission_model='{em_mode}'. Use 'poe' or 'hierarchical'.")
 
         self.emission_model = em_mode
         
@@ -145,7 +146,7 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     # EM training loop
     # ------------------------------------------------------------------
-    def em_train(self, train_obs_seqs, val_obs_seqs=None, wandb_run=None, train_obs_seqs_raw=None):
+    def em_train(self, train_obs_seqs, val_obs_seqs=None, wandb_run=None, train_obs_seqs_raw=None, checkpoint_dir=None, checkpoint_every=5,):
         """
         Train the model using EM.
 
@@ -167,6 +168,15 @@ class HDVTrainer:
               - "train_loglik": list of total train log-likelihood per iteration
               - "val_loglik":   list of total val log-likelihood per iteration (empty if no val)
         """
+        # Normalize checkpoint settings
+        ckpt_dir = Path(checkpoint_dir) if checkpoint_dir is not None else None
+        if ckpt_dir is not None:
+            ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+        ckpt_every = None if checkpoint_every is None else int(checkpoint_every)
+        if ckpt_every is not None and ckpt_every <= 0:
+            ckpt_every = None
+
         num_iters = TRAINING_CONFIG.em_num_iters
         use_progress = TRAINING_CONFIG.use_progress
         patience = getattr(TRAINING_CONFIG, "early_stop_patience", 3)
@@ -227,8 +237,8 @@ class HDVTrainer:
             # -----------------------------------------------------------
             # Trajectory-level diagnostics (from posteriors)
             # -----------------------------------------------------------
-            run_lengths_train, runlen_median_per_traj = run_lengths_from_gamma_sa_argmax(gamma_all)
-            ent_all_train, ent_mean_per_traj = posterior_entropy_from_gamma(gamma_all)
+            #run_lengths_train, runlen_median_per_traj = run_lengths_from_gamma_sa_argmax(gamma_all)
+            #ent_all_train, ent_mean_per_traj = posterior_entropy_from_gamma(gamma_all)
             # Semantics (scaled-space) for relative comparisons
             #sem_feat_names, sem_means, sem_stds = posterior_weighted_feature_stats(
             #                                                obs_names=self.obs_names,
@@ -262,6 +272,8 @@ class HDVTrainer:
             # ----------------------
             # M-step: update emission parameters
             # ----------------------
+            # snapshot BEFORE emission update
+            em_prev = self.emissions.to_arrays()
             if self.verbose:
                 print("M-step: Updating emission parameters...")
             state_weights_sa, total_mass, state_frac_sa = self._m_step_emissions(
@@ -270,6 +282,11 @@ class HDVTrainer:
                                                     use_progress=use_progress,
                                                     verbose=self.verbose,
                                                 )
+            # snapshot AFTER emission update
+            em_new = self.emissions.to_arrays()
+            em_deltas = self._emission_delta(em_prev, em_new)
+            if self.verbose >= 2:
+                print(f"  emission_delta_mean: {em_deltas.get('emission_delta_mean', np.nan):.6e}")
             # ----------------------
             # Compute validation log-likelihood (if available)
             # ----------------------
@@ -326,7 +343,7 @@ class HDVTrainer:
                 transitions_stable = (m.delta_A_s < delta_A_thresh) and (m.delta_A_a < delta_A_thresh)
                 pi_stable = (m.delta_pi_s0 < delta_pi_thresh) and (m.delta_pi_a0_given_s0 < delta_pi_thresh)
 
-                if bad_epochs >= patience and transitions_stable and pi_stable:
+                if bad_epochs >= patience:
                     should_break = True
 
             else:
@@ -394,6 +411,18 @@ class HDVTrainer:
                 "delta_pi_a0_given_s0": float(m.delta_pi_a0_given_s0),
                 "delta_A_s": float(m.delta_A_s),
                 "delta_A_a": float(m.delta_A_a),
+                "log_emission_delta_mean": float(em_deltas.get("emission_delta_mean", np.nan)),
+                # hierarchical keys (if using hierarchical emissions)
+                "log_delta_gauss_mean": float(em_deltas.get("gauss_mean", np.nan)),
+                "log_delta_gauss_var":  float(em_deltas.get("gauss_var", np.nan)),
+                "log_delta_bern_p":     float(em_deltas.get("bern_p", np.nan)),
+                # PoE keys (if using PoE emissions)
+                "log_delta_style_gauss_mean":  float(em_deltas.get("style_gauss_mean", np.nan)),
+                "log_delta_style_gauss_var":   float(em_deltas.get("style_gauss_var", np.nan)),
+                "log_delta_action_gauss_mean": float(em_deltas.get("action_gauss_mean", np.nan)),
+                "log_delta_action_gauss_var":  float(em_deltas.get("action_gauss_var", np.nan)),
+                "log_delta_style_bern_p":      float(em_deltas.get("style_bern_p", np.nan)),
+                "log_delta_action_bern_p":     float(em_deltas.get("action_bern_p", np.nan)),
 
                 # early stop state (optional; helps debugging)
                 "bad_epochs": int(bad_epochs),
@@ -411,10 +440,10 @@ class HDVTrainer:
                 "total_responsibility_mass": float(total_mass),
                 "state_frac_sa": state_frac_sa,
 
-                "run_lengths_train": run_lengths_train,
-                "runlen_median_per_traj": runlen_median_per_traj,
-                "ent_all_train": ent_all_train,
-                "ent_mean_per_traj": ent_mean_per_traj,
+                #"run_lengths_train": run_lengths_train,
+                #"runlen_median_per_traj": runlen_median_per_traj,
+                #"ent_all_train": ent_all_train,
+                #"ent_mean_per_traj": ent_mean_per_traj,
 
                 "sem_feat_names": sem_feat_names,
                 #"sem_means": sem_means,
@@ -425,12 +454,20 @@ class HDVTrainer:
 
             WandbLogger.log_iteration(**log_kwargs)
 
+            # ----------------------
+            # Periodic checkpoint saving
+            # ----------------------
+            if ckpt_dir is not None and ckpt_every is not None:
+                if ((it + 1) % ckpt_every) == 0:
+                    ckpt_path = ckpt_dir / f"ckpt_iter{it+1:04d}.npz"
+                    self.save(ckpt_path)
+
             # Update prev_criterion after logging
             prev_criterion = criterion_for_stop
 
             if should_break:
                 if self.verbose:
-                    print("\n*** Early stopping triggered (plateau + stable pi + stable transitions) ***")
+                    print("\n*** Early stopping triggered (log-likelihood plateau) ***")
                 break
 
         if self.verbose:
@@ -973,7 +1010,7 @@ class HDVTrainer:
                 verbose=verbose,
             )
         else:
-            # linear/additive: typically closed-form M-step; no lr/steps
+            # hierarchical closed-form M-step; no lr/steps
             masses = self.emissions.update_from_posteriors(
                 obs_seqs=train_obs_seqs,
                 gamma_sa_seqs=gamma_all,
@@ -989,6 +1026,38 @@ class HDVTrainer:
     # ------------------------------------------------------------------
     # emissions init, save, load 
     # ------------------------------------------------------------------
+    def _emission_delta(self, prev_em_dict, new_em_dict):
+        """Compute per-key mean-absolute deltas between two emission snapshots, plus an aggregate mean."""
+        deltas = {}
+
+        # Keys that are not learnable parameters (metadata / indices / names)
+        exclude = {
+            "obs_names",
+            "bernoulli_names",
+            "cont_idx",
+            "bin_idx",
+        }
+
+        keys = sorted(set(prev_em_dict.keys()) & set(new_em_dict.keys()))
+        for k in keys:
+            if k in exclude:
+                continue
+
+            a = np.asarray(prev_em_dict[k])
+            b = np.asarray(new_em_dict[k])
+
+            # Only compare numeric arrays with identical shape
+            if a.shape != b.shape or a.size == 0:
+                continue
+            if not (np.issubdtype(a.dtype, np.number) and np.issubdtype(b.dtype, np.number)):
+                continue
+
+            deltas[k] = float(np.mean(np.abs(b - a)))
+
+        # Aggregate scalar: mean of per-key deltas
+        deltas["emission_delta_mean"] = float(np.mean(list(deltas.values()))) if deltas else np.nan
+        return deltas
+
     def _init_lc_weight_invfreq(self, train_obs_seqs, clip=25.0):
         """
         Initialize the inverse frequency weight for left/right turn indicators.
@@ -1060,7 +1129,7 @@ class HDVTrainer:
         S = int(self.S)
         A = int(self.A)
         if pi_s0_np.shape != (S,):
-            raise ValueError(f"pi_S must have shape {(S,)}, got {pi_s0_np.shape}")
+            raise ValueError(f"pi_s0 must have shape {(S,)}, got {pi_s0_np.shape}")
         if pi_a0_given_s0_np.shape != (S, A):
             raise ValueError(f"pi_a0_given_S0 must have shape {(S, A)}, got {pi_a0_given_s0_np.shape}")
         if A_s_np.shape != (S, S):
@@ -1084,18 +1153,32 @@ class HDVTrainer:
         # -----------------------------
         # Emissions 
         # -----------------------------
-        required = {
-            "obs_names",
-            "cont_idx",
-            "bin_idx",
-            "bernoulli_names",
-            "style_gauss_mean",
-            "style_gauss_var",
-            "action_gauss_mean",
-            "action_gauss_var",
-            "style_bern_p",
-            "action_bern_p",
-        }
+        if self.emission_model == "poe":
+            required = {
+                "obs_names",
+                "cont_idx",
+                "bin_idx",
+                "bernoulli_names",
+                "style_gauss_mean",
+                "style_gauss_var",
+                "action_gauss_mean",
+                "action_gauss_var",
+                "style_bern_p",
+                "action_bern_p",
+            }
+        elif self.emission_model == "hierarchical":
+            required = {
+                "obs_names",
+                "cont_idx",
+                "bin_idx",
+                "bernoulli_names",
+                "gauss_mean",
+                "gauss_var",
+                "bern_p",
+            }
+        else:
+            raise ValueError(f"Unknown emission_model='{self.emission_model}' in save().")
+        
         em_dict = self.emissions.to_arrays()  
         missing = [k for k in sorted(required) if k not in em_dict]
         if missing:

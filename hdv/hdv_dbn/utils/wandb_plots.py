@@ -310,6 +310,12 @@ def _format_cell(mean, std=None, fmt="{:.2f}", pm="±") -> str:
         except Exception:
             return str(mean)
     try:
+        s = float(std)
+        if not np.isfinite(s):
+            return fmt.format(float(mean))
+    except Exception:
+        return str(mean)
+    try:
         return f"{fmt.format(float(mean))}{pm}{fmt.format(float(std))}"
     except Exception:
         return str(mean)
