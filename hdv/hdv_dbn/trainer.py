@@ -14,7 +14,6 @@ from .poe_emissions import MixedEmissionModel as PoEMixedEmissionModel
 from .config import TRAINING_CONFIG
 from .utils.wandb_logger import WandbLogger
 from .utils.trainer_diagnostics import (
-    #run_lengths_from_gamma_sa_argmax,
     #posterior_entropy_from_gamma,
     posterior_weighted_feature_stats
 )
@@ -237,7 +236,6 @@ class HDVTrainer:
             # -----------------------------------------------------------
             # Trajectory-level diagnostics (from posteriors)
             # -----------------------------------------------------------
-            #run_lengths_train, runlen_median_per_traj = run_lengths_from_gamma_sa_argmax(gamma_all)
             #ent_all_train, ent_mean_per_traj = posterior_entropy_from_gamma(gamma_all)
             # Semantics (scaled-space) for relative comparisons
             #sem_feat_names, sem_means, sem_stds = posterior_weighted_feature_stats(

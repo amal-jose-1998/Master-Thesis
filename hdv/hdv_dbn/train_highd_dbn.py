@@ -11,10 +11,10 @@ Pipeline
 """
 
 from pathlib import Path
+import json
 import sys
 import re
 import numpy as np
-import json
 from dataclasses import asdict
 
 from .datasets import (
@@ -32,6 +32,7 @@ from .config import (
     TRAINING_CONFIG, FRAME_FEATURE_COLS, META_COLS,
     WINDOW_FEATURE_COLS, CONTINUOUS_FEATURES, WINDOW_CONFIG, DBN_STATES
 )
+from .utils.eval_core import seq_key
 
 if TRAINING_CONFIG.use_wandb:
     import wandb
@@ -39,6 +40,29 @@ else:
     wandb = None
 
 USE_CLASSWISE_SCALING = TRAINING_CONFIG.use_classwise_scaling
+
+
+def save_split_json(path, train_seqs, val_seqs, test_seqs, seed, train_frac, val_frac):
+    payload = {
+        "seed": int(seed),
+        "train_frac": float(train_frac),
+        "val_frac": float(val_frac),
+        "test_frac": float(1.0 - train_frac - val_frac),
+
+        "W": int(WINDOW_CONFIG.W),
+        "stride": int(WINDOW_CONFIG.stride),
+        "max_highd_recordings": int(getattr(TRAINING_CONFIG, "max_highd_recordings", -1)),
+        "split_level": "vehicle",  
+
+        "keys": {
+            "train": [seq_key(s) for s in train_seqs],
+            "val":   [seq_key(s) for s in val_seqs],
+            "test":  [seq_key(s) for s in test_seqs],
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2))
+
 
 # -----------------------------
 # W&B table builders 
@@ -111,34 +135,6 @@ def _slug(s):
 
 def _veh_key(seq):
     return (getattr(seq, "recording_id", None), getattr(seq, "vehicle_id", None))
-
-def _seq_key(seq):
-    """Stable key for a vehicle sequence (split is vehicle-level)."""
-    rec_id = getattr(seq, "recording_id", None)
-    veh_id = getattr(seq, "vehicle_id", None)
-    return f"{rec_id}:{veh_id}"
-
-
-def save_split_json(path, train_seqs, val_seqs, test_seqs, seed, train_frac, val_frac):
-    payload = {
-        "seed": int(seed),
-        "train_frac": float(train_frac),
-        "val_frac": float(val_frac),
-        "test_frac": float(1.0 - train_frac - val_frac),
-
-        "W": int(WINDOW_CONFIG.W),
-        "stride": int(WINDOW_CONFIG.stride),
-        "max_highd_recordings": int(getattr(TRAINING_CONFIG, "max_highd_recordings", -1)),
-        "split_level": "vehicle",  
-
-        "keys": {
-            "train": [_seq_key(s) for s in train_seqs],
-            "val":   [_seq_key(s) for s in val_seqs],
-            "test":  [_seq_key(s) for s in test_seqs],
-        },
-    }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2))
 
 
 def build_model_filename(cfg, wandb_run=None):

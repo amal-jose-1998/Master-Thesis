@@ -24,11 +24,6 @@ ENV/
 hdv/data/highd/
 
 
-
-# If datasets inside hdv folder:
-hdv/data/
-hdv/data/*
-
 # ---------------------------
 # MODEL OUTPUTS
 # ---------------------------

@@ -1,164 +1,126 @@
 import numpy as np
 import torch
-import math
 
-
-import numpy as np
-import torch
-
-def _run_lengths_from_hard_labels(idx_1d: np.ndarray):
-    """Helper: contiguous run lengths for a 1D integer label sequence."""
-    T = int(idx_1d.shape[0])
-    if T <= 0:
-        return np.asarray([], dtype=np.int64)
-
-    runs = []
-    cur = 1
-    for t in range(1, T):
-        if idx_1d[t] == idx_1d[t - 1]:
-            cur += 1
-        else:
-            runs.append(cur)
-            cur = 1
-    runs.append(cur)
-    return np.asarray(runs, dtype=np.int64)
-
-def run_lengths_from_gamma_sa(gamma_sa_seqs):
-    """
-    Compute run-length diagnostics from gamma[t,s,a] (T,S,A):
-
-      - joint (s,a): argmax over (s,a)
-      - style only  : argmax over s of sum_a gamma[t,s,a]
-      - action only : argmax over a of sum_s gamma[t,s,a]
-
-    Returns
-    -------
-    joint_runs, joint_median_per_traj
-    style_runs, style_median_per_traj
-    action_runs, action_median_per_traj
-    """
-    all_joint, med_joint = [], []
-    all_s, med_s = [], []
-    all_a, med_a = [], []
-
-    for gamma in gamma_sa_seqs:
-        if gamma is None:
-            med_joint.append(np.nan); med_s.append(np.nan); med_a.append(np.nan)
-            continue
-
-        T, S, A = map(int, gamma.shape)
-        if T <= 0:
-            med_joint.append(np.nan); med_s.append(np.nan); med_a.append(np.nan)
-            continue
-
-        g = gamma.reshape(T, S, A)
-
-        # --- joint hard labels (flatten only for argmax convenience) ---
-        flat = g.reshape(T, S * A)
-        idx_joint = torch.argmax(flat, dim=1).detach().cpu().numpy().astype(np.int64)
-
-        # --- style hard labels: marginalize over action ---
-        g_s = g.sum(dim=2)  # (T,S)
-        idx_s = torch.argmax(g_s, dim=1).detach().cpu().numpy().astype(np.int64)
-
-        # --- action hard labels: marginalize over style ---
-        g_a = g.sum(dim=1)  # (T,A)
-        idx_a = torch.argmax(g_a, dim=1).detach().cpu().numpy().astype(np.int64)
-
-        # run lengths
-        rj = _run_lengths_from_hard_labels(idx_joint)
-        rs = _run_lengths_from_hard_labels(idx_s)
-        ra = _run_lengths_from_hard_labels(idx_a)
-
-        all_joint.append(rj); med_joint.append(float(np.median(rj)) if rj.size else np.nan)
-        all_s.append(rs);     med_s.append(float(np.median(rs)) if rs.size else np.nan)
-        all_a.append(ra);     med_a.append(float(np.median(ra)) if ra.size else np.nan)
-
-    joint_runs = np.concatenate(all_joint) if all_joint else np.asarray([], dtype=np.int64)
-    style_runs = np.concatenate(all_s) if all_s else np.asarray([], dtype=np.int64)
-    action_runs = np.concatenate(all_a) if all_a else np.asarray([], dtype=np.int64)
-
-    return (
-        joint_runs,  np.asarray(med_joint, dtype=np.float64),
-        style_runs,  np.asarray(med_s, dtype=np.float64),
-        action_runs, np.asarray(med_a, dtype=np.float64),
-    )
-
-def _entropy_normalized(p: np.ndarray, axis: int = -1, eps: float = 1e-15) -> np.ndarray:
+def _entropy_normalized(p, axis=-1, eps=1e-15):
     """
     Normalized Shannon entropy along `axis`:
       H(p)/log(K), where K = size along axis.
-    Uses 0*log(0)=0 (no clipping distortion).
     """
     K = int(p.shape[axis])
     K = max(K, 2)
-    logK = float(np.log(K))
+    logK = float(np.log(K)) # normalization constant
 
-    den = np.maximum(p.sum(axis=axis, keepdims=True), eps)
-    p = p / den
+    den = np.maximum(p.sum(axis=axis, keepdims=True), eps) # the total mass along axis
+    p = p / den # turns p into a proper probability distribution.
 
     # 0*log(0)=0
     mask = (p > 0.0)
-    H = -np.sum(np.where(mask, p * np.log(p), 0.0), axis=axis)
+    H = -np.sum(np.where(mask, p * np.log(p), 0.0), axis=axis) # Shannon entropy
     return H / logK
 
 
-def posterior_entropy_from_gamma_sa(gamma_sa_seqs, eps: float = 1e-15):
+def posterior_entropy_from_gamma_sa(gamma_sa_seqs, eps=1e-15):
     """
-    Compute normalized entropies from gamma[t,s,a] (T,S,A):
+    Compute normalized posterior entropies for an EM-trained DBN with
+    joint latent states (style, action). 
+    For each trajectory and each timestep t, the function computes:
+        - Joint entropy H(S_t, A_t) from the joint posterior γ_t(s, a), normalized by log(S · A).
+        - Style entropy H(S_t) from the marginal posterior γ_t(s) = Σ_a γ_t(s, a), normalized by log(S).
+        - Action entropy H(A_t) from the marginal posterior γ_t(a) = Σ_s γ_t(s, a), normalized by log(A).
+    Entropies are normalized to lie in [0, 1], allowing comparison across models with different numbers of latent states.
 
-      - joint entropy: H(S,A) normalized by log(S*A)
-      - style entropy: H(S)   normalized by log(S)   using gamma_s[t,s] = sum_a gamma[t,s,a]
-      - action entropy:H(A)   normalized by log(A)   using gamma_a[t,a] = sum_s gamma[t,s,a]
+    Parameters
+    gamma_sa_seqs
+        List of posterior tensors γ_t(s, a), one per trajectory, each of shape (T, S, A).
+    eps
+        Small constant used to prevent numerical instability when normalizing probability distributions.
 
     Returns
-    -------
-    ent_joint_all : (sum_T,)
-    ent_joint_mean_per_traj : (num_traj,)
-    ent_style_all : (sum_T,)
-    ent_style_mean_per_traj : (num_traj,)
-    ent_action_all : (sum_T,)
-    ent_action_mean_per_traj : (num_traj,)
+    H_joint_mat, H_style_mat, H_action_mat
+        Arrays of shape (N, Tmax) with NaN padding.
+    lengths
+        Array of shape (N,) containing each trajectory length.
+    summary
+        Dict of robust scalars for cross-experiment comparison.
     """
-    joint_list, style_list, action_list = [], [], []
-    joint_mean, style_mean, action_mean = [], [], []
+    # Per-trajectory entropy series
+    Hj_list, Hs_list, Ha_list = [], [], []
+    lengths = []
 
     for gamma in gamma_sa_seqs:
         if gamma is None:
-            joint_mean.append(np.nan); style_mean.append(np.nan); action_mean.append(np.nan)
+            Hj_list.append(np.asarray([], dtype=np.float64))
+            Hs_list.append(np.asarray([], dtype=np.float64))
+            Ha_list.append(np.asarray([], dtype=np.float64))
+            lengths.append(0)
             continue
 
         T, S, A = map(int, gamma.shape)
         if T <= 0:
-            joint_mean.append(np.nan); style_mean.append(np.nan); action_mean.append(np.nan)
+            Hj_list.append(np.asarray([], dtype=np.float64))
+            Hs_list.append(np.asarray([], dtype=np.float64))
+            Ha_list.append(np.asarray([], dtype=np.float64))
+            lengths.append(0)
             continue
 
         g = gamma.detach().cpu().numpy().astype(np.float64)  # (T,S,A)
 
-        # --- joint entropy over (s,a): flatten last two dims ---
+        # joint entropy over SA
         g_joint = g.reshape(T, S * A)                         # (T, SA)
         Hj = _entropy_normalized(g_joint, axis=1, eps=eps)     # (T,)
 
-        # --- style marginal entropy ---
+        # style marginal entropy
         g_s = g.sum(axis=2)                                   # (T,S)
         Hs = _entropy_normalized(g_s, axis=1, eps=eps)         # (T,)
 
-        # --- action marginal entropy ---
+        # action marginal entropy
         g_a = g.sum(axis=1)                                   # (T,A)
         Ha = _entropy_normalized(g_a, axis=1, eps=eps)         # (T,)
 
-        joint_list.append(Hj); style_list.append(Hs); action_list.append(Ha)
-        joint_mean.append(float(np.mean(Hj))); style_mean.append(float(np.mean(Hs))); action_mean.append(float(np.mean(Ha)))
+        Hj_list.append(Hj)
+        Hs_list.append(Hs)
+        Ha_list.append(Ha)
+        lengths.append(T)
 
-    ent_joint_all = np.concatenate(joint_list) if joint_list else np.asarray([], dtype=np.float64)
-    ent_style_all = np.concatenate(style_list) if style_list else np.asarray([], dtype=np.float64)
-    ent_action_all = np.concatenate(action_list) if action_list else np.asarray([], dtype=np.float64)
+    lengths = np.asarray(lengths, dtype=np.int64)
+    N = int(len(lengths))
+    Tmax = int(lengths.max()) if N > 0 else 0
 
-    return (
-        ent_joint_all,  np.asarray(joint_mean, dtype=np.float64),
-        ent_style_all,  np.asarray(style_mean, dtype=np.float64),
-        ent_action_all, np.asarray(action_mean, dtype=np.float64),
+    # Padded heatmap matrices (vehicles x time)
+    H_joint_mat = np.full((N, Tmax), np.nan, dtype=np.float64)
+    H_style_mat = np.full((N, Tmax), np.nan, dtype=np.float64)
+    H_action_mat = np.full((N, Tmax), np.nan, dtype=np.float64)
+    for i in range(N):
+        Ti = int(lengths[i])
+        if Ti <= 0:
+            continue
+        H_joint_mat[i, :Ti] = Hj_list[i]
+        H_style_mat[i, :Ti] = Hs_list[i]
+        H_action_mat[i, :Ti] = Ha_list[i]
+    
+    # Per-trajectory means (vehicle-level)
+    ent_joint_mean_per_traj = np.asarray(
+        [np.nanmean(H_joint_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+        dtype=np.float64
     )
+    ent_style_mean_per_traj = np.asarray(
+        [np.nanmean(H_style_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+        dtype=np.float64
+    )
+    ent_action_mean_per_traj = np.asarray(
+        [np.nanmean(H_action_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+        dtype=np.float64
+    )
+
+    summary = dict(
+        ent_joint_vehicle_median=float(np.nanmedian(ent_joint_mean_per_traj)),
+        ent_style_vehicle_median=float(np.nanmedian(ent_style_mean_per_traj)),
+        ent_action_vehicle_median=float(np.nanmedian(ent_action_mean_per_traj)),
+    )
+
+    return H_joint_mat, H_style_mat, H_action_mat, lengths, summary
+
+
 
 def posterior_weighted_feature_stats(obs_names, obs_seqs, gamma_sa_seqs, semantic_feature_names=None, include_derived=True, S=None, A=None):
     """
