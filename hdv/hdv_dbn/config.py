@@ -143,7 +143,7 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = 10
+    max_highd_recordings: Optional[int] = 2
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
