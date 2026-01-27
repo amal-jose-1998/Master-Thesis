@@ -25,9 +25,6 @@ hdv/data/
 hdv/data/highd/
 hdv/data/ngsim/
 
-# general file ignores
-*.txt
-*.png
 
 
 # If datasets inside hdv folder:
