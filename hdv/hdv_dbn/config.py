@@ -253,22 +253,25 @@ WINDOW_FRONT_RISK_FEATURES: List[str] = [
 
 WINDOW_NEIGHBOR_REL_FEATURES: List[str] = [
     "front_dx_min", #"front_dx_slope",
-    "front_dvx_min", #"front_dvx_slope",
+    #"front_dvx_min", 
+    "front_dvx_slope",
     "front_exists_frac",
 
     #"left_side_dx_last", "left_side_dx_slope",
-    #"left_side_dvx_last", "left_side_dvx_slope",
+    "left_side_dvx_last", 
+    "left_side_dvx_slope",
     "left_side_dy_last", "left_side_exists_frac",
 
     #"right_side_dx_last", "right_side_dx_slope",
-    #"right_side_dvx_last", "right_side_dvx_slope",
+    "right_side_dvx_last", 
+    "right_side_dvx_slope",
     "right_side_dy_last", "right_side_exists_frac",
 
-    "left_front_dx_last", "left_front_exists_frac", 
-    "left_rear_dx_last", "left_rear_exists_frac",
+    "left_front_dx_last", "left_front_dvx_slope", "left_front_dy_last", "left_front_exists_frac", 
+    #"left_rear_dx_last", "left_rear_exists_frac",
 
-    "right_front_dx_last", "right_front_exists_frac", 
-    "right_rear_dx_last", "right_rear_exists_frac",
+    "right_front_dx_last", "right_front_dvx_slope", "right_front_dy_last", "right_front_exists_frac", 
+    #"right_rear_dx_last", "right_rear_exists_frac",
 ]
 
 
