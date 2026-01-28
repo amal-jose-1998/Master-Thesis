@@ -108,9 +108,9 @@ class TrainingConfig:
 
     learn_pi0: bool = False  
     pi0_alpha: float = 0.0
-    disable_discrete_obs: bool = False     
+    disable_discrete_obs: bool = False
     bern_weight: float = 1     #(dont change)                
-    lc_weight: float = 25   
+    lc_weight: float = 25   # to clip
     # Lane-change imbalance handling in EM
     #   - 'none': no special weighting
     #   - 'A'   : likelihood tempering (logB[t] *= w_t) before forward-backward. This can distort inference more strongly.
@@ -143,11 +143,11 @@ class TrainingConfig:
     gauss_min_eig: float = 1e-4
 
     max_kmeans_samples: int = 100000
-    max_highd_recordings: Optional[int] = 2
+    max_highd_recordings: Optional[int] = 20
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "demo"
+    wandb_run_name: Optional[str] = "6.poe-sticky_cpd-uni_pi-lc_b-bern_on"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
