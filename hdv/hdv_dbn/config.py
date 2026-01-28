@@ -101,21 +101,21 @@ class TrainingConfig:
     # -------------------------------------------------------------
     # "poe"    : Product-of-Experts emissions (your PoE module)
     # "linear" : additive log-likelihoods (no PoE logZ coupling)
-    emission_model: Literal["poe", "hierarchical"] = "poe"
+    emission_model: Literal["poe", "hierarchical"] = "hierarchical"
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
 
     learn_pi0: bool = False  
     pi0_alpha: float = 0.0
-    disable_discrete_obs: bool = True 
+    disable_discrete_obs: bool = False
     bern_weight: float = 1     #(dont change)                
-    lc_weight: float = 25   
+    lc_weight: float = 25   # to clip
     # Lane-change imbalance handling in EM
     #   - 'none': no special weighting
     #   - 'A'   : likelihood tempering (logB[t] *= w_t) before forward-backward. This can distort inference more strongly.
     #   - 'B'   : weighted sufficient statistics (gamma and xi) after forward-backward. This is usually safer and more interpretable. 
-    lc_weight_mode: Literal["none", "A", "B"] = "none"       
+    lc_weight_mode: Literal["none", "A", "B"] = "A"       
     # How to weight xi_t (transition counts) in mode 'B'
     #   - 'next': use w_{t+1}
     #   - 'avg' : use 0.5*(w_t + w_{t+1})
@@ -147,7 +147,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "1.poe-sticky_cpd-uni_pi-lc_none-bern_off"
+    wandb_run_name: Optional[str] = "16.hierar-sticky_cpd-uni_pi-lc_a-bern_on"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
