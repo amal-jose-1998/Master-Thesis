@@ -6,7 +6,6 @@ __pycache__/
 *.pyo
 *.pyd
 *.pkl
-*.npz
 
 # Virtual environments
 .venv/
@@ -22,27 +21,12 @@ ENV/
 # ---------------------------
 # HighD or other trajectory datasets
 # Ignore all datasets
-hdv/data/
 hdv/data/highd/
-hdv/data/ngsim/
 
-# general file ignores
-*.csv
-*.txt
-*.png
-
-
-# If datasets inside hdv folder:
-hdv/data/
-hdv/data/*
 
 # ---------------------------
 # MODEL OUTPUTS
 # ---------------------------
-models/
-models/*
-
-checkpoints/
 logs/
 outputs/
 runs/

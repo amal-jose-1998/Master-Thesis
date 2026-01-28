@@ -175,13 +175,18 @@ def plot_pi_s0(pi_s0) -> plt.Figure:
     return plot_bar(pi_s0, "Initial style distribution π(s0)", "style s", "probability")
 
 
-def plot_pi_a0_given_s0(pi_a0_given_s0) -> plt.Figure:
+def plot_pi_a0_given_s0(pi_a0_given_s0, annotate: bool = True, fmt: str = "{:.3f}", fontsize: int = 8) -> plt.Figure:
     P = _as_2d(pi_a0_given_s0)
     fig, ax = plt.subplots()
     im = ax.imshow(P, aspect="auto")
     ax.set_title("Initial action distribution π(a0 | s0)")
     ax.set_xlabel("action a")
     ax.set_ylabel("style s")
+    if annotate:
+        finite = P[np.isfinite(P)]
+        thr = float(np.max(np.abs(finite))) * 0.6 if finite.size else None
+        _annotate_heatmap(ax, P, fmt=fmt, fontsize=fontsize, threshold=thr)
+
     fig.colorbar(im, ax=ax)
     fig.tight_layout()
     return fig
@@ -304,6 +309,12 @@ def _format_cell(mean, std=None, fmt="{:.2f}", pm="±") -> str:
             return fmt.format(float(mean))
         except Exception:
             return str(mean)
+    try:
+        s = float(std)
+        if not np.isfinite(s):
+            return fmt.format(float(mean))
+    except Exception:
+        return str(mean)
     try:
         return f"{fmt.format(float(mean))}{pm}{fmt.format(float(std))}"
     except Exception:
