@@ -7,7 +7,7 @@ import json
 from ..dataset import TrajectorySequence
 from ...config import (FRAME_FEATURE_COLS, META_COLS, WINDOW_FEATURE_COLS)
 
-_REL_SUFFIXES = ("_dx", "_dy", "_dvx", "_dvy")
+_REL_SUFFIXES = ("_dx", "_dy", "_dvx", "_dvy", "_dax", "_day")
 
 def df_to_sequences(df, feature_cols, id_col="vehicle_id", frame_col="frame",  meta_cols=None):
     """
@@ -160,15 +160,28 @@ def _nanlast(x):
         return np.nan
     return float(x[int(idx[-1])])
 
-def _nanslope(x):
+def _masked_nanslope(x, mask=None):
     x = np.asarray(x, dtype=np.float64)
-    idx = np.where(np.isfinite(x))[0]
-    if idx.size < 2:
+    if mask is None:
+        idx = np.isfinite(x)
+    else:
+        m = np.asarray(mask, dtype=bool)
+        idx = m & np.isfinite(x)
+
+    if idx.sum() < 2:
         return np.nan
-    i0, i1 = int(idx[0]), int(idx[-1])
-    if i1 == i0:
+
+    t = np.arange(len(x), dtype=np.float64)[idx]
+    y = x[idx]
+
+    t_mean = t.mean()
+    y_mean = y.mean()
+    denom = np.sum((t - t_mean) ** 2)
+    if denom == 0:
         return np.nan
-    return float((x[i1] - x[i0]) / (i1 - i0))
+
+    return float(np.sum((t - t_mean) * (y - y_mean)) / denom)
+
 
 def _masked_nanlast(x, mask):
     x = np.asarray(x, dtype=np.float64)
@@ -276,7 +289,7 @@ def _compute_kinematics(win, Y, t, in_idx, out):
     for c in ("vx", "ax", "vy", "ay"):
         col = win[:, in_idx[c]]
         _seti(Y, t, out.get(f"{c}_last"),  _nanlast(col))
-        _seti(Y, t, out.get(f"{c}_slope"),  _nanslope(col))
+        _seti(Y, t, out.get(f"{c}_slope"),  _masked_nanslope(col))
         if c == "ax" or c == "ay":
             _compute_minmax_and_sign_fracs(win, Y, t, in_idx, out, c)
 
@@ -439,7 +452,7 @@ def _parse_neighbor_rel_out(out_name):
         <prefix>_<dx|dy|dvx|dvy>_<last|min>
     Returns (rel_name, exists_name, stat) or None if not a neighbor-rel feature.
     """
-    for stat in ("last", "min"):
+    for stat in ("last", "min", "slope"):
         suf = f"_{stat}"
         if not out_name.endswith(suf):
             continue
@@ -489,9 +502,11 @@ def _compute_neighbor_rel(win, Y, t, rel_tasks):
         valid = np.isfinite(rel) & (ex > 0.5)
 
         if stat == "last":
-            v = _masked_nanlast(rel, valid)
-        else:  # "min"
-            v = _masked_nanmin(rel, valid)
+            v = _masked_nanlast(rel, mask=valid)
+        elif stat == "min":
+            v = _masked_nanmin(rel, mask=valid)
+        else:  # "slope"
+            v = _masked_nanslope(rel, mask=valid)
 
         _seti(Y, t, out_j, v)
 
@@ -515,11 +530,15 @@ def windowize_sequences(sequences, W=150, stride=10):
     if not sequences:
         return out
     
+    win_names = list(WINDOW_FEATURE_COLS)  # schema of window-level features in the output
+    if len(win_names) != len(set(win_names)):
+        # Duplicates in the configured window schema would silently alias columns.
+        dup = [n for n in win_names if win_names.count(n) > 1]
+        raise ValueError(f"[windowize_sequences] Duplicate names in WINDOW_FEATURE_COLS: {sorted(set(dup))}")
+
     # Get feature names and build index maps
     per_frame_feature_names = list(sequences[0].obs_names)
     in_idx = {n: i for i, n in enumerate(per_frame_feature_names)}
-
-    win_names = list(WINDOW_FEATURE_COLS) # schema of window-level features in the output.
     out_idx = {n: i for i, n in enumerate(win_names)}
 
     #strict input validation (fail fast) 
@@ -527,13 +546,30 @@ def windowize_sequences(sequences, W=150, stride=10):
 
     has_front_exists = "front_exists" in in_idx  
 
+    STRICT_INPUT_SCHEMA = True
+
     total_windows = 0
     skipped = 0
     pbar = tqdm(sequences, desc="Windowizing sequences", unit="seq")
 
     # Process each sequence individually
     for seq in pbar:
+        if STRICT_INPUT_SCHEMA:
+            if list(seq.obs_names) != per_frame_feature_names:
+                raise RuntimeError(
+                    "[windowize_sequences] Input sequence schema mismatch.\n"
+                    f"  expected obs_names (from first seq): {per_frame_feature_names}\n"
+                    f"  got obs_names (this seq):           {list(seq.obs_names)}\n"
+                    "  Fix: ensure df_to_sequences uses the same feature_cols for all sequences."
+                )
         X = seq.obs    # per-frame observation matrix for one vehicle: shape (T, F_in)
+        if X.ndim != 2 or X.shape[1] != len(per_frame_feature_names):
+            raise RuntimeError(
+                f"[windowize_sequences] Bad per-frame obs shape for "
+                f"(rec={getattr(seq,'recording_id',None)}, veh={getattr(seq,'vehicle_id',None)}): "
+                f"got {tuple(X.shape)}, expected (T, {len(per_frame_feature_names)})."
+            )
+
         T = X.shape[0] # number of frames 
         if T < W:      # vehicle’s trajectory length T is shorter than window size W; skip it
             skipped += 1
@@ -557,8 +593,19 @@ def windowize_sequences(sequences, W=150, stride=10):
             _compute_existence_fracs(win, Y, t, in_idx, out_idx, exists_cols) # existence fractions
             _compute_neighbor_rel(win, Y, t, rel_tasks)
         
+        if Y.shape != (Tw, len(win_names)):
+            raise RuntimeError(
+                f"[windowize_sequences] Windowised obs has wrong shape: got {tuple(Y.shape)}, "
+                f"expected {(Tw, len(win_names))}"
+            )
+
         frames = seq.frames
         out_frames = frames[starts]  # window start frame numbers
+
+        if out_frames.shape[0] != Tw:
+            raise RuntimeError(
+                f"[windowize_sequences] out_frames length mismatch: got {out_frames.shape[0]}, expected {Tw}"
+            )
 
         out.append(TrajectorySequence(
             vehicle_id=seq.vehicle_id,
@@ -568,6 +615,10 @@ def windowize_sequences(sequences, W=150, stride=10):
             recording_id=seq.recording_id,
             meta=seq.meta,
         ))
+
+        if out[-1].obs.shape[1] != len(WINDOW_FEATURE_COLS) or list(out[-1].obs_names) != list(WINDOW_FEATURE_COLS):
+            raise RuntimeError("[windowize_sequences] Output sequence schema does not match WINDOW_FEATURE_COLS.")
+
         pbar.set_postfix(skipped=skipped, out=len(out), windows=total_windows,)
 
     return out
