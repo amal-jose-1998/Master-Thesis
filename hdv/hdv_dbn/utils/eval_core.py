@@ -7,6 +7,7 @@ from ..trainer import HDVTrainer
 from ..config import CONTINUOUS_FEATURES, DBN_STATES, TRAINING_CONFIG
 from ..inference import infer_posterior  
 from .trainer_diagnostics import posterior_entropy_from_gamma_sa
+from .viterbi import viterbi, durations_from_path
 
 
 # -----------------------------
@@ -52,10 +53,24 @@ def seq_key(seq):
     return f"{seq.recording_id}:{seq.vehicle_id}"
 
 
+def _summ_durs(x):
+    """
+    Summarize a pooled run-length array (durations). x is 1D in "timesteps" (windows).
+    """
+    x = np.asarray(x, dtype=np.float64).reshape(-1)
+    if x.size == 0:
+        return dict(median=np.nan, p10=np.nan, p90=np.nan, mean=np.nan, n=0)
+    return dict(
+        median=float(np.median(x)),
+        p10=float(np.percentile(x, 10)),
+        p90=float(np.percentile(x, 90)),
+        mean=float(np.mean(x)),
+        n=int(x.size),
+    )
+
 # -----------------------------
 # metrics helpers
 # -----------------------------
-
 def param_count(trainer):
     """
     Compute the exact number of free parameters k for the *implemented* model.
@@ -234,7 +249,6 @@ def plot_entropy_heatmaps(H_joint, H_style, H_action, lengths, out_dir, prefix="
 # -----------------------------
 # core reusable evaluator
 # -----------------------------
-
 def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_heatmaps=True):
     """Load checkpoint -> scale test obs -> infer -> compute metrics."""
     trainer = HDVTrainer.load(model_path)  
@@ -265,6 +279,10 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
     per_traj_ll_per_window = []
     gamma_sa_all = []
 
+    # Viterbi duration pools (across vehicles)
+    vit_runlen_style = []
+    vit_runlen_action = []
+
     # infer per trajectory 
     for obs in test_obs:
         gamma_s_a, _, _, loglik = infer_posterior(obs=obs, pi_s0=trainer.pi_s0, pi_a0_given_s0=trainer.pi_a0_given_s0, A_s=trainer.A_s, A_a=trainer.A_a, emissions=emissions)
@@ -273,6 +291,24 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
         total_ll += float(loglik)
         per_traj_ll_per_window.append(float(loglik) / max(obs.shape[0], 1))
         total_T += int(obs.shape[0])
+
+        # Viterbi decode (per-vehicle) + duration extraction 
+        # infer_posterior computes emissions.loglikelihood internally for FB.
+        # For Viterbi compute logB again 
+        logB_s_a = emissions.loglikelihood(obs)  # (T,S,A)
+        if not torch.is_tensor(logB_s_a):
+            logB_s_a = torch.as_tensor(logB_s_a)
+        logB_s_a = logB_s_a.to(device=gamma_s_a.device, dtype=gamma_s_a.dtype)
+
+        vit = viterbi(
+            pi_s0=trainer.pi_s0.to(device=logB_s_a.device, dtype=logB_s_a.dtype),
+            pi_a0_given_s0=trainer.pi_a0_given_s0.to(device=logB_s_a.device, dtype=logB_s_a.dtype),
+            A_s=trainer.A_s.to(device=logB_s_a.device, dtype=logB_s_a.dtype),
+            A_a=trainer.A_a.to(device=logB_s_a.device, dtype=logB_s_a.dtype),
+            logB_s_a=logB_s_a,
+        )
+        vit_runlen_style.append(durations_from_path(vit.s_path).detach().cpu().numpy())
+        vit_runlen_action.append(durations_from_path(vit.a_path).detach().cpu().numpy())
 
     ll_per_t = total_ll / max(total_T, 1) # Average log-likelihood per timestep; How good is the model, independent of dataset size
 
@@ -284,6 +320,12 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
     k, k_parts = param_count(trainer)
     N = max(total_T, 1)
     bic = (k * np.log(N)) - 2.0 * total_ll
+
+    # pool Viterbi run-lengths across vehicles
+    vit_style_all = np.concatenate(vit_runlen_style) if vit_runlen_style else np.array([], dtype=np.float64)
+    vit_action_all = np.concatenate(vit_runlen_action) if vit_runlen_action else np.array([], dtype=np.float64)
+    vit_style_s = _summ_durs(vit_style_all)
+    vit_action_s = _summ_durs(vit_action_all)
 
     p = np.percentile(per_traj_ll_per_window, [0, 5, 25, 50, 75, 95, 100]) if per_traj_ll_per_window else np.full(7, np.nan)
 
@@ -303,7 +345,21 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
 
         k_params=int(k),
         BIC=float(bic),
+
+        # Viterbi duration summaries (in timesteps = windows) 
+        vit_runlen_style_median=float(vit_style_s["median"]),
+        vit_runlen_style_p10=float(vit_style_s["p10"]),
+        vit_runlen_style_p90=float(vit_style_s["p90"]),
+        vit_runlen_style_mean=float(vit_style_s["mean"]),
+        vit_runlen_style_n=int(vit_style_s["n"]),
+
+        vit_runlen_action_median=float(vit_action_s["median"]),
+        vit_runlen_action_p10=float(vit_action_s["p10"]),
+        vit_runlen_action_p90=float(vit_action_s["p90"]),
+        vit_runlen_action_mean=float(vit_action_s["mean"]),
+        vit_runlen_action_n=int(vit_action_s["n"]),
     )
+
     metrics.update({k: float(v) for k, v in occ.items()})
     metrics.update(ent_summary)
     
