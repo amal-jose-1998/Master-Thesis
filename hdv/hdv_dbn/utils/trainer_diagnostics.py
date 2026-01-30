@@ -14,7 +14,10 @@ def _entropy_normalized(p, axis=-1, eps=1e-15):
 
     # 0*log(0)=0
     mask = (p > 0.0)
-    H = -np.sum(np.where(mask, p * np.log(p), 0.0), axis=axis) # Shannon entropy
+    logp = np.zeros_like(p)
+    logp[mask] = np.log(p[mask])   # log computed ONLY where safe
+
+    H = -np.sum(p * logp, axis=axis) # Shannon entropy
     return H / logK
 
 def _finite_1d(x):
@@ -118,23 +121,37 @@ def posterior_entropy_from_gamma_sa(gamma_sa_seqs, eps=1e-15):
         H_action_mat[i, :Ti] = Ha_list[i]
     
     # Per-trajectory means (vehicle-level)
-    ent_joint_mean_per_traj = np.asarray(
-        [np.nanmean(H_joint_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+    #ent_joint_per_traj = np.asarray(
+    #    [np.nanmean(H_joint_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+    #    dtype=np.float64
+    #)
+    #ent_style_per_traj = np.asarray(
+    #    [np.nanmean(H_style_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+    #    dtype=np.float64
+    #)
+    #ent_action_per_traj = np.asarray(
+    #    [np.nanmean(H_action_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+    #    dtype=np.float64
+    #)
+
+    # Per-trajectory medians (vehicle-level, robust)
+    ent_joint_per_traj = np.asarray(
+        [np.nanmedian(H_joint_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
         dtype=np.float64
     )
-    ent_style_mean_per_traj = np.asarray(
-        [np.nanmean(H_style_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+    ent_style_per_traj = np.asarray(
+        [np.nanmedian(H_style_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
         dtype=np.float64
     )
-    ent_action_mean_per_traj = np.asarray(
-        [np.nanmean(H_action_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
+    ent_action_per_traj = np.asarray(
+        [np.nanmedian(H_action_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
         dtype=np.float64
-    )
+)
 
     summary = {}
-    summary.update(_summarize_entropy("ent_joint",  ent_joint_mean_per_traj))
-    summary.update(_summarize_entropy("ent_style",  ent_style_mean_per_traj))
-    summary.update(_summarize_entropy("ent_action", ent_action_mean_per_traj))
+    summary.update(_summarize_entropy("ent_joint",  ent_joint_per_traj))
+    summary.update(_summarize_entropy("ent_style",  ent_style_per_traj))
+    summary.update(_summarize_entropy("ent_action", ent_action_per_traj))
 
     return H_joint_mat, H_style_mat, H_action_mat, lengths, summary
 

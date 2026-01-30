@@ -158,7 +158,7 @@ def main():
     print(f"[evaluate_highd_dbn] exp={exp_dir.name} ckpt={checkpoint_name}")
     print(f"[evaluate_highd_dbn] saved JSON -> {out_json}")
     print(f"[evaluate_highd_dbn] ll/t={metrics['ll_per_timestep']:.6f}  BIC={metrics['BIC']:.2f}  k={metrics['k_params']}")
-    print(f"[evaluate_highd_dbn] ent_joint_mean={metrics['ent_joint_mean']:.3f}")
+    print(f"[evaluate_highd_dbn] ent_joint_vehicle_median={metrics['ent_joint_vehicle_median']:.3f}")
     print("[evaluate_highd_dbn] Done.")
 
 
