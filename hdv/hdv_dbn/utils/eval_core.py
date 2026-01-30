@@ -51,11 +51,9 @@ def seq_key(seq):
     """
     return f"{seq.recording_id}:{seq.vehicle_id}"
 
-
 # -----------------------------
 # metrics helpers
 # -----------------------------
-
 def param_count(trainer):
     """
     Compute the exact number of free parameters k for the *implemented* model.
@@ -234,7 +232,6 @@ def plot_entropy_heatmaps(H_joint, H_style, H_action, lengths, out_dir, prefix="
 # -----------------------------
 # core reusable evaluator
 # -----------------------------
-
 def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_heatmaps=True):
     """Load checkpoint -> scale test obs -> infer -> compute metrics."""
     trainer = HDVTrainer.load(model_path)  
@@ -274,6 +271,7 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
         per_traj_ll_per_window.append(float(loglik) / max(obs.shape[0], 1))
         total_T += int(obs.shape[0])
 
+
     ll_per_t = total_ll / max(total_T, 1) # Average log-likelihood per timestep; How good is the model, independent of dataset size
 
     H_joint, H_style, H_action, lengths, ent_summary = posterior_entropy_from_gamma_sa(gamma_sa_all)
@@ -304,6 +302,7 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
         k_params=int(k),
         BIC=float(bic),
     )
+
     metrics.update({k: float(v) for k, v in occ.items()})
     metrics.update(ent_summary)
     
