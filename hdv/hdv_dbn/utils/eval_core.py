@@ -164,7 +164,7 @@ def occupancy_and_keff(gamma_sa_seqs):
     )
 
 def plot_entropy_heatmaps(H_joint, H_style, H_action, lengths, out_dir, prefix="entropy", 
-                          sort_by="joint_mean",   # "joint_mean", "length", or None 
+                          sort_by="joint_median",   # "joint_median", "length", or None 
                           vmax=1.0,               # entropy is normalized in [0,1]
                           ):
     """
@@ -181,7 +181,7 @@ def plot_entropy_heatmaps(H_joint, H_style, H_action, lengths, out_dir, prefix="
         File prefix for outputs.
     sort_by
         Row ordering strategy:
-          - "joint_mean": sort by mean joint entropy per vehicle (ascending)
+          - "joint_median": sort by median joint entropy per vehicle (ascending)
           - "length": sort by sequence length (descending)
           - None: keep original order
     vmax
@@ -196,8 +196,8 @@ def plot_entropy_heatmaps(H_joint, H_style, H_action, lengths, out_dir, prefix="
         return {}
 
     # Sorting (stable across runs if you keep same input order)
-    if sort_by == "joint_mean":
-        row_score = np.nanmean(H_joint, axis=1)
+    if sort_by == "joint_median":
+        row_score = np.nanmedian(H_joint, axis=1)
         order = np.argsort(row_score)  # low -> high uncertainty
     elif sort_by == "length":
         order = np.argsort(-lengths)   # long -> short
