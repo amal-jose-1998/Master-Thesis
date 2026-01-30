@@ -1,5 +1,5 @@
 import numpy as np
-import torch
+import time
 from pathlib import Path
 import matplotlib.pyplot as plt
 
@@ -234,8 +234,11 @@ def plot_entropy_heatmaps(H_joint, H_style, H_action, lengths, out_dir, prefix="
 # -----------------------------
 def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_heatmaps=True):
     """Load checkpoint -> scale test obs -> infer -> compute metrics."""
+    t0 = time.perf_counter()
+    print(f"[eval_core] Loading model: {model_path}", flush=True)
     trainer = HDVTrainer.load(model_path)  
     emissions = trainer.emissions
+    print(f"[eval_core] Model loaded in {time.perf_counter()-t0:.2f}s", flush=True)
 
     scaler_mean = trainer.scaler_mean
     scaler_std = trainer.scaler_std
@@ -244,9 +247,10 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
 
     scale_idx = np.array([i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES], dtype=np.int64)
 
+    print(f"[eval_core] Scaling {len(test_seqs)} test sequences", flush=True)
     # scale test obs
     test_obs = []
-    for seq in test_seqs:
+    for i, seq in enumerate(test_seqs):
         if isinstance(scaler_mean, dict) and isinstance(scaler_std, dict):
             meta = getattr(seq, "meta", None) or {}
             cls = str(meta.get("meta_class", "NA"))
@@ -255,6 +259,8 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
         else:
             mean, std = scaler_mean, scaler_std
         test_obs.append(scale_obs_masked(seq.obs, mean, std, scale_idx))
+        if (i + 1) % 50 == 0 or (i + 1) == len(test_seqs):
+            print(f"[eval_core] scaled {i+1}/{len(test_seqs)}", flush=True)
 
     total_ll = 0.0 # total_ll = Σ_i log p(O^{(i)} | model), mainly an internal quantity used for normalization and BIC.
 
@@ -262,8 +268,10 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
     per_traj_ll_per_window = []
     gamma_sa_all = []
 
+    print("[eval_core] Starting inference per trajectory", flush=True)
+    t_inf0 = time.perf_counter()
     # infer per trajectory 
-    for obs in test_obs:
+    for i, obs in enumerate(test_obs):
         gamma_s_a, _, _, loglik = infer_posterior(obs=obs, pi_s0=trainer.pi_s0, pi_a0_given_s0=trainer.pi_a0_given_s0, A_s=trainer.A_s, A_a=trainer.A_a, emissions=emissions)
 
         gamma_sa_all.append(gamma_s_a)
@@ -271,6 +279,13 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
         per_traj_ll_per_window.append(float(loglik) / max(obs.shape[0], 1))
         total_T += int(obs.shape[0])
 
+        if (i + 1) % 20 == 0 or (i + 1) == len(test_obs):
+            dt = time.perf_counter() - t_inf0
+            avg = dt / (i + 1)
+            print(f"[eval_core] infer {i+1}/{len(test_obs)}  avg={avg:.3f}s/seq  totalT={total_T}", flush=True)
+
+
+    print("[eval_core] Computing entropy/occupancy/BIC", flush=True)
 
     ll_per_t = total_ll / max(total_T, 1) # Average log-likelihood per timestep; How good is the model, independent of dataset size
 
@@ -337,4 +352,5 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
         metrics.setdefault("artifacts", {})
         metrics["artifacts"].update({"entropy_heatmaps_npz": str(heatmap_npz), **plot_paths})
 
+    print("[eval_core] Done metrics", flush=True)
     return metrics

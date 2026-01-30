@@ -21,11 +21,13 @@ def write_json(path, payload):
 def load_split_json(exp_dir):
     exp_dir = Path(exp_dir)
     p = exp_dir / "split.json"
+    print(f"[evaluate_highd_dbn] Loading split -> {p}")
     if not p.exists():
         raise FileNotFoundError(f"Missing split.json: {p}")
     payload = json.loads(p.read_text(encoding="utf-8"))
     if "keys" not in payload or "test" not in payload["keys"]:
         raise ValueError(f"split.json format unexpected: {p}")
+    print(f"[evaluate_highd_dbn] split.json loaded: test={len(payload['keys']['test'])} vehicles, W={payload.get('W')}, stride={payload.get('stride')}")
     return payload, set(payload["keys"]["test"])
 
 
@@ -43,6 +45,7 @@ def load_test_sequences_from_experiment_split(exp_dir, data_root):
     W = int(split_payload.get("W", int(WINDOW_CONFIG.W)))
     stride = int(split_payload.get("stride", int(WINDOW_CONFIG.stride)))
 
+    print(f"[evaluate_highd_dbn] Loading highD df from: {data_root}")
     df = load_highd_folder(
         data_root,
         cache_path=None,
@@ -51,6 +54,7 @@ def load_test_sequences_from_experiment_split(exp_dir, data_root):
     )
 
     cache_dir = data_root / "cache"
+    print(f"[evaluate_highd_dbn] Building/loading window cache: cache_dir={cache_dir}  W={W} stride={stride}")
     all_seqs = load_or_build_windowized(
         df,
         cache_dir=cache_dir,
@@ -59,7 +63,9 @@ def load_test_sequences_from_experiment_split(exp_dir, data_root):
         force_rebuild=False,
     )
 
+    print(f"[evaluate_highd_dbn] Total windowized sequences in cache: {len(all_seqs)}")
     test_seqs = [s for s in all_seqs if seq_key(s) in test_keys]
+    print(f"[evaluate_highd_dbn] Matched test sequences: {len(test_seqs)}/{len(test_keys)}")
 
     found = {seq_key(s) for s in test_seqs}
     missing = test_keys - found
@@ -79,16 +85,18 @@ def evaluate_experiment(exp_dir, checkpoint_name="final.npz", data_root=None):
     exp_dir = Path(exp_dir)
     project_root = Path(__file__).resolve().parents[1]
     data_root = Path(data_root) if data_root is not None else (project_root / "data" / "highd")
-
     ckpt_path = exp_dir / checkpoint_name
     if not ckpt_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+    print(f"[evaluate_highd_dbn] Using exp_dir={exp_dir}")
+    print(f"[evaluate_highd_dbn] Using checkpoint={ckpt_path}")
 
     test_seqs, feature_cols, split_payload, test_keys = load_test_sequences_from_experiment_split(
         exp_dir=exp_dir,
         data_root=data_root,
     )
 
+    print(f"[evaluate_highd_dbn] Starting checkpoint evaluation...")
     metrics = evaluate_checkpoint(
         model_path=ckpt_path,
         test_seqs=test_seqs,
@@ -96,6 +104,7 @@ def evaluate_experiment(exp_dir, checkpoint_name="final.npz", data_root=None):
         out_dir=exp_dir,
         save_heatmaps=True,
     )
+    print(f"[evaluate_highd_dbn] Finished checkpoint evaluation.")
 
     meta = dict(
         experiment_dir=str(exp_dir),
@@ -132,9 +141,12 @@ def main():
         print(f"[evaluate_highd_dbn] ERROR: exp folder not found: {exp_dir}", file=sys.stderr)
         sys.exit(1)
 
+    print(f"[evaluate_highd_dbn] exp_dir resolved -> {exp_dir}")
+    print("[evaluate_highd_dbn] Running evaluate_experiment()")
 
     checkpoint_name = "final.npz"
     result = evaluate_experiment(exp_dir=exp_dir, checkpoint_name=checkpoint_name, data_root=data_root)
+    print("[evaluate_highd_dbn] Writing eval_metrics.json")
 
     metrics = result["metrics"]
 
@@ -145,8 +157,8 @@ def main():
     # Console summary
     print(f"[evaluate_highd_dbn] exp={exp_dir.name} ckpt={checkpoint_name}")
     print(f"[evaluate_highd_dbn] saved JSON -> {out_json}")
-    print(f"[evaluate_highd_dbn] ll/t={metrics['ll_per_timestep']:.6f}  BIC={metrics['BIC_approx']:.2f}  k={metrics['k_params_approx']}")
-    print(f"[evaluate_highd_dbn] ent_joint_mean={metrics['ent_joint_mean']:.3f}  runlen_joint_median={metrics['runlen_joint_median']:.1f}")
+    print(f"[evaluate_highd_dbn] ll/t={metrics['ll_per_timestep']:.6f}  BIC={metrics['BIC']:.2f}  k={metrics['k_params']}")
+    print(f"[evaluate_highd_dbn] ent_joint_mean={metrics['ent_joint_mean']:.3f}")
     print("[evaluate_highd_dbn] Done.")
 
 
