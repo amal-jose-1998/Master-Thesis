@@ -146,7 +146,7 @@ def posterior_entropy_from_gamma_sa(gamma_sa_seqs, eps=1e-15):
     ent_action_per_traj = np.asarray(
         [np.nanmedian(H_action_mat[i, :lengths[i]]) if lengths[i] > 0 else np.nan for i in range(N)],
         dtype=np.float64
-)
+    )
 
     summary = {}
     summary.update(_summarize_entropy("ent_joint",  ent_joint_per_traj))
