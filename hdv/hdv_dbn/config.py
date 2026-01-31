@@ -101,7 +101,7 @@ class TrainingConfig:
     # -------------------------------------------------------------
     # "poe"    : Product-of-Experts emissions (your PoE module)
     # "linear" : additive log-likelihoods (no PoE logZ coupling)
-    emission_model: Literal["poe", "hierarchical"] = "poe"
+    emission_model: Literal["poe", "hierarchical"] = "hierarchical"
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
@@ -147,7 +147,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "3.poe-sticky_cpd-uni_pi-lc_a-bern_off"
+    wandb_run_name: Optional[str] = "15.hierar-sticky_cpd-uni_pi-lc_a-bern_off"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
