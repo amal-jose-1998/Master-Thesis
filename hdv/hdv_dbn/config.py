@@ -108,7 +108,7 @@ class TrainingConfig:
 
     learn_pi0: bool = False  
     pi0_alpha: float = 0.0
-    disable_discrete_obs: bool = False
+    disable_discrete_obs: bool = False     
     bern_weight: float = 1     #(dont change)                
     lc_weight: float = 25   
     # Lane-change imbalance handling in EM
