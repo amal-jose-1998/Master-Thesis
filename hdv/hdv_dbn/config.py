@@ -106,7 +106,7 @@ class TrainingConfig:
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
 
-    learn_pi0: bool = False  
+    learn_pi0: bool = True  
     pi0_alpha: float = 0.0
     disable_discrete_obs: bool = True 
     bern_weight: float = 1     #(dont change)                
@@ -147,7 +147,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "1.poe-sticky_cpd-uni_pi-lc_none-bern_off"
+    wandb_run_name: Optional[str] = "7.poe-sticky_cpd-lern_pi-lc_none-bern_off"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
