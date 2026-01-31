@@ -94,7 +94,7 @@ class TrainingConfig:
         Seed used for random CPD initialization (kept separate for clarity).
     """
     seed: int = 123
-    em_num_iters: int = 100
+    em_num_iters: int = 200
 
     # -------------------------------------------------------------
     # Emission model selection
