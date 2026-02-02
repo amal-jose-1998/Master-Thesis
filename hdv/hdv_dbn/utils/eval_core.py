@@ -2,6 +2,8 @@ import numpy as np
 import time
 from pathlib import Path
 import matplotlib.pyplot as plt
+from dataclasses import dataclass
+import torch
 
 from ..trainer import HDVTrainer
 from ..config import CONTINUOUS_FEATURES, DBN_STATES, TRAINING_CONFIG
@@ -229,6 +231,59 @@ def plot_entropy_heatmaps(H_joint, H_style, H_action, lengths, out_dir, prefix="
     return paths
 
 
+def plot_T_vs_avg_nll(per_seq, out_dir, fname="T_vs_avg_nll.png", title="Online predictive: T vs avg NLL"):
+    """
+    Scatter plot of trajectory length T (windows) vs avg NLL per window.
+
+    Parameters
+    per_seq : dict
+        key -> {"T": int, "avg_nll": float}
+    out_dir : str or Path
+        Where to save the PNG.
+    fname : str
+        File name for saved figure.
+    title : str
+        Plot title.
+
+    Returns
+    str : path to saved PNG
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    T_list = []
+    nll_list = []
+
+    for _, rec in per_seq.items():
+        T = rec.get("T", None)
+        avg_nll = rec.get("avg_nll", None)
+        if T is None or avg_nll is None:
+            continue
+        if np.isfinite(T) and np.isfinite(avg_nll) and int(T) > 0:
+            T_list.append(int(T))
+            nll_list.append(float(avg_nll))
+
+    if len(T_list) == 0:
+        # nothing to plot
+        return ""
+
+    T_arr = np.asarray(T_list, dtype=np.int64)
+    nll_arr = np.asarray(nll_list, dtype=np.float64)
+
+    plt.figure(figsize=(8, 5))
+    plt.scatter(T_arr, nll_arr, s=10, alpha=0.6)
+    plt.xlabel("Trajectory length T (windows)")
+    plt.ylabel("Average NLL per window")
+    plt.title(title)
+    plt.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+    plt.tight_layout()
+
+    path = out_dir / fname
+    plt.savefig(path, dpi=200)
+    plt.close()
+    return str(path)
+
+
 # -----------------------------
 # core reusable evaluator
 # -----------------------------
@@ -354,3 +409,195 @@ def evaluate_checkpoint(model_path, test_seqs, feature_cols, out_dir=None, save_
 
     print("[eval_core] Done metrics", flush=True)
     return metrics
+
+# =============================================================================
+# Online  predictive log-likelihood via filtering only
+# =============================================================================
+@torch.no_grad()
+def _online_ll_terms_single(obs_scaled, pi_s0, pi_a0_given_s0, A_s, A_a, emissions):
+    """
+    Compute ll_terms[t] = log p(o_t | o_{0:t-1}) using forward filtering only.
+
+    Shapes:
+      obs_scaled: (T,F)
+      emissions.loglikelihood(obs_scaled) -> logB_sa: (T,S,A)
+
+    Returns:
+      ll_terms: list length T
+    """
+    if obs_scaled is None or obs_scaled.shape[0] == 0:
+        return []
+
+    logB_sa = emissions.loglikelihood(obs_scaled)  # (T,S,A); logB_sa[t, s, a] is the emission log-likelihood for the observed window at time t
+    if not torch.is_tensor(logB_sa):
+        logB_sa = torch.as_tensor(logB_sa)
+
+    device = getattr(emissions, "_device", pi_s0.device)
+    dtype = getattr(emissions, "_dtype", pi_s0.dtype)
+
+    logB_sa = logB_sa.to(device=device, dtype=dtype)
+    pi_s0 = pi_s0.to(device=device, dtype=dtype)
+    pi_a0_given_s0 = pi_a0_given_s0.to(device=device, dtype=dtype)
+    A_s = A_s.to(device=device, dtype=dtype)
+    A_a = A_a.to(device=device, dtype=dtype)
+
+    T, S, A = map(int, logB_sa.shape)
+    if pi_a0_given_s0.shape != (S, A):
+        raise ValueError(f"pi_a0_given_s0 shape {tuple(pi_a0_given_s0.shape)} != ({S},{A})")
+    if A_s.shape != (S, S):
+        raise ValueError(f"A_s shape {tuple(A_s.shape)} != ({S},{S})")
+    if A_a.shape != (S, A, A):
+        raise ValueError(f"A_a shape {tuple(A_a.shape)} != ({S},{A},{A})")
+
+    eps = 1e-6
+
+    # log predicted belief before seeing o_0: log p(s0,a0)
+    log_b_pred = torch.log(pi_s0 + eps)[:, None] + torch.log(pi_a0_given_s0 + eps)  # (S,A); p(s0​,a0​)=p(s0​)p(a0​∣s0​)
+
+    logAs = torch.log(A_s + eps)  # (S,S)
+    logAa = torch.log(A_a + eps)  # (S,A,A)
+    # convenience: (A_prev, S_next, A_next)
+    logAa_ap_s_an = logAa.permute(1, 0, 2).contiguous()
+    assert logAa_ap_s_an.shape == (A, S, A), (
+        f"logAa_ap_s_a has shape {logAa_ap_s_an.shape}, expected ({A},{S},{A})"
+    )
+
+    ll_terms = []
+
+    for t in range(T):
+        # predictive likelihood for o_t given past
+        # log_b_pred = what the model currently believe about (s, a) before seeing this window
+        # logB_sa[t] = If the driver were in (s, a), how likely is this observation?
+        log_joint = log_b_pred + logB_sa[t]  # (S,A); log[p(s_t​,a_t ​∣ o_{0:t−1}​) p(o_t ​∣ s_t​,a_t​)]; How plausible is it that the driver was in this state and produced this window
+        logZ_t = torch.logsumexp(log_joint.reshape(-1), dim=0)  # log[p(o_t ​∣ o_{0:t−1​})]; scalar normalization constant, adds everything up across all possible states.
+        ll_terms.append(float(logZ_t.detach().cpu().item())) # save it because this is the prediction quality at time t.
+
+        # filtering posterior (After seeing this window, what the model believe about the driver’s style and action)
+        log_b_post = log_joint - logZ_t  # normalized log p(s_t,a_t | o_{0:t}); becomes a proper probability distribution
+
+        if t < T - 1:
+            # predict next belief: If the driver is currently in (s, a), how likely are they to move to (s′, a′)
+            # log b_{t+1|t}(s',a') = logsumexp_{s,a} [ log b_post(s,a) + logA_s[s,s'] + logA_a[s',a,a'] ]
+            tmp = (
+                log_b_post[:, :, None, None] +
+                logAs[:, None, :, None] +
+                logAa_ap_s_an[None, :, :, :]
+            )  # (S,A,S',A')
+            log_b_pred = torch.logsumexp(tmp, dim=(0, 1))  # (S',A'); belief before seeing the next window
+            log_b_pred = log_b_pred - torch.logsumexp(log_b_pred.reshape(-1), dim=0)
+
+    return ll_terms # [logp(o_0​), logp(o_1 ​∣ o_0​), …, logp(o_{T−1​} ∣ o_{0:T−2}​)]
+
+
+def evaluate_online_predictive_ll(model_path, test_seqs, feature_cols, out_dir=None, save_plot=True):
+    """
+    Online (strictly-causal) evaluation using filtering-only predictive log-likelihood.
+
+    Output:
+      summary 
+    """
+    print(f"[eval_core.online_ll] Loading model: {model_path}", flush=True)
+    trainer = HDVTrainer.load(model_path)
+    emissions = trainer.emissions
+
+    scaler_mean = trainer.scaler_mean
+    scaler_std = trainer.scaler_std
+    if scaler_mean is None or scaler_std is None:
+        raise RuntimeError(f"Model '{model_path}' missing scaler_mean/std.")
+
+    scale_idx = np.array([i for i, n in enumerate(feature_cols) if n in CONTINUOUS_FEATURES], dtype=np.int64)
+
+    # model params (torch)
+    pi_s0 = trainer.pi_s0
+    pi_a0_given_s0 = trainer.pi_a0_given_s0
+    A_s = trainer.A_s
+    A_a = trainer.A_a
+
+    per_seq = {}
+    total_ll = 0.0
+    total_T = 0
+    avg_nll_list = []
+
+    for i, seq in enumerate(test_seqs):
+        key = seq_key(seq)
+
+        # scaling (classwise vs global)
+        if isinstance(scaler_mean, dict) and isinstance(scaler_std, dict):
+            meta = getattr(seq, "meta", None) or {}
+            cls = str(meta.get("meta_class", "NA"))
+            mean = scaler_mean[cls]
+            std = scaler_std[cls]
+        else:
+            mean, std = scaler_mean, scaler_std
+
+        obs_scaled = scale_obs_masked(seq.obs, mean, std, scale_idx)
+
+        ll_terms = _online_ll_terms_single(
+            obs_scaled=obs_scaled,
+            pi_s0=pi_s0,
+            pi_a0_given_s0=pi_a0_given_s0,
+            A_s=A_s,
+            A_a=A_a,
+            emissions=emissions
+        )
+
+        ll_total = float(np.sum(ll_terms))
+        T = int(len(ll_terms))
+        nll_total = float(-ll_total)
+        avg_nll = float(nll_total / max(T, 1))
+
+        total_ll += ll_total
+        total_T += T
+        avg_nll_list.append(avg_nll)
+
+        rec = {
+            "T": T,
+            "avg_nll": avg_nll,
+        }
+
+        per_seq[key] = rec
+
+        if (i + 1) % 50 == 0 or (i + 1) == len(test_seqs):
+            print(f"[eval_core.online_ll] processed {i+1}/{len(test_seqs)} totalT={total_T}", flush=True)
+
+    x = np.asarray(avg_nll_list, dtype=np.float64)
+    x = x[np.isfinite(x)]
+
+    def _summ(z):
+        if z.size == 0:
+            return {"mean": np.nan, "median": np.nan, "p10": np.nan, "p90": np.nan}
+        return {
+            "mean": float(np.mean(z)),
+            "median": float(np.median(z)),
+            "p10": float(np.percentile(z, 10)),
+            "p90": float(np.percentile(z, 90)),
+        }
+
+    summary = {
+        "model_path": str(model_path),
+        "n_sequences": int(len(test_seqs)),
+        "total_T": int(total_T), # Total number of windows across all test vehicles
+        "total_ll": float(total_ll), # Raw log-likelihood, summed over all timesteps of all vehicles
+        "total_nll": float(-total_ll),
+        "avg_nll_per_timestep_weighted": float((-total_ll) / max(int(total_T), 1)), # global average NLL per window; long trajectories contribute more weight than short ones
+        "per_sequence_avg_nll": _summ(x), # Each vehicle counts equally, regardless of length.
+    }
+
+    artifacts = {}
+    if save_plot:
+        if out_dir is None:
+            raise ValueError("save_plot=True requires out_dir to be set.")
+        png_path = plot_T_vs_avg_nll(
+            per_seq=per_seq,
+            out_dir=out_dir,
+            fname="T_vs_avg_nll.png",
+            title="Online predictive: T vs avg NLL"
+        )
+        if png_path:
+            artifacts["T_vs_avg_nll_png"] = png_path
+
+    out = {"summary": summary}
+    if artifacts:
+        out["artifacts"] = artifacts
+
+    return out
