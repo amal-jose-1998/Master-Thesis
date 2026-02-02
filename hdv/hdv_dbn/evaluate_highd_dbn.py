@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .datasets import load_highd_folder, load_or_build_windowized
 from .config import TRAINING_CONFIG, WINDOW_FEATURE_COLS, WINDOW_CONFIG, DBN_STATES
-from .utils.eval_core import evaluate_checkpoint, evaluate_online_predictive_ll, OnlineLLConfig, seq_key
+from .utils.eval_core import evaluate_checkpoint, evaluate_online_predictive_ll, seq_key
 
 
 # -----------------------------
