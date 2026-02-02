@@ -428,7 +428,7 @@ def _online_ll_terms_single(obs_scaled, pi_s0, pi_a0_given_s0, A_s, A_a, emissio
     if obs_scaled is None or obs_scaled.shape[0] == 0:
         return []
 
-    logB_sa = emissions.loglikelihood(obs_scaled)  # (T,S,A)
+    logB_sa = emissions.loglikelihood(obs_scaled)  # (T,S,A); logB_sa[t, s, a] is the emission log-likelihood for the observed window at time t
     if not torch.is_tensor(logB_sa):
         logB_sa = torch.as_tensor(logB_sa)
 
@@ -452,36 +452,41 @@ def _online_ll_terms_single(obs_scaled, pi_s0, pi_a0_given_s0, A_s, A_a, emissio
     eps = 1e-6
 
     # log predicted belief before seeing o_0: log p(s0,a0)
-    log_b_pred = torch.log(pi_s0 + eps)[:, None] + torch.log(pi_a0_given_s0 + eps)  # (S,A)
+    log_b_pred = torch.log(pi_s0 + eps)[:, None] + torch.log(pi_a0_given_s0 + eps)  # (S,A); p(s0​,a0​)=p(s0​)p(a0​∣s0​)
 
     logAs = torch.log(A_s + eps)  # (S,S)
     logAa = torch.log(A_a + eps)  # (S,A,A)
     # convenience: (A_prev, S_next, A_next)
     logAa_ap_s_an = logAa.permute(1, 0, 2).contiguous()
+    assert logAa_ap_s_an.shape == (A, S, A), (
+        f"logAa_ap_s_a has shape {logAa_ap_s_an.shape}, expected ({A},{S},{A})"
+    )
 
     ll_terms = []
 
     for t in range(T):
         # predictive likelihood for o_t given past
-        log_joint = log_b_pred + logB_sa[t]  # (S,A)
-        logZ_t = torch.logsumexp(log_joint.reshape(-1), dim=0)  # scalar
-        ll_terms.append(float(logZ_t.detach().cpu().item()))
+        # log_b_pred = what the model currently believe about (s, a) before seeing this window
+        # logB_sa[t] = If the driver were in (s, a), how likely is this observation?
+        log_joint = log_b_pred + logB_sa[t]  # (S,A); log[p(s_t​,a_t ​∣ o_{0:t−1}​) p(o_t ​∣ s_t​,a_t​)]; How plausible is it that the driver was in this state and produced this window
+        logZ_t = torch.logsumexp(log_joint.reshape(-1), dim=0)  # log[p(o_t ​∣ o_{0:t−1​})]; scalar normalization constant, adds everything up across all possible states.
+        ll_terms.append(float(logZ_t.detach().cpu().item())) # save it because this is the prediction quality at time t.
 
-        # filtering posterior
-        log_b_post = log_joint - logZ_t  # normalized log p(s_t,a_t | o_{0:t})
+        # filtering posterior (After seeing this window, what the model believe about the driver’s style and action)
+        log_b_post = log_joint - logZ_t  # normalized log p(s_t,a_t | o_{0:t}); becomes a proper probability distribution
 
         if t < T - 1:
-            # predict next belief:
+            # predict next belief: If the driver is currently in (s, a), how likely are they to move to (s′, a′)
             # log b_{t+1|t}(s',a') = logsumexp_{s,a} [ log b_post(s,a) + logA_s[s,s'] + logA_a[s',a,a'] ]
             tmp = (
                 log_b_post[:, :, None, None] +
                 logAs[:, None, :, None] +
                 logAa_ap_s_an[None, :, :, :]
             )  # (S,A,S',A')
-            log_b_pred = torch.logsumexp(tmp, dim=(0, 1))  # (S',A')
+            log_b_pred = torch.logsumexp(tmp, dim=(0, 1))  # (S',A'); belief before seeing the next window
             log_b_pred = log_b_pred - torch.logsumexp(log_b_pred.reshape(-1), dim=0)
 
-    return ll_terms
+    return ll_terms # [logp(o_0​), logp(o_1 ​∣ o_0​), …, logp(o_{T−1​} ∣ o_{0:T−2}​)]
 
 
 def evaluate_online_predictive_ll(model_path, test_seqs, feature_cols, out_dir=None, save_plot=True):
