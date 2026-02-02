@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .datasets import load_highd_folder, load_or_build_windowized
 from .config import TRAINING_CONFIG, WINDOW_FEATURE_COLS, WINDOW_CONFIG, DBN_STATES
-from .utils.eval_core import evaluate_checkpoint, evaluate_online_predictive_ll, seq_key
+from .utils.eval_core import evaluate_checkpoint, evaluate_online_predictive_ll, evaluate_anticipatory_predictive_ll, seq_key
 
 
 # -----------------------------
@@ -116,6 +116,18 @@ def evaluate_experiment(exp_dir, checkpoint_name="final.npz", data_root=None):
     )
     print(f"[evaluate_highd_dbn] Finished ONLINE-LL evaluation.")
 
+    print(f"[evaluate_highd_dbn] Starting ANTICIPATORY-LL evaluation...")
+    anticipatory_ll = evaluate_anticipatory_predictive_ll(
+        model_path=ckpt_path,
+        test_seqs=test_seqs,
+        feature_cols=feature_cols,
+        H=10, # ≈ 4.0 s forecast horizon
+        t_warmup=5, # ≈ 2.0 s of observed past
+        out_dir=exp_dir,
+        save_plot=True,
+    )
+    print(f"[evaluate_highd_dbn] Finished ANTICIPATORY-LL evaluation.")
+
     print(f"[evaluate_highd_dbn] Finished checkpoint evaluation.")
 
     meta = dict(
@@ -135,7 +147,12 @@ def evaluate_experiment(exp_dir, checkpoint_name="final.npz", data_root=None):
         bern_weight=float(getattr(TRAINING_CONFIG, "bern_weight", 1.0)),
     )
 
-    return dict(meta=meta, metrics=metrics, online_ll=online_ll)
+    return dict(
+        meta=meta,
+        metrics=metrics,
+        online_ll=online_ll,
+        anticipatory_ll=anticipatory_ll,
+    )
 
 
 def main():
