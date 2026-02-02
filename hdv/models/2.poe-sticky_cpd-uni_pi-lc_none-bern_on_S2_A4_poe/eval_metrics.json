@@ -52,5 +52,24 @@
     "traj_ll_pw_p50": -24.96388743786102,
     "traj_ll_pw_p75": -19.98754625709079,
     "traj_ll_pw_p95": -14.645081121271307
+  },
+  "online_ll": {
+    "artifacts": {
+      "T_vs_avg_nll_png": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\2.poe-sticky_cpd-uni_pi-lc_none-bern_on_S2_A4_poe\\T_vs_avg_nll.png"
+    },
+    "summary": {
+      "avg_nll_per_timestep_weighted": 28.15575086019327,
+      "model_path": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\2.poe-sticky_cpd-uni_pi-lc_none-bern_on_S2_A4_poe\\final.npz",
+      "n_sequences": 10092,
+      "per_sequence_avg_nll": {
+        "mean": 27.28084240316226,
+        "median": 24.963893566993956,
+        "p10": 16.444326919873554,
+        "p90": 39.622008267427105
+      },
+      "total_T": 343983,
+      "total_ll": -9685099.648141861,
+      "total_nll": 9685099.648141861
+    }
   }
 }
