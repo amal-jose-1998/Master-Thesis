@@ -1,4 +1,27 @@
 {
+  "anticipatory_ll": {
+    "artifacts": {
+      "ap_nll_vs_horizon_png": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe/ap_nll_vs_horizon.png"
+    },
+    "summary": {
+      "H": 10,
+      "ap_nll_by_h": [
+        29.229546808818295,
+        29.66586364931061,
+        30.04096455770263,
+        30.427272016822563,
+        30.831030104713047,
+        31.29552145438725,
+        31.84549463550438,
+        32.51315756170307,
+        33.27045676460095,
+        34.04426708971104
+      ],
+      "ap_nll_mean_over_h": 31.316357464327382,
+      "n_pause_total": 193357,
+      "t_warmup": 5
+    }
+  },
   "meta": {
     "A": 4,
     "S": 2,
@@ -6,51 +29,62 @@
     "bern_weight": 1.0,
     "bernoulli_ll_enabled": false,
     "checkpoint_name": "final.npz",
-    "checkpoint_path": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe\\final.npz",
+    "checkpoint_path": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe/final.npz",
     "cpd_init": "sticky",
     "emission_model": "poe",
-    "experiment_dir": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe",
+    "experiment_dir": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe",
     "lc_weight_mode": "B",
     "learn_pi0": false,
     "n_test_vehicles": 10092,
     "stride": 10
   },
   "metrics": {
-    "BIC": 20784333.05323521,
+    "BIC": 20784333.587071575,
     "artifacts": {
-      "entropy_action_png": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe\\entropy_action.png",
-      "entropy_heatmaps_npz": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe\\entropy_heatmaps.npz",
-      "entropy_joint_png": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe\\entropy_joint.png",
-      "entropy_style_png": "C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe\\entropy_style.png"
+      "entropy_action_png": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe/entropy_action.png",
+      "entropy_heatmaps_npz": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe/entropy_heatmaps.npz",
+      "entropy_joint_png": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe/entropy_joint.png",
+      "entropy_style_png": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe/entropy_style.png"
     },
-    "ent_action_vehicle_median": 1.0479135228578214e-08,
+    "ent_action_vehicle_median": 1.0479132342701857e-08,
     "ent_action_vehicle_n": 10092,
-    "ent_action_vehicle_p10": 1.775327125114482e-13,
-    "ent_action_vehicle_p90": 8.807748556362531e-07,
-    "ent_joint_vehicle_median": 2.474289467075866e-08,
+    "ent_action_vehicle_p10": 1.7753361210926083e-13,
+    "ent_action_vehicle_p90": 8.807699877512088e-07,
+    "ent_joint_vehicle_median": 2.474276322522332e-08,
     "ent_joint_vehicle_n": 10092,
-    "ent_joint_vehicle_p10": 1.1126987724497596e-11,
-    "ent_joint_vehicle_p90": 1.322702575512777e-06,
-    "ent_style_vehicle_median": 2.9273690675707294e-08,
+    "ent_joint_vehicle_p10": 1.1126873264886404e-11,
+    "ent_joint_vehicle_p90": 1.3227021046929198e-06,
+    "ent_style_vehicle_median": 2.9273689919398583e-08,
     "ent_style_vehicle_n": 10092,
     "ent_style_vehicle_p10": 0.0,
-    "ent_style_vehicle_p90": 2.2639769504542492e-06,
+    "ent_style_vehicle_p90": 2.2639871146256676e-06,
     "k_params": 518,
-    "keff_action": 2.9426222340961474,
-    "keff_joint": 4.886844806911011,
+    "keff_action": 2.9426223548965917,
+    "keff_joint": 4.886844770928692,
     "keff_style": 1.9807646520872477,
-    "ll_per_timestep": -30.201680619713255,
-    "occ_action_max": 0.461945116519928,
+    "ll_per_timestep": -30.20168139567655,
+    "occ_action_max": 0.4619450867176056,
     "occ_joint_max": 0.29249194264411926,
     "occ_style_max": 0.569401204586029,
     "total_T": 343983,
-    "total_ll": -10388864.704610825,
-    "traj_ll_pw_p0": -2328.8820043103447,
-    "traj_ll_pw_p100": -6.866904625525842,
-    "traj_ll_pw_p25": -33.919174285162065,
-    "traj_ll_pw_p5": -44.78071291779486,
-    "traj_ll_pw_p50": -27.311744955055502,
-    "traj_ll_pw_p75": -22.327601405552457,
-    "traj_ll_pw_p95": -16.618317943149144
+    "traj_ll_pw_p5": -44.780713688254544,
+    "traj_ll_pw_p50": -27.31174960928074,
+    "traj_ll_pw_p95": -16.618315456531665
+  },
+  "online_ll": {
+    "artifacts": {
+      "T_vs_avg_nll_png": "/home/RUS_CIP/st184634/implementation/hdv/models/5.poe-sticky_cpd-uni_pi-lc_b-bern_off_S2_A4_poe/T_vs_avg_nll.png"
+    },
+    "summary": {
+      "avg_nll_per_timestep_weighted": 30.20168775267567,
+      "n_sequences": 10092,
+      "per_sequence_avg_nll": {
+        "mean": 29.20833458425957,
+        "median": 27.31175480201898,
+        "p10": 18.744281934951026,
+        "p90": 41.029754792465994
+      },
+      "total_T": 343983
+    }
   }
 }
