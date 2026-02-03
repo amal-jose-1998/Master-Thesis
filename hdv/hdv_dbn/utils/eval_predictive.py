@@ -3,6 +3,7 @@ import torch
 
 from .eval_plots import plot_T_vs_avg_nll, plot_ap_nll_vs_horizon
 from .eval_common import scale_obs_masked, seq_key
+from .eval_baselines import evaluate_iid_baseline, evaluate_frozen_belief_online_ll
 from ..trainer import HDVTrainer
 from ..config import CONTINUOUS_FEATURES
 
