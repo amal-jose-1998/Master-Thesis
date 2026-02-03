@@ -7,6 +7,8 @@ from pathlib import Path
 from .datasets import load_highd_folder, load_or_build_windowized
 from .config import TRAINING_CONFIG, WINDOW_FEATURE_COLS, WINDOW_CONFIG, DBN_STATES
 from .utils.eval_core import evaluate_checkpoint, evaluate_online_predictive_ll, evaluate_anticipatory_predictive_ll, seq_key
+
+
 # -----------------------------
 # IO helpers 
 # -----------------------------
@@ -26,15 +28,8 @@ def load_split_json(exp_dir):
     payload = json.loads(p.read_text(encoding="utf-8"))
     if "keys" not in payload or "test" not in payload["keys"]:
         raise ValueError(f"split.json format unexpected: {p}")
-    
-    keys = payload.get("keys", {})
-    test_keys = set(keys["test"])
-
-    print(
-        f"[evaluate_highd_dbn] split.json loaded: "
-        f"W={payload.get('W')}, stride={payload.get('stride')}"
-    )
-    return payload, test_keys
+    print(f"[evaluate_highd_dbn] split.json loaded: test={len(payload['keys']['test'])} vehicles, W={payload.get('W')}, stride={payload.get('stride')}")
+    return payload, set(payload["keys"]["test"])
 
 
 def load_test_sequences_from_experiment_split(exp_dir, data_root):
@@ -70,20 +65,16 @@ def load_test_sequences_from_experiment_split(exp_dir, data_root):
     )
 
     print(f"[evaluate_highd_dbn] Total windowized sequences in cache: {len(all_seqs)}")
-    test_seqs  = [s for s in all_seqs if seq_key(s) in test_keys]
-    print(f"[evaluate_highd_dbn] Matched test  sequences: {len(test_seqs)}/{len(test_keys)}")
+    test_seqs = [s for s in all_seqs if seq_key(s) in test_keys]
+    print(f"[evaluate_highd_dbn] Matched test sequences: {len(test_seqs)}/{len(test_keys)}")
 
-    found_test  = {seq_key(s) for s in test_seqs}
-
-    missing_test  = test_keys - found_test
-
-    if missing_test:
-        msg = []
-        if missing_test:
-            msg.append(f"Missing {len(missing_test)} test vehicles. Example: {list(sorted(missing_test))[:10]}")
+    found = {seq_key(s) for s in test_seqs}
+    missing = test_keys - found
+    if missing:
         raise RuntimeError(
-            "[evaluate_highd_dbn] Split vehicles missing from cache. "
-            "Likely W/stride/max_recordings mismatch.\n" + "\n".join(msg)
+            f"[evaluate_highd_dbn] Missing {len(missing)} test vehicles from cache. "
+            f"Likely W/stride/max_recordings mismatch.\n"
+            f"Example missing keys: {list(sorted(missing))[:10]}"
         )
 
     return test_seqs, list(WINDOW_FEATURE_COLS), split_payload, test_keys
@@ -136,6 +127,7 @@ def evaluate_experiment(exp_dir, checkpoint_name="final.npz", data_root=None):
         save_plot=True,
     )
     print(f"[evaluate_highd_dbn] Finished ANTICIPATORY-LL evaluation.")
+
     print(f"[evaluate_highd_dbn] Finished checkpoint evaluation.")
 
     meta = dict(

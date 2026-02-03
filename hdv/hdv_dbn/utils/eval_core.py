@@ -6,5 +6,5 @@ from .eval_diagnostics import evaluate_checkpoint
 __all__ = [
     "scale_obs_masked", "seq_key",
     "evaluate_online_predictive_ll", "evaluate_anticipatory_predictive_ll",
-    "evaluate_checkpoint"
+    "evaluate_checkpoint",
 ]
