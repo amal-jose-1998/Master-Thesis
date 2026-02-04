@@ -236,7 +236,7 @@ def main():
     )
 
     obs_dim = len(feature_cols)
-    trainer = HDVTrainer(obs_names=feature_cols)
+    trainer = HDVTrainer(obs_names=feature_cols, emission_model=TRAINING_CONFIG.emission_model)
 
     # Set scaler in trainer for saving alongside model. This is used during inference.
     if USE_CLASSWISE_SCALING:
