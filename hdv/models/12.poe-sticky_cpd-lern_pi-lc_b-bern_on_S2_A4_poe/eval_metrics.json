@@ -1,0 +1,90 @@
+{
+  "anticipatory_ll": {
+    "artifacts": {
+      "ap_nll_vs_horizon_png": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe/ap_nll_vs_horizon.png"
+    },
+    "summary": {
+      "H": 10,
+      "ap_nll_by_h": [
+        29.126619660149096,
+        29.564575597565014,
+        29.942222758537063,
+        30.332330747503644,
+        30.74144313694322,
+        31.211899198630512,
+        31.769545304221413,
+        32.44668415784152,
+        33.214584362795584,
+        33.998543009043345
+      ],
+      "ap_nll_mean_over_h": 31.23484479332304,
+      "n_pause_total": 193357,
+      "t_warmup": 5
+    }
+  },
+  "meta": {
+    "A": 4,
+    "S": 2,
+    "W": 50,
+    "bern_weight": 1.0,
+    "bernoulli_ll_enabled": true,
+    "checkpoint_name": "final.npz",
+    "checkpoint_path": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe/final.npz",
+    "cpd_init": "sticky",
+    "emission_model": "poe",
+    "experiment_dir": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe",
+    "lc_weight_mode": "B",
+    "learn_pi0": true,
+    "n_test_vehicles": 10092,
+    "stride": 10
+  },
+  "metrics": {
+    "BIC": 20753581.650885418,
+    "artifacts": {
+      "entropy_action_png": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe/entropy_action.png",
+      "entropy_heatmaps_npz": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe/entropy_heatmaps.npz",
+      "entropy_joint_png": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe/entropy_joint.png",
+      "entropy_style_png": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe/entropy_style.png"
+    },
+    "ent_action_vehicle_median": 8.91588231167246e-09,
+    "ent_action_vehicle_n": 10092,
+    "ent_action_vehicle_p10": 1.701739737220494e-13,
+    "ent_action_vehicle_p90": 7.182446148026878e-07,
+    "ent_joint_vehicle_median": 2.0326207715223284e-08,
+    "ent_joint_vehicle_n": 10092,
+    "ent_joint_vehicle_p10": 1.0634533833077634e-11,
+    "ent_joint_vehicle_p90": 1.0617504162925714e-06,
+    "ent_style_vehicle_median": 2.434615604469873e-08,
+    "ent_style_vehicle_n": 10092,
+    "ent_style_vehicle_p10": 0.0,
+    "ent_style_vehicle_p90": 1.8627624029252562e-06,
+    "k_params": 537,
+    "keff_action": 2.9414000729267764,
+    "keff_joint": 4.878335513538666,
+    "keff_style": 1.980580184566217,
+    "ll_per_timestep": -30.15662952568738,
+    "occ_action_max": 0.4620678722858429,
+    "occ_joint_max": 0.2930983304977417,
+    "occ_style_max": 0.569733738899231,
+    "total_T": 343983,
+    "traj_ll_pw_p5": -45.02047876275104,
+    "traj_ll_pw_p50": -27.2934511801354,
+    "traj_ll_pw_p95": -16.54256906281732
+  },
+  "online_ll": {
+    "artifacts": {
+      "T_vs_avg_nll_png": "/home/RUS_CIP/st184634/implementation/hdv/models/12.poe-sticky_cpd-lern_pi-lc_b-bern_on_S2_A4_poe/T_vs_avg_nll.png"
+    },
+    "summary": {
+      "avg_nll_per_timestep_weighted": 30.15663563150358,
+      "n_sequences": 10092,
+      "per_sequence_avg_nll": {
+        "mean": 29.20325411776225,
+        "median": 27.293457821795815,
+        "p10": 18.69448607177065,
+        "p90": 41.151061758971565
+      },
+      "total_T": 343983
+    }
+  }
+}
