@@ -101,14 +101,14 @@ class TrainingConfig:
     # -------------------------------------------------------------
     # "poe"    : Product-of-Experts emissions (your PoE module)
     # "linear" : additive log-likelihoods (no PoE logZ coupling)
-    emission_model: Literal["poe", "hierarchical"] = "poe"
+    emission_model: Literal["poe", "hierarchical"] = "hierarchical"
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
 
-    learn_pi0: bool = False  
+    learn_pi0: bool = True  
     pi0_alpha: float = 0.0
-    disable_discrete_obs: bool = True 
+    disable_discrete_obs: bool = False
     bern_weight: float = 1     #(dont change)                
     lc_weight: float = 25   
     # Lane-change imbalance handling in EM
@@ -147,7 +147,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "1.poe-sticky_cpd-uni_pi-lc_none-bern_off"
+    wandb_run_name: Optional[str] = "20.hierar-sticky_cpd-learn_pi-lc_none-bern_on"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
