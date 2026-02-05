@@ -101,7 +101,7 @@ class TrainingConfig:
     # -------------------------------------------------------------
     # "poe"    : Product-of-Experts emissions (your PoE module)
     # "linear" : additive log-likelihoods (no PoE logZ coupling)
-    emission_model: Literal["poe", "hierarchical"] = "poe"
+    emission_model: Literal["poe", "hierarchical"] = "hierarchical"
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
@@ -115,7 +115,7 @@ class TrainingConfig:
     #   - 'none': no special weighting
     #   - 'A'   : likelihood tempering (logB[t] *= w_t) before forward-backward. This can distort inference more strongly.
     #   - 'B'   : weighted sufficient statistics (gamma and xi) after forward-backward. This is usually safer and more interpretable. 
-    lc_weight_mode: Literal["none", "A", "B"] = "none"       
+    lc_weight_mode: Literal["none", "A", "B"] = "B"       
     # How to weight xi_t (transition counts) in mode 'B'
     #   - 'next': use w_{t+1}
     #   - 'avg' : use 0.5*(w_t + w_{t+1})
@@ -147,7 +147,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "1.poe-sticky_cpd-uni_pi-lc_none-bern_off"
+    wandb_run_name: Optional[str] = "17.hierar-sticky_cpd-uni_pi-lc_b-bern_off"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
