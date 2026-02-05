@@ -48,9 +48,9 @@ class DiagGaussianExpert:
       var : (S,A,D)  diagonal variances
     """
     def __init__(self, S, A, D):
-        self.S, self.A, self.D = int(S), int(A), int(D)
-        self.mean = np.zeros((self.S, self.A, self.D), dtype=np.float64)
-        self.var  = np.ones((self.S, self.A, self.D), dtype=np.float64)
+        self.num_style, self.num_action, self.D = int(S), int(A), int(D)
+        self.mean = np.zeros((self.num_style, self.num_action, self.D), dtype=np.float64)
+        self.var  = np.ones((self.num_style, self.num_action, self.D), dtype=np.float64)
 
         self._device = torch.device("cpu")
         self._dtype = torch.float32
@@ -97,7 +97,7 @@ class DiagGaussianExpert:
         """
         if self.D == 0:
             T = int(x_cont.shape[0])
-            return torch.zeros((T, self.S, self.A), device=self._device, dtype=self._dtype)
+            return torch.zeros((T, self.num_style, self.num_action), device=self._device, dtype=self._dtype)
 
         if self._mean_t is None or self._inv_var_t is None or self._log_var_t is None:
             raise RuntimeError("DiagGaussian cache not initialized. Call to_device().")
@@ -141,7 +141,7 @@ class DiagGaussianExpert:
         device, dtype = _get_device_dtype()
         self.to_device(device=device, dtype=dtype)
 
-        S, A, D = self.S, self.A, self.D
+        S, A, D = self.num_style, self.num_action, self.D
 
         sum_w = torch.zeros((S, A, D), device=device, dtype=dtype)
         sum_x = torch.zeros((S, A, D), device=device, dtype=dtype)
@@ -224,8 +224,8 @@ class BernoulliExpert:
       p: (S,A,B)
     """
     def __init__(self, S, A, B):
-        self.S, self.A, self.B = int(S), int(A), int(B)
-        self.p = np.full((self.S, self.A, self.B), 0.5, dtype=np.float64) # maximum uncertainty (uninformative prior-ish)
+        self.num_style, self.num_action, self.B = int(S), int(A), int(B)
+        self.p = np.full((self.num_style, self.num_action, self.B), 0.5, dtype=np.float64) # maximum uncertainty (uninformative prior-ish)
 
         self._device = torch.device("cpu")
         self._dtype = torch.float32
@@ -243,14 +243,15 @@ class BernoulliExpert:
         p = torch.as_tensor(self.p, device=self._device, dtype=self._dtype)
         self._p_t = p.clamp(EPSILON, 1.0 - EPSILON)
 
-    def loglikelihood(self, x_bin):
+    def loglikelihood(self, x_bin, mask=None):
         """
-        x_bin: (T,B) float in {0,1}
+        x_bin: (T,B) in {0,1}
+        mask : (T,B) in {0,1} float/bool (optional). If provided, ignores dims where mask=0.
         Returns: (T,S,A)
         """
         if self.B == 0:
             T = int(x_bin.shape[0])
-            return torch.zeros((T, self.S, self.A), device=self._device, dtype=self._dtype)
+            return torch.zeros((T, self.num_style, self.num_action), device=self._device, dtype=self._dtype)
 
         if self._p_t is None:
             raise RuntimeError("BernoulliExpert cache not initialized. Call to_device().")
@@ -260,7 +261,12 @@ class BernoulliExpert:
         p  = self._p_t[None, :, :, :]                                        # (1,S,A,B)
 
         logp = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)           # (T,S,A,B)
-        return logp.sum(dim=3)                                               # (T,S,A)
+        
+        if mask is not None:
+            m = (mask.to(device=self._device, dtype=self._dtype) > 0.5).to(self._dtype)  # (T,B)
+            logp = logp * m[:, None, None, :]
+
+        return logp.sum(dim=3)  # (T,S,A)                                               # (T,S,A)
 
     def m_step(self, xbin_raw_seqs, gamma_seqs, finite_mask_seqs=None, use_progress=True):
         """
@@ -274,7 +280,7 @@ class BernoulliExpert:
         device, dtype = _get_device_dtype()
         self.to_device(device=device, dtype=dtype)
 
-        S, A, B = self.S, self.A, self.B
+        S, A, B = self.num_style, self.num_action, self.B
         sum_x = torch.zeros((S, A, B), device=device, dtype=dtype)
         sum_w = torch.zeros((S, A, B), device=device, dtype=dtype)
 
@@ -334,8 +340,8 @@ class MixedEmissionModel:
 
         self.style_states = DBN_STATES.driving_style
         self.action_states = DBN_STATES.action
-        self.S = len(self.style_states)
-        self.A = len(self.action_states)
+        self.num_style = len(self.style_states)
+        self.num_action = len(self.action_states)
 
         self.disable_discrete_obs = bool(disable_discrete_obs)
 
@@ -352,8 +358,8 @@ class MixedEmissionModel:
         self.cont_dim = len(self.cont_idx)
 
         # Experts
-        self.gauss = DiagGaussianExpert(self.S, self.A, self.cont_dim)
-        self.bern  = BernoulliExpert(self.S, self.A, self.bin_dim)
+        self.gauss = DiagGaussianExpert(self.num_style, self.num_action, self.cont_dim)
+        self.bern  = BernoulliExpert(self.num_style, self.num_action, self.bin_dim)
 
         # runtime cache config
         self._device = torch.device("cpu")
@@ -402,14 +408,18 @@ class MixedEmissionModel:
             x_cont = torch.where(finite, x_cont_raw, torch.zeros_like(x_cont_raw))
             log_gauss = self.gauss.loglikelihood(x_cont, mask=mask_c)      # (T,S,A)
         else:
-            log_gauss = torch.zeros((T, self.S, self.A), device=device, dtype=dtype)
+            log_gauss = torch.zeros((T, self.num_style, self.num_action), device=device, dtype=dtype)
 
         if self.disable_discrete_obs or self.bin_dim == 0:
             return log_gauss
 
-        xb_raw = x[:, self.bin_idx]                                           # (T,B)
-        xb = (xb_raw > 0.5).to(dtype=dtype)
-        log_bern = self.bern.loglikelihood(xb)                             # (T,S,A)
+        xb_raw = x[:, self.bin_idx]                                           # (T,B)                            
+        finite_b = torch.isfinite(xb_raw)
+        m_b = finite_b.to(dtype=dtype)
+        xb_clean = torch.where(finite_b, xb_raw, torch.zeros_like(xb_raw)) # Replace NaNs with a neutral value
+        xb = (xb_clean > 0.5).to(dtype=dtype)
+
+        log_bern = self.bern.loglikelihood(xb, mask=m_b)   # (T,S,A)
 
         w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
         return log_gauss + w_bern * log_bern
@@ -436,8 +446,8 @@ class MixedEmissionModel:
                 raise ValueError(f"Expected obs shape (T,{self.obs_dim}), got {tuple(x.shape)}")
 
             T = int(x.shape[0])
-            if g.ndim != 3 or g.shape != (T, self.S, self.A):
-                raise ValueError(f"Expected gamma_sa (T,S,A)=({T},{self.S},{self.A}), got {tuple(g.shape)}")
+            if g.ndim != 3 or g.shape != (T, self.num_style, self.num_action):
+                raise ValueError(f"Expected gamma_sa (T,S,A)=({T},{self.num_style},{self.num_action}), got {tuple(g.shape)}")
 
             # Continuous: finite mask per entry
             if self.cont_dim > 0:
@@ -467,7 +477,7 @@ class MixedEmissionModel:
         self.invalidate_cache()
 
         # Return masses for debugging/logging
-        mass_joint = torch.zeros((self.S, self.A), device=device, dtype=dtype)
+        mass_joint = torch.zeros((self.num_style, self.num_action), device=device, dtype=dtype)
         for g in gamma_sa_seqs:
             gg = _as_torch(g, device=device, dtype=dtype)
             mass_joint += gg.sum(dim=0)
@@ -518,19 +528,19 @@ class MixedEmissionModel:
         self.bin_dim  = len(self.bin_idx)
 
         # Recreate experts with correct dims
-        self.gauss = DiagGaussianExpert(self.S, self.A, self.cont_dim)
-        self.bern  = BernoulliExpert(self.S, self.A, self.bin_dim)
+        self.gauss = DiagGaussianExpert(self.num_style, self.num_action, self.cont_dim)
+        self.bern  = BernoulliExpert(self.num_style, self.num_action, self.bin_dim)
 
         self.gauss.mean = np.asarray(payload["gauss_mean"], dtype=np.float64)
         self.gauss.var  = np.asarray(payload["gauss_var"],  dtype=np.float64)
-        self.bern.p     = np.asarray(payload.get("bern_p", np.full((self.S, self.A, self.bin_dim), 0.5)), dtype=np.float64)
+        self.bern.p     = np.asarray(payload.get("bern_p", np.full((self.num_style, self.num_action, self.bin_dim), 0.5)), dtype=np.float64)
 
         # Basic sanity checks
-        if self.gauss.mean.shape != (self.S, self.A, self.cont_dim):
+        if self.gauss.mean.shape != (self.num_style, self.num_action, self.cont_dim):
             raise ValueError("gauss_mean shape mismatch")
-        if self.gauss.var.shape != (self.S, self.A, self.cont_dim):
+        if self.gauss.var.shape != (self.num_style, self.num_action, self.cont_dim):
             raise ValueError("gauss_var shape mismatch")
-        if self.bern.p.shape != (self.S, self.A, self.bin_dim):
+        if self.bern.p.shape != (self.num_style, self.num_action, self.bin_dim):
             raise ValueError("bern_p shape mismatch")
 
         self.invalidate_cache()
