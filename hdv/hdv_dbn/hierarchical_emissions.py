@@ -243,9 +243,10 @@ class BernoulliExpert:
         p = torch.as_tensor(self.p, device=self._device, dtype=self._dtype)
         self._p_t = p.clamp(EPSILON, 1.0 - EPSILON)
 
-    def loglikelihood(self, x_bin):
+    def loglikelihood(self, x_bin, mask=None):
         """
-        x_bin: (T,B) float in {0,1}
+        x_bin: (T,B) in {0,1}
+        mask : (T,B) in {0,1} float/bool (optional). If provided, ignores dims where mask=0.
         Returns: (T,S,A)
         """
         if self.B == 0:
@@ -260,7 +261,12 @@ class BernoulliExpert:
         p  = self._p_t[None, :, :, :]                                        # (1,S,A,B)
 
         logp = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)           # (T,S,A,B)
-        return logp.sum(dim=3)                                               # (T,S,A)
+        
+        if mask is not None:
+            m = (mask.to(device=self._device, dtype=self._dtype) > 0.5).to(self._dtype)  # (T,B)
+            logp = logp * m[:, None, None, :]
+
+        return logp.sum(dim=3)  # (T,S,A)                                               # (T,S,A)
 
     def m_step(self, xbin_raw_seqs, gamma_seqs, finite_mask_seqs=None, use_progress=True):
         """
@@ -407,9 +413,13 @@ class MixedEmissionModel:
         if self.disable_discrete_obs or self.bin_dim == 0:
             return log_gauss
 
-        xb_raw = x[:, self.bin_idx]                                           # (T,B)
-        xb = (xb_raw > 0.5).to(dtype=dtype)
-        log_bern = self.bern.loglikelihood(xb)                             # (T,S,A)
+        xb_raw = x[:, self.bin_idx]                                           # (T,B)                            
+        finite_b = torch.isfinite(xb_raw)
+        m_b = finite_b.to(dtype=dtype)
+        xb_clean = torch.where(finite_b, xb_raw, torch.zeros_like(xb_raw)) # Replace NaNs with a neutral value
+        xb = (xb_clean > 0.5).to(dtype=dtype)
+
+        log_bern = self.bern.loglikelihood(xb, mask=m_b)   # (T,S,A)
 
         w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
         return log_gauss + w_bern * log_bern
