@@ -1,0 +1,90 @@
+{
+  "anticipatory_ll": {
+    "artifacts": {
+      "ap_nll_vs_horizon_png": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical/ap_nll_vs_horizon.png"
+    },
+    "summary": {
+      "H": 10,
+      "ap_nll_by_h": [
+        17.780744493153353,
+        18.308282109756522,
+        18.79749452867656,
+        19.305841232575233,
+        19.84828070833922,
+        20.468747882200798,
+        21.19376100140016,
+        22.060540631003395,
+        23.028939124649856,
+        24.0166455479205
+      ],
+      "ap_nll_mean_over_h": 20.48092772596756,
+      "n_pause_total": 193357,
+      "t_warmup": 5
+    }
+  },
+  "meta": {
+    "A": 4,
+    "S": 2,
+    "W": 50,
+    "bern_weight": 1.0,
+    "bernoulli_ll_enabled": false,
+    "checkpoint_name": "final.npz",
+    "checkpoint_path": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical/final.npz",
+    "cpd_init": "sticky",
+    "emission_model": "hierarchical",
+    "experiment_dir": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical",
+    "lc_weight_mode": "A",
+    "learn_pi0": true,
+    "n_test_vehicles": 10092,
+    "stride": 10
+  },
+  "metrics": {
+    "BIC": 14402816.090310235,
+    "artifacts": {
+      "entropy_action_png": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical/entropy_action.png",
+      "entropy_heatmaps_npz": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical/entropy_heatmaps.npz",
+      "entropy_joint_png": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical/entropy_joint.png",
+      "entropy_style_png": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical/entropy_style.png"
+    },
+    "ent_action_vehicle_median": 5.446039061542835e-10,
+    "ent_action_vehicle_n": 10092,
+    "ent_action_vehicle_p10": 9.135489514895704e-15,
+    "ent_action_vehicle_p90": 7.261582609897115e-07,
+    "ent_joint_vehicle_median": 6.18604718807324e-10,
+    "ent_joint_vehicle_n": 10092,
+    "ent_joint_vehicle_p10": 9.415515814987716e-14,
+    "ent_joint_vehicle_p90": 5.370545587022922e-07,
+    "ent_style_vehicle_median": 1.3127841296150016e-10,
+    "ent_style_vehicle_n": 10092,
+    "ent_style_vehicle_p10": 8.6873660834718e-17,
+    "ent_style_vehicle_p90": 1.2204734518037335e-07,
+    "k_params": 689,
+    "keff_action": 3.721679779783839,
+    "keff_joint": 6.829177615082793,
+    "keff_style": 1.999136984849566,
+    "ll_per_timestep": -20.92259280091072,
+    "occ_action_max": 0.37264129519462585,
+    "occ_joint_max": 0.22004832327365875,
+    "occ_style_max": 0.5146890878677368,
+    "total_T": 343983,
+    "traj_ll_pw_p5": -41.1605977479402,
+    "traj_ll_pw_p50": -19.588685931581438,
+    "traj_ll_pw_p95": -6.265447452036071
+  },
+  "online_ll": {
+    "artifacts": {
+      "T_vs_avg_nll_png": "/home/RUS_CIP/st184634/implementation/hdv/models/21.hierar-sticky_cpd-learn_pi-lc_a-bern_off_S2_A4_hierarchical/T_vs_avg_nll.png"
+    },
+    "summary": {
+      "avg_nll_per_timestep_weighted": 20.922598423493813,
+      "n_sequences": 10092,
+      "per_sequence_avg_nll": {
+        "mean": 21.33382368242423,
+        "median": 19.588691891876586,
+        "p10": 9.034505673079265,
+        "p90": 36.4061630087533
+      },
+      "total_T": 343983
+    }
+  }
+}
