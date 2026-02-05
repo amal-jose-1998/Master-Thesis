@@ -160,7 +160,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "12.poe-sticky_cpd-lern_pi-lc_b-bern_on"
+    wandb_run_name: Optional[str] = "12.1.poe-sticky_cpd-lern_pi-lc_b-bern_on"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
