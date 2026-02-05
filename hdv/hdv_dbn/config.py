@@ -305,3 +305,21 @@ CONTINUOUS_FEATURES: List[str] = [
     n for n in WINDOW_FEATURE_COLS
     if n not in set(BERNOULLI_FEATURES)
 ]
+
+
+@dataclass(frozen=True)
+class SemanticAnalysisConfig:
+    # Paths (edit these)
+    model_path: str = r"C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\final.npz"
+    data_root: str = r"C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\data\\highd"
+
+    # Speed/debug controls
+    max_sequences: int | None = None   # e.g. 200 for quick run; None = use all
+    print_joint_table: bool = True     # print (s,a)
+    print_style_table: bool = True     # derived marginal over a
+    print_action_table: bool = True    # derived marginal over s
+
+    
+    semantic_feature_cols: List[str] = list(WINDOW_FEATURE_COLS)
+
+SEMANTIC_CONFIG = SemanticAnalysisConfig()
