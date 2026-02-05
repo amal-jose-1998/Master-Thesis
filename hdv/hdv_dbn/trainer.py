@@ -87,7 +87,7 @@ class HDVTrainer:
             emission parameters updated from gamma (responsibilities)
     """
 
-    def __init__(self, obs_names, emission_model="poe"):
+    def __init__(self, obs_names, emission_model=None):
         """
         Parameters
         obs_names : list[str]
@@ -1012,8 +1012,7 @@ class HDVTrainer:
             masses = self.emissions.update_from_posteriors(
                 obs_seqs=train_obs_seqs,
                 gamma_sa_seqs=gamma_all,
-                use_progress=use_progress,
-                verbose=verbose,
+                use_progress=use_progress
             )
 
         state_weights_sa = np.asarray(masses["mass_joint"], dtype=np.float64)  # (S,A)
