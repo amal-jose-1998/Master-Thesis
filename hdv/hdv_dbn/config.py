@@ -105,6 +105,19 @@ class TrainingConfig:
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
+    # -------------------------------------------------------------
+    # PoE emission M-step stabilization / regularization
+    # -------------------------------------------------------------
+    # Weak MAP-style priors to stabilize gradient-based PoE M-step
+    poe_em_lam_mu: float = 1e-5        # L2 penalty on Gaussian means
+    poe_em_lam_logvar: float = 1e-4    # L2 penalty on log-variances
+    poe_em_lam_logit: float = 1e-5     # L2 penalty on Bernoulli logits
+    # Optional optimizer-level damping (usually keep 0.0 if explicit priors are used)
+    poe_em_weight_decay: float = 0.0
+    # Inner-loop early stopping for PoE M-step
+    poe_em_inner_patience: int = 3
+    # Optional chunking over time steps (0 = disabled)
+    poe_em_chunk_size: int = 0
 
     learn_pi0: bool = True  
     pi0_alpha: float = 0.0
