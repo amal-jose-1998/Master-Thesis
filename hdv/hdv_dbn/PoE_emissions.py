@@ -17,16 +17,33 @@ In log-space:
 """
 
 import math
-from typing import Optional
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch
 from tqdm.auto import tqdm
 
 from .config import DBN_STATES, TRAINING_CONFIG, BERNOULLI_FEATURES
-from.utils.poe_utils import get_device_dtype, as_torch, build_unconstrained_emission_params_and_opt, regularizer, accumulate_Q_and_mass, snapshot_params, restore_params
 
 EPSILON = TRAINING_CONFIG.EPSILON if hasattr(TRAINING_CONFIG, "EPSILON") else 1e-6
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+def _get_device_dtype():
+    dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
+    dtype = torch.float32 if dtype_str == "float32" else torch.float64
+    device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
+    return device, dtype
+
+
+def _as_torch(x, device, dtype):
+    if torch.is_tensor(x):
+        return x.to(device=device, dtype=dtype)
+    return torch.as_tensor(x, device=device, dtype=dtype)
 
 
 # =============================================================================
@@ -135,7 +152,7 @@ class DiagGaussianExpert:
         if self.D == 0:
             return
 
-        device, dtype = get_device_dtype()
+        device, dtype = _get_device_dtype()
         self.to_device(device=device, dtype=dtype)
 
         K, D = self.K, self.D
@@ -155,8 +172,8 @@ class DiagGaussianExpert:
             it = tqdm(it, total=len(cont_seqs), desc="M-step PoE Gaussian", leave=False)
 
         for x, g, m in it: # Loop over sequences
-            x = as_torch(x, device=device, dtype=dtype)
-            g = as_torch(g, device=device, dtype=dtype)
+            x = _as_torch(x, device=device, dtype=dtype)
+            g = _as_torch(g, device=device, dtype=dtype)
 
             if x.ndim != 2 or x.shape[1] != D:
                 raise ValueError(f"Expected cont x (T,{D}), got {tuple(x.shape)}")
@@ -171,7 +188,7 @@ class DiagGaussianExpert:
             if m is None:
                 mm = torch.ones_like(x, device=device, dtype=dtype) # every entry is treated as observed.
             else:
-                mm = as_torch(m, device=device, dtype=dtype)
+                mm = _as_torch(m, device=device, dtype=dtype)
                 if mm.shape != x.shape:
                     raise ValueError("mask shape must match x shape")
                 mm = (mm > 0.5).to(dtype=dtype)
@@ -268,7 +285,7 @@ class BernoulliExpert:
         if self.B == 0:
             return
 
-        device, dtype = get_device_dtype()
+        device, dtype = _get_device_dtype()
         self.to_device(device=device, dtype=dtype)
 
         K, B = self.K, self.B
@@ -285,8 +302,8 @@ class BernoulliExpert:
             it = tqdm(it, total=len(xbin_raw_seqs), desc="M-step PoE Bernoulli", leave=False)
 
         for xb_raw, g, fm in it:
-            xb_raw = as_torch(xb_raw, device=device, dtype=dtype)
-            g = as_torch(g, device=device, dtype=dtype)
+            xb_raw = _as_torch(xb_raw, device=device, dtype=dtype)
+            g = _as_torch(g, device=device, dtype=dtype)
 
             if xb_raw.ndim != 2 or xb_raw.shape[1] != B:
                 raise ValueError(f"Expected xb_raw (T,{B}), got {tuple(xb_raw.shape)}")
@@ -298,7 +315,7 @@ class BernoulliExpert:
             if fm is None:
                 finite = torch.isfinite(xb_raw)
             else:
-                finite = as_torch(fm, device=device, dtype=dtype) > 0.5
+                finite = _as_torch(fm, device=device, dtype=dtype) > 0.5
 
             m = finite.to(dtype=dtype)
             b = (xb_raw > 0.5).to(dtype=dtype) * m
@@ -380,7 +397,7 @@ class MixedEmissionModel:
         self.action_bern.to_device(device, dtype)
 
     def _ensure_device(self):
-        device, dtype = get_device_dtype()
+        device, dtype = _get_device_dtype()
         # If experts weren't materialized on the configured device yet, push them.
         need = (self.cont_dim > 0) and (self.style_gauss._mean_t is None or self.action_gauss._mean_t is None)
         need = need or ((self.bin_dim > 0) and (self.style_bern._p_t is None or self.action_bern._p_t is None))
@@ -401,7 +418,7 @@ class MixedEmissionModel:
         self._ensure_device()
         device, dtype = self._device, self._dtype
 
-        x = as_torch(obs, device=device, dtype=dtype)
+        x = _as_torch(obs, device=device, dtype=dtype)
         if x.ndim != 2 or x.shape[1] != self.obs_dim:
             raise ValueError(f"Expected obs shape (T,{self.obs_dim}), got {tuple(x.shape)}")
 
@@ -444,7 +461,7 @@ class MixedEmissionModel:
         self._ensure_device()
         device, dtype = self._device, self._dtype
 
-        x = as_torch(obs, device=device, dtype=dtype)
+        x = _as_torch(obs, device=device, dtype=dtype)
         T = int(x.shape[0])
         S, A = self.num_style, self.num_action
 
@@ -511,6 +528,7 @@ class MixedEmissionModel:
         Maximizes the exact PoE Q-function:
         sum_{seq} sum_t sum_{s,a} gamma[t,s,a] * (log p_s(x|s) + log p_a(x|a) - log Z_sa(t))
 
+        No separable updates (style/action are coupled via Z_sa).
 
         Parameters
         obs_seqs : list[np.ndarray | torch.Tensor]
@@ -526,124 +544,144 @@ class MixedEmissionModel:
         - mass_joint:  (S,A) total responsibility mass per (style,action)
         """
         self._ensure_device()
-        device, dtype = get_device_dtype()
+        device, dtype = _get_device_dtype()
         S, A = self.num_style, self.num_action
         Dc, B = self.cont_dim, self.bin_dim
 
         # ----------------------------
-        # Stabilization / regularization hyperparams 
-        # ----------------------------
-        lam_mu = float(getattr(TRAINING_CONFIG, "poe_em_lam_mu", 1e-5)) # penalizes large means (prevents drift)
-        lam_logvar = float(getattr(TRAINING_CONFIG, "poe_em_lam_logvar", 1e-4)) # discourages variance collapsing to ~0 or exploding.
-        lam_logit = float(getattr(TRAINING_CONFIG, "poe_em_lam_logit", 1e-5)) # prevents Bernoulli logits saturating (probabilities going to 0/1).
-        weight_decay = float(getattr(TRAINING_CONFIG, "poe_em_weight_decay", 0.0)) # optimizer-level L2 penalty.
-        inner_patience = int(getattr(TRAINING_CONFIG, "poe_em_inner_patience", 3)) # early stopping inside the M-step loop if loss isn’t improving.
-
-        # ----------------------------
         # Unconstrained parameterization
         # ----------------------------
-        bundle = build_unconstrained_emission_params_and_opt(
-            style_gauss_mean=self.style_gauss.mean,
-            action_gauss_mean=self.action_gauss.mean,
-            style_gauss_var=self.style_gauss.var,
-            action_gauss_var=self.action_gauss.var,
-            device=device,
-            dtype=dtype,
-            disable_discrete_obs=self.disable_discrete_obs,
-            bin_dim=B,
-            weight_decay=weight_decay,
-            lr=lr,
-            style_bern_p=None if self.disable_discrete_obs else getattr(self.style_bern, "p", None),
-            action_bern_p=None if self.disable_discrete_obs else getattr(self.action_bern, "p", None),
-        )
+        # Start from current numpy params for continuity
+        mu_s0 = torch.as_tensor(self.style_gauss.mean, device=device, dtype=dtype)      # (S,Dc)
+        mu_a0 = torch.as_tensor(self.action_gauss.mean, device=device, dtype=dtype)    # (A,Dc)
 
-        mu_s = bundle["mu_s"]
-        mu_a = bundle["mu_a"]
-        rho_s = bundle["rho_s"]
-        rho_a = bundle["rho_a"]
-        logit_s = bundle["logit_s"]
-        logit_a = bundle["logit_a"]
-        params = bundle["params"]
-        opt = bundle["opt"] # optimiser
-        vmin = bundle["vmin"]
-        jitter = bundle["jitter"]
+        # Use softplus for variances to keep > 0
+        vmin = float(getattr(TRAINING_CONFIG, "min_cov_diag", 1e-5))
+        jitter = float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6))
 
-        ctx = {
-            "device": device, "dtype": dtype,
-            "S": S, "A": A, "Dc": Dc, "B": B,
-            "cont_idx": self.cont_idx, "bin_idx": self.bin_idx,
-            "vmin": vmin, "jitter": jitter, "EPSILON": EPSILON,
-            "mu_s": mu_s, "mu_a": mu_a,
-            "rho_s": rho_s, "rho_a": rho_a,
-            "logit_s": logit_s, "logit_a": logit_a,
-            "lam_mu": lam_mu, "lam_logvar": lam_logvar, "lam_logit": lam_logit,
-        }
+        var_s0 = torch.as_tensor(self.style_gauss.var, device=device, dtype=dtype).clamp_min(vmin)
+        var_a0 = torch.as_tensor(self.action_gauss.var, device=device, dtype=dtype).clamp_min(vmin)
+
+        # Invert softplus approximately for initialization (safe fallback: log(exp(x)-1) not stable for tiny x)
+        def inv_softplus(y):
+            return torch.log(torch.expm1(torch.clamp(y, min=1e-6)))
+
+        rho_s = torch.nn.Parameter(inv_softplus(var_s0 - vmin))
+        rho_a = torch.nn.Parameter(inv_softplus(var_a0 - vmin))
+        mu_s = torch.nn.Parameter(mu_s0)
+        mu_a = torch.nn.Parameter(mu_a0)
+
+        if (not self.disable_discrete_obs) and (B > 0):
+            p_s0 = torch.as_tensor(self.style_bern.p, device=device, dtype=dtype).clamp(EPSILON, 1.0 - EPSILON)
+            p_a0 = torch.as_tensor(self.action_bern.p, device=device, dtype=dtype).clamp(EPSILON, 1.0 - EPSILON)
+            logit_s = torch.nn.Parameter(torch.log(p_s0) - torch.log1p(-p_s0))  # (S,B)
+            logit_a = torch.nn.Parameter(torch.log(p_a0) - torch.log1p(-p_a0))  # (A,B)
+            params = [mu_s, mu_a, rho_s, rho_a, logit_s, logit_a]
+        else:
+            logit_s = logit_a = None
+            params = [mu_s, mu_a, rho_s, rho_a]
+
+        opt = torch.optim.Adam(params, lr=lr)
 
         # ----------------------------
-        # Optimize Q_emit by gradient ascent (mass-normalized + regularized)
+        # Helper: compute per-seq Q contribution (vectorized)
+        # ----------------------------
+        def seq_objective(x, gamma):
+            # x: (T,D), gamma: (T,S,A)
+            T = int(x.shape[0])
+
+            # Continuous part
+            if Dc > 0:
+                xc_raw = x[:, self.cont_idx]                      # (T,Dc)
+                finite_c = torch.isfinite(xc_raw)
+                m_c = finite_c.to(dtype=dtype)                    # (T,Dc)
+                xc = torch.where(finite_c, xc_raw, torch.zeros_like(xc_raw))
+
+                var_s = torch.nn.functional.softplus(rho_s) + vmin + jitter  # (S,Dc)
+                var_a = torch.nn.functional.softplus(rho_a) + vmin + jitter  # (A,Dc)
+
+                # log p_s(x|s): (T,S)
+                diff_s = xc[:, None, :] - mu_s[None, :, :]
+                logps_dim = -0.5 * (math.log(2.0 * math.pi) + torch.log(var_s)[None, :, :] + (diff_s * diff_s) / var_s[None, :, :])
+                logps = (logps_dim * m_c[:, None, :]).sum(dim=2)
+
+                # log p_a(x|a): (T,A)
+                diff_a = xc[:, None, :] - mu_a[None, :, :]
+                logpa_dim = -0.5 * (math.log(2.0 * math.pi) + torch.log(var_a)[None, :, :] + (diff_a * diff_a) / var_a[None, :, :])
+                logpa = (logpa_dim * m_c[:, None, :]).sum(dim=2)
+
+                # log Z_c(t,s,a): (T,S,A)
+                dmu = mu_s[:, None, :] - mu_a[None, :, :]         # (S,A,Dc)
+                v = var_s[:, None, :] + var_a[None, :, :]         # (S,A,Dc)
+                logZc_dim = -0.5 * (math.log(2.0 * math.pi) + torch.log(v) + (dmu * dmu) / v)  # (S,A,Dc)
+                logZc = torch.einsum("td,sad->tsa", m_c, logZc_dim)
+            else:
+                logps = torch.zeros((T, S), device=device, dtype=dtype)
+                logpa = torch.zeros((T, A), device=device, dtype=dtype)
+                logZc = torch.zeros((T, S, A), device=device, dtype=dtype)
+
+            # Bernoulli part
+            if (logit_s is not None) and (logit_a is not None):
+                xb_raw = x[:, self.bin_idx]                       # (T,B)
+                finite_b = torch.isfinite(xb_raw)
+                m_b = finite_b.to(dtype=dtype)                    # (T,B)
+                xb = (xb_raw > 0.5).to(dtype=dtype)
+
+                ps = torch.sigmoid(logit_s).clamp(EPSILON, 1.0 - EPSILON)  # (S,B)
+                pa = torch.sigmoid(logit_a).clamp(EPSILON, 1.0 - EPSILON)  # (A,B)
+
+                # log p_s(b|s): (T,S)
+                xbS = xb[:, None, :]  # (T,1,B)
+                logpsb_dim = xbS * torch.log(ps)[None, :, :] + (1.0 - xbS) * torch.log(1.0 - ps)[None, :, :]
+                logpsb = (logpsb_dim * m_b[:, None, :]).sum(dim=2)
+
+                # log p_a(b|a): (T,A)
+                logpab_dim = xbS * torch.log(pa)[None, :, :] + (1.0 - xbS) * torch.log(1.0 - pa)[None, :, :]
+                logpab = (logpab_dim * m_b[:, None, :]).sum(dim=2)
+
+                # log Z_b(t,s,a): (T,S,A)
+                Zj = ps[:, None, :] * pa[None, :, :] + (1.0 - ps[:, None, :]) * (1.0 - pa[None, :, :])  # (S,A,B)
+                Zj = Zj.clamp(EPSILON, 1.0)
+                logZj = torch.log(Zj)  # (S,A,B)
+                logZb = torch.einsum("tb,sab->tsa", m_b, logZj)
+
+            else:
+                logpsb = torch.zeros((T, S), device=device, dtype=dtype)
+                logpab = torch.zeros((T, A), device=device, dtype=dtype)
+                logZb = torch.zeros((T, S, A), device=device, dtype=dtype)
+
+            # Combine: (T,S,A)
+            log_joint = (logps + logpsb)[:, :, None] + (logpa + logpab)[:, None, :] - (logZc + logZb)
+
+            # Weighted Q contribution (sum over t,s,a)
+            return (gamma * log_joint).sum()
+
+        # ----------------------------
+        # Optimize Q_emit by gradient ascent
         # ----------------------------
         it = range(steps)
         if use_progress:
-            it = tqdm(it, total=steps, desc="M-step PoE (joint grad, stabilized)", leave=False)
-        
-        best_snap = None # stores a copy of parameters when the loss was best
-        best_loss = float("inf") # starts at infinity so any real loss will be better
-        bad_steps = 0 # counts how many steps in a row the optimiser failed to improve (for early stopping)
+            it = tqdm(it, total=steps, desc="M-step PoE (joint grad)", leave=False)
 
-        # Mass check ONCE (gamma does not change during this M-step)
-        # Q_sum: total expected log emission score (weighted by gamma)
-        # mass: total responsibility mass = sum of all gamma values
-        Q_sum, mass = accumulate_Q_and_mass(obs_seqs, gamma_sa_seqs, ctx, chunk_size=chunk_size)
-        mass_val = float(mass.detach().cpu().item())
-        if mass_val < 1e-6:
-            if verbose >= 0:
-                print("[PoE M-step] mass ~ 0, skipping emission update.")
-        else:
-            # compute initial loss 
-            Q_avg = Q_sum / (mass + EPSILON) # divide by mass to get a mass-normalized objective.
-            reg = regularizer(ctx) # Computes regularization penalty
-            # minimizing -Q_avg is equivalent to maximizing Q_avg
-            loss = -Q_avg + reg # add reg to discourage extreme parameters
-            best_loss = float(loss.detach().cpu().item())
-            best_snap = snapshot_params(ctx)
+        for k in it:
+            opt.zero_grad(set_to_none=True)
+            Q = 0.0
+            for obs, gamma in zip(obs_seqs, gamma_sa_seqs):
+                x = _as_torch(obs, device=device, dtype=dtype)
+                g = _as_torch(gamma, device=device, dtype=dtype)
+                Q = Q + seq_objective(x, g)
+            loss = -Q  # minimize negative
+            loss.backward()
 
-            for k in it:
-                opt.zero_grad(set_to_none=True) # Clears gradients from the previous iteration so they don’t accumulate.
+            # optional gradient clipping for safety (does not change optimum, only stabilizes steps)
+            torch.nn.utils.clip_grad_norm_(params, max_norm=10.0)
 
-                # Recompute objective with current params
-                Q_sum, _ = accumulate_Q_and_mass(obs_seqs, gamma_sa_seqs, ctx, chunk_size=chunk_size)     # mass is constant; ignore returned mass
-                Q_avg = Q_sum / (mass + EPSILON) # recompute the mass normalised objective
-                reg = regularizer(ctx) # Recompute regularization
-                loss = -Q_avg + reg # Build the scalar loss to minimize.
-
-                loss.backward() # Computes gradients of loss w.r.t. all optimizable params (mu_*, rho_*, logits).
-                torch.nn.utils.clip_grad_norm_(params, max_norm=10.0) # Clips gradient norm to avoid exploding gradients
-                opt.step() # Applies one AdamW update step to the parameters.
-
-                # Track best parameters + early stopping
-                loss_val = float(loss.detach().cpu().item())
-                if loss_val < best_loss:
-                    best_loss = loss_val
-                    best_snap = snapshot_params(ctx)
-                    bad_steps = 0
-                else:
-                    bad_steps += 1
-
-                if inner_patience > 0 and bad_steps >= inner_patience:
-                    if verbose >= 2:
-                        print(f"[PoE M-step] early stop at step {k+1}/{steps} (no improvement).")
-                    break
-
-        # Restore best found inner-step parameters 
-        if best_snap is not None:
-            restore_params(ctx, best_snap)
- 
+            opt.step()
 
         # ----------------------------
         # Write back to numpy storage + refresh caches
         # ----------------------------
         with torch.no_grad():
-            # Convert unconstrained rho_* back into valid positive variances.
             var_s = torch.nn.functional.softplus(rho_s) + vmin + jitter
             var_a = torch.nn.functional.softplus(rho_a) + vmin + jitter
 
@@ -653,7 +691,6 @@ class MixedEmissionModel:
             self.action_gauss.var = var_a.detach().cpu().numpy()
 
             if (logit_s is not None) and (logit_a is not None):
-                # logits → probabilities via sigmoid, clamp to avoid exact 0/1
                 ps = torch.sigmoid(logit_s).clamp(EPSILON, 1.0 - EPSILON)
                 pa = torch.sigmoid(logit_a).clamp(EPSILON, 1.0 - EPSILON)
                 self.style_bern.p = ps.detach().cpu().numpy()
@@ -665,7 +702,7 @@ class MixedEmissionModel:
         # Masses for logging (same as your current implementation)
         mass_joint = torch.zeros((S, A), device=device, dtype=dtype)
         for g in gamma_sa_seqs:
-            mass_joint += as_torch(g, device=device, dtype=dtype).sum(dim=0)
+            mass_joint += _as_torch(g, device=device, dtype=dtype).sum(dim=0)
         return {
             "mass_style": mass_joint.sum(dim=1).detach().cpu().numpy(),
             "mass_action": mass_joint.sum(dim=0).detach().cpu().numpy(),
