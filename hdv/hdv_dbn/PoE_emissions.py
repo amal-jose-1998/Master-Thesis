@@ -17,9 +17,6 @@ In log-space:
 """
 
 import math
-from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
-
 import numpy as np
 import torch
 from tqdm.auto import tqdm
@@ -73,10 +70,10 @@ class DiagGaussianExpert:
         self._dtype = torch.float32
 
         # cached tensors
-        self._mean_t: Optional[torch.Tensor] = None   # (K,D)
-        self._var_t: Optional[torch.Tensor] = None    # (K,D)
-        self._inv_var_t: Optional[torch.Tensor] = None
-        self._log_var_t: Optional[torch.Tensor] = None
+        self._mean_t = None   # (K,D)
+        self._var_t = None    # (K,D)
+        self._inv_var_t = None
+        self._log_var_t = None
 
     def invalidate_cache(self):
         self._mean_t = None
@@ -243,7 +240,7 @@ class BernoulliExpert:
 
         self._device = torch.device("cpu")
         self._dtype = torch.float32
-        self._p_t: Optional[torch.Tensor] = None  # (K,B)
+        self._p_t = None  # (K,B)
 
     def invalidate_cache(self):
         self._p_t = None
