@@ -600,7 +600,7 @@ class MixedEmissionModel:
                 print("[PoE M-step] mass ~ 0, skipping emission update.")
         else:
             # compute initial loss 
-            Q_avg = Q_sum / (mass + EPSILON) # divide by mass to get a mass-normalized objective.
+            Q_avg = Q_sum #/ (mass + EPSILON) # divide by mass to get a mass-normalized objective.
             reg = regularizer(ctx) # Computes regularization penalty
             # minimizing -Q_avg is equivalent to maximizing Q_avg
             loss = -Q_avg + reg # add reg to discourage extreme parameters
@@ -612,7 +612,7 @@ class MixedEmissionModel:
 
                 # Recompute objective with current params
                 Q_sum, _ = accumulate_Q_and_mass(obs_seqs, gamma_sa_seqs, ctx, chunk_size=chunk_size)     # mass is constant; ignore returned mass
-                Q_avg = Q_sum / (mass + EPSILON) # recompute the mass normalised objective
+                Q_avg = Q_sum #/ (mass + EPSILON) # recompute the mass normalised objective
                 reg = regularizer(ctx) # Recompute regularization
                 loss = -Q_avg + reg # Build the scalar loss to minimize.
 
