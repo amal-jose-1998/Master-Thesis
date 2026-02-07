@@ -614,6 +614,19 @@ class MixedEmissionModel:
             loss = -Q_sum + reg
             loss.backward()
 
+            # ----------------------------
+            # Debug logging: Q / reg / loss / mass
+            # ----------------------------
+            if verbose >= 0:
+                Qv = float(Q_sum.detach().cpu().item())
+                Rv = float(reg.detach().cpu().item()) if torch.is_tensor(reg) else float(reg)
+                Lv = float(loss.detach().cpu().item())
+                Mv = float(mass.detach().cpu().item())
+                print(
+                    f"[PoE M-step] k={k:03d}  Q_sum={Qv:.6e}  reg={Rv:.6e}  "
+                    f"loss={Lv:.6e}  mass={Mv:.6e}"
+                )
+
             torch.nn.utils.clip_grad_norm_(params, max_norm=10.0)
             opt.step()
 
