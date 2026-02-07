@@ -160,8 +160,6 @@ def posterior_entropy_from_gamma_sa(gamma_sa_seqs, eps=1e-15):
 def posterior_weighted_feature_stats(obs_names, obs_seqs, gamma_sa_seqs, semantic_feature_names=None, include_derived=True, S=None, A=None):
     """
     Posterior-weighted mean ± std per (s,a) state for semantics features.
-
-    - Config-driven (no hard-coded feature lists).
     - Computes posterior-weighted moments:
         mean = Σ_t γ_t(s,a) x_t / Σ_t γ_t(s,a)
         var  = Σ_t γ_t(s,a) x_t^2 / Σ_t γ_t(s,a) - mean^2
@@ -251,7 +249,7 @@ def posterior_weighted_feature_stats(obs_names, obs_seqs, gamma_sa_seqs, semanti
         if g.shape[1] != S or g.shape[2] != A:
             raise ValueError(f"gamma has shape {g.shape}, expected (T,{S},{A})")
 
-        # Normalize per timestep WITHOUT element clipping (avoids artificial mass injection)
+        # Normalize per timestep 
         den = np.maximum(g.sum(axis=(1, 2), keepdims=True), 1e-15)
         g = g / den
 

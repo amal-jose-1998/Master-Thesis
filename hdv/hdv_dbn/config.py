@@ -315,6 +315,7 @@ class SemanticAnalysisConfig:
 
     # Speed/debug controls
     max_sequences: int | None = None   # e.g. 200 for quick run; None = use all
+    split_name : str = "train"
     print_joint_table: bool = True     # print (s,a)
     print_style_table: bool = True     # derived marginal over a
     print_action_table: bool = True    # derived marginal over s
