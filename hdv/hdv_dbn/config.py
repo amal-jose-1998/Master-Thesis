@@ -109,9 +109,9 @@ class TrainingConfig:
     # PoE emission M-step stabilization / regularization
     # -------------------------------------------------------------
     # Weak MAP-style priors to stabilize gradient-based PoE M-step
-    poe_em_lam_mu: float = 1e-5        # L2 penalty on Gaussian means
-    poe_em_lam_logvar: float = 1e-4    # L2 penalty on log-variances
-    poe_em_lam_logit: float = 1e-5     # L2 penalty on Bernoulli logits
+    poe_em_lam_mu: float = 0.0        # L2 penalty on Gaussian means
+    poe_em_lam_logvar: float = 0.0    # L2 penalty on log-variances
+    poe_em_lam_logit: float = 0.0     # L2 penalty on Bernoulli logits
     # Optional optimizer-level damping (usually keep 0.0 if explicit priors are used)
     poe_em_weight_decay: float = 0.0
     # Inner-loop early stopping for PoE M-step

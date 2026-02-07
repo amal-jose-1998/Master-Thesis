@@ -22,6 +22,16 @@ import torch
 from tqdm.auto import tqdm
 
 from .config import DBN_STATES, TRAINING_CONFIG, BERNOULLI_FEATURES
+from .utils.poe_utils import (
+    get_device_dtype,
+    as_torch,
+    build_unconstrained_emission_params_and_opt,
+    accumulate_Q_and_mass,
+    regularizer,
+    snapshot_params,
+    restore_params,
+)
+
 
 EPSILON = TRAINING_CONFIG.EPSILON if hasattr(TRAINING_CONFIG, "EPSILON") else 1e-6
 
@@ -546,112 +556,62 @@ class MixedEmissionModel:
         Dc, B = self.cont_dim, self.bin_dim
 
         # ----------------------------
+        # Stabilization / regularization hyperparams 
+        # ----------------------------
+        lam_mu = float(getattr(TRAINING_CONFIG, "poe_em_lam_mu", 1e-5)) # penalizes large means (prevents drift)
+        lam_logvar = float(getattr(TRAINING_CONFIG, "poe_em_lam_logvar", 1e-4)) # discourages variance collapsing to ~0 or exploding.
+        lam_logit = float(getattr(TRAINING_CONFIG, "poe_em_lam_logit", 1e-5)) # prevents Bernoulli logits saturating (probabilities going to 0/1).
+        weight_decay = float(getattr(TRAINING_CONFIG, "poe_em_weight_decay", 0.0)) # optimizer-level L2 penalty.
+        inner_patience = int(getattr(TRAINING_CONFIG, "poe_em_inner_patience", 3)) # early stopping inside the M-step loop if loss isn’t improving.
+
+        # ----------------------------
         # Unconstrained parameterization
         # ----------------------------
-        # Start from current numpy params for continuity
-        mu_s0 = torch.as_tensor(self.style_gauss.mean, device=device, dtype=dtype)      # (S,Dc)
-        mu_a0 = torch.as_tensor(self.action_gauss.mean, device=device, dtype=dtype)    # (A,Dc)
+        bundle = build_unconstrained_emission_params_and_opt(
+            style_gauss_mean=self.style_gauss.mean,
+            action_gauss_mean=self.action_gauss.mean,
+            style_gauss_var=self.style_gauss.var,
+            action_gauss_var=self.action_gauss.var,
+            device=device,
+            dtype=dtype,
+            disable_discrete_obs=self.disable_discrete_obs,
+            bin_dim=B,
+            weight_decay=weight_decay,
+            lr=lr,
+            style_bern_p=None if self.disable_discrete_obs else getattr(self.style_bern, "p", None),
+            action_bern_p=None if self.disable_discrete_obs else getattr(self.action_bern, "p", None),
+        )
 
-        # Use softplus for variances to keep > 0
-        vmin = float(getattr(TRAINING_CONFIG, "min_cov_diag", 1e-5))
-        jitter = float(getattr(TRAINING_CONFIG, "emission_jitter", 1e-6))
+        mu_s = bundle["mu_s"]
+        mu_a = bundle["mu_a"]
+        rho_s = bundle["rho_s"]
+        rho_a = bundle["rho_a"]
+        logit_s = bundle["logit_s"]
+        logit_a = bundle["logit_a"]
+        params = bundle["params"]
+        opt = bundle["opt"] # optimiser
+        vmin = bundle["vmin"]
+        jitter = bundle["jitter"]
 
-        var_s0 = torch.as_tensor(self.style_gauss.var, device=device, dtype=dtype).clamp_min(vmin)
-        var_a0 = torch.as_tensor(self.action_gauss.var, device=device, dtype=dtype).clamp_min(vmin)
+        ctx = {
+            "device": device, "dtype": dtype,
+            "S": S, "A": A, "Dc": Dc, "B": B,
+            "cont_idx": self.cont_idx, "bin_idx": self.bin_idx,
+            "vmin": vmin, "jitter": jitter, "EPSILON": EPSILON,
+            "mu_s": mu_s, "mu_a": mu_a,
+            "rho_s": rho_s, "rho_a": rho_a,
+            "logit_s": logit_s, "logit_a": logit_a,
+            "lam_mu": lam_mu, "lam_logvar": lam_logvar, "lam_logit": lam_logit,
+        }
 
-        # Invert softplus approximately for initialization (safe fallback: log(exp(x)-1) not stable for tiny x)
-        def inv_softplus(y):
-            return torch.log(torch.expm1(torch.clamp(y, min=1e-6)))
+        if chunk_size is None:
+            cs = int(getattr(TRAINING_CONFIG, "poe_em_chunk_size", 0))
+            chunk_size = None if cs <= 0 else cs
 
-        rho_s = torch.nn.Parameter(inv_softplus(var_s0 - vmin))
-        rho_a = torch.nn.Parameter(inv_softplus(var_a0 - vmin))
-        mu_s = torch.nn.Parameter(mu_s0)
-        mu_a = torch.nn.Parameter(mu_a0)
-
-        if (not self.disable_discrete_obs) and (B > 0):
-            p_s0 = torch.as_tensor(self.style_bern.p, device=device, dtype=dtype).clamp(EPSILON, 1.0 - EPSILON)
-            p_a0 = torch.as_tensor(self.action_bern.p, device=device, dtype=dtype).clamp(EPSILON, 1.0 - EPSILON)
-            logit_s = torch.nn.Parameter(torch.log(p_s0) - torch.log1p(-p_s0))  # (S,B)
-            logit_a = torch.nn.Parameter(torch.log(p_a0) - torch.log1p(-p_a0))  # (A,B)
-            params = [mu_s, mu_a, rho_s, rho_a, logit_s, logit_a]
-        else:
-            logit_s = logit_a = None
-            params = [mu_s, mu_a, rho_s, rho_a]
-
-        opt = torch.optim.Adam(params, lr=lr)
-
-        # ----------------------------
-        # Helper: compute per-seq Q contribution (vectorized)
-        # ----------------------------
-        def seq_objective(x, gamma):
-            # x: (T,D), gamma: (T,S,A)
-            T = int(x.shape[0])
-
-            # Continuous part
-            if Dc > 0:
-                xc_raw = x[:, self.cont_idx]                      # (T,Dc)
-                finite_c = torch.isfinite(xc_raw)
-                m_c = finite_c.to(dtype=dtype)                    # (T,Dc)
-                xc = torch.where(finite_c, xc_raw, torch.zeros_like(xc_raw))
-
-                var_s = torch.nn.functional.softplus(rho_s) + vmin + jitter  # (S,Dc)
-                var_a = torch.nn.functional.softplus(rho_a) + vmin + jitter  # (A,Dc)
-
-                # log p_s(x|s): (T,S)
-                diff_s = xc[:, None, :] - mu_s[None, :, :]
-                logps_dim = -0.5 * (math.log(2.0 * math.pi) + torch.log(var_s)[None, :, :] + (diff_s * diff_s) / var_s[None, :, :])
-                logps = (logps_dim * m_c[:, None, :]).sum(dim=2)
-
-                # log p_a(x|a): (T,A)
-                diff_a = xc[:, None, :] - mu_a[None, :, :]
-                logpa_dim = -0.5 * (math.log(2.0 * math.pi) + torch.log(var_a)[None, :, :] + (diff_a * diff_a) / var_a[None, :, :])
-                logpa = (logpa_dim * m_c[:, None, :]).sum(dim=2)
-
-                # log Z_c(t,s,a): (T,S,A)
-                dmu = mu_s[:, None, :] - mu_a[None, :, :]         # (S,A,Dc)
-                v = var_s[:, None, :] + var_a[None, :, :]         # (S,A,Dc)
-                logZc_dim = -0.5 * (math.log(2.0 * math.pi) + torch.log(v) + (dmu * dmu) / v)  # (S,A,Dc)
-                logZc = torch.einsum("td,sad->tsa", m_c, logZc_dim)
-            else:
-                logps = torch.zeros((T, S), device=device, dtype=dtype)
-                logpa = torch.zeros((T, A), device=device, dtype=dtype)
-                logZc = torch.zeros((T, S, A), device=device, dtype=dtype)
-
-            # Bernoulli part
-            if (logit_s is not None) and (logit_a is not None):
-                xb_raw = x[:, self.bin_idx]                       # (T,B)
-                finite_b = torch.isfinite(xb_raw)
-                m_b = finite_b.to(dtype=dtype)                    # (T,B)
-                xb = (xb_raw > 0.5).to(dtype=dtype)
-
-                ps = torch.sigmoid(logit_s).clamp(EPSILON, 1.0 - EPSILON)  # (S,B)
-                pa = torch.sigmoid(logit_a).clamp(EPSILON, 1.0 - EPSILON)  # (A,B)
-
-                # log p_s(b|s): (T,S)
-                xbS = xb[:, None, :]  # (T,1,B)
-                logpsb_dim = xbS * torch.log(ps)[None, :, :] + (1.0 - xbS) * torch.log(1.0 - ps)[None, :, :]
-                logpsb = (logpsb_dim * m_b[:, None, :]).sum(dim=2)
-
-                # log p_a(b|a): (T,A)
-                logpab_dim = xbS * torch.log(pa)[None, :, :] + (1.0 - xbS) * torch.log(1.0 - pa)[None, :, :]
-                logpab = (logpab_dim * m_b[:, None, :]).sum(dim=2)
-
-                # log Z_b(t,s,a): (T,S,A)
-                Zj = ps[:, None, :] * pa[None, :, :] + (1.0 - ps[:, None, :]) * (1.0 - pa[None, :, :])  # (S,A,B)
-                Zj = Zj.clamp(EPSILON, 1.0)
-                logZj = torch.log(Zj)  # (S,A,B)
-                logZb = torch.einsum("tb,sab->tsa", m_b, logZj)
-
-            else:
-                logpsb = torch.zeros((T, S), device=device, dtype=dtype)
-                logpab = torch.zeros((T, A), device=device, dtype=dtype)
-                logZb = torch.zeros((T, S, A), device=device, dtype=dtype)
-
-            # Combine: (T,S,A)
-            log_joint = (logps + logpsb)[:, :, None] + (logpa + logpab)[:, None, :] - (logZc + logZb)
-
-            # Weighted Q contribution (sum over t,s,a)
-            return (gamma * log_joint).sum()
+        best_snap = None
+        best_loss = None
+        bad_steps = 0
+        patience = int(getattr(TRAINING_CONFIG, "poe_em_inner_patience", 0))
 
         # ----------------------------
         # Optimize Q_emit by gradient ascent
@@ -662,34 +622,47 @@ class MixedEmissionModel:
 
         for k in it:
             opt.zero_grad(set_to_none=True)
-            Q = 0.0
-            for obs, gamma in zip(obs_seqs, gamma_sa_seqs):
-                x = _as_torch(obs, device=device, dtype=dtype)
-                g = _as_torch(gamma, device=device, dtype=dtype)
-                Q = Q + seq_objective(x, g)
-            loss = -Q  # minimize negative
+            Q_sum, mass = accumulate_Q_and_mass(obs_seqs, gamma_sa_seqs, ctx, chunk_size=chunk_size)
+            if float(mass.detach().cpu().item()) < 1e-6:
+                if verbose >= 0:
+                    print("[PoE M-step] mass ~ 0, skipping emission update.")
+                break
+
+            reg = regularizer(ctx)
+            loss = -Q_sum + reg
             loss.backward()
 
-            # optional gradient clipping for safety (does not change optimum, only stabilizes steps)
             torch.nn.utils.clip_grad_norm_(params, max_norm=10.0)
-
             opt.step()
+
+            # best-snapshot + optional inner early-stop
+            loss_val = float(loss.detach().cpu().item())
+            if best_loss is None or loss_val < best_loss:
+                best_loss = loss_val
+                best_snap = snapshot_params(ctx)
+                bad_steps = 0
+            else:
+                bad_steps += 1
+                if patience > 0 and bad_steps >= patience:
+                    break
+
+        if best_snap is not None:
+            restore_params(ctx, best_snap)
 
         # ----------------------------
         # Write back to numpy storage + refresh caches
         # ----------------------------
         with torch.no_grad():
-            var_s = torch.nn.functional.softplus(rho_s) + vmin + jitter
-            var_a = torch.nn.functional.softplus(rho_a) + vmin + jitter
-
-            self.style_gauss.mean = mu_s.detach().cpu().numpy()
-            self.action_gauss.mean = mu_a.detach().cpu().numpy()
+            var_s = torch.nn.functional.softplus(ctx["rho_s"]) + ctx["vmin"] + ctx["jitter"]
+            var_a = torch.nn.functional.softplus(ctx["rho_a"]) + ctx["vmin"] + ctx["jitter"]
+            self.style_gauss.mean = ctx["mu_s"].detach().cpu().numpy()
+            self.action_gauss.mean = ctx["mu_a"].detach().cpu().numpy()
             self.style_gauss.var = var_s.detach().cpu().numpy()
             self.action_gauss.var = var_a.detach().cpu().numpy()
 
-            if (logit_s is not None) and (logit_a is not None):
-                ps = torch.sigmoid(logit_s).clamp(EPSILON, 1.0 - EPSILON)
-                pa = torch.sigmoid(logit_a).clamp(EPSILON, 1.0 - EPSILON)
+            if (ctx["logit_s"] is not None) and (ctx["logit_a"] is not None):
+                ps = torch.sigmoid(ctx["logit_s"]).clamp(EPSILON, 1.0 - EPSILON)
+                pa = torch.sigmoid(ctx["logit_a"]).clamp(EPSILON, 1.0 - EPSILON)
                 self.style_bern.p = ps.detach().cpu().numpy()
                 self.action_bern.p = pa.detach().cpu().numpy()
 
