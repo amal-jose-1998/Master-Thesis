@@ -35,24 +35,6 @@ from .utils.poe_utils import (
 
 EPSILON = TRAINING_CONFIG.EPSILON if hasattr(TRAINING_CONFIG, "EPSILON") else 1e-6
 
-
-# =============================================================================
-# Helpers
-# =============================================================================
-
-def _get_device_dtype():
-    dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
-    dtype = torch.float32 if dtype_str == "float32" else torch.float64
-    device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
-    return device, dtype
-
-
-def _as_torch(x, device, dtype):
-    if torch.is_tensor(x):
-        return x.to(device=device, dtype=dtype)
-    return torch.as_tensor(x, device=device, dtype=dtype)
-
-
 # =============================================================================
 # Diagonal Gaussian expert (masked)
 # =============================================================================
@@ -159,7 +141,7 @@ class DiagGaussianExpert:
         if self.D == 0:
             return
 
-        device, dtype = _get_device_dtype()
+        device, dtype = get_device_dtype()
         self.to_device(device=device, dtype=dtype)
 
         K, D = self.K, self.D
@@ -179,8 +161,8 @@ class DiagGaussianExpert:
             it = tqdm(it, total=len(cont_seqs), desc="M-step PoE Gaussian", leave=False)
 
         for x, g, m in it: # Loop over sequences
-            x = _as_torch(x, device=device, dtype=dtype)
-            g = _as_torch(g, device=device, dtype=dtype)
+            x = as_torch(x, device=device, dtype=dtype)
+            g = as_torch(g, device=device, dtype=dtype)
 
             if x.ndim != 2 or x.shape[1] != D:
                 raise ValueError(f"Expected cont x (T,{D}), got {tuple(x.shape)}")
@@ -195,7 +177,7 @@ class DiagGaussianExpert:
             if m is None:
                 mm = torch.ones_like(x, device=device, dtype=dtype) # every entry is treated as observed.
             else:
-                mm = _as_torch(m, device=device, dtype=dtype)
+                mm = as_torch(m, device=device, dtype=dtype)
                 if mm.shape != x.shape:
                     raise ValueError("mask shape must match x shape")
                 mm = (mm > 0.5).to(dtype=dtype)
@@ -292,7 +274,7 @@ class BernoulliExpert:
         if self.B == 0:
             return
 
-        device, dtype = _get_device_dtype()
+        device, dtype = get_device_dtype()
         self.to_device(device=device, dtype=dtype)
 
         K, B = self.K, self.B
@@ -309,8 +291,8 @@ class BernoulliExpert:
             it = tqdm(it, total=len(xbin_raw_seqs), desc="M-step PoE Bernoulli", leave=False)
 
         for xb_raw, g, fm in it:
-            xb_raw = _as_torch(xb_raw, device=device, dtype=dtype)
-            g = _as_torch(g, device=device, dtype=dtype)
+            xb_raw = as_torch(xb_raw, device=device, dtype=dtype)
+            g = as_torch(g, device=device, dtype=dtype)
 
             if xb_raw.ndim != 2 or xb_raw.shape[1] != B:
                 raise ValueError(f"Expected xb_raw (T,{B}), got {tuple(xb_raw.shape)}")
@@ -322,7 +304,7 @@ class BernoulliExpert:
             if fm is None:
                 finite = torch.isfinite(xb_raw)
             else:
-                finite = _as_torch(fm, device=device, dtype=dtype) > 0.5
+                finite = as_torch(fm, device=device, dtype=dtype) > 0.5
 
             m = finite.to(dtype=dtype)
             b = (xb_raw > 0.5).to(dtype=dtype) * m
@@ -404,7 +386,7 @@ class MixedEmissionModel:
         self.action_bern.to_device(device, dtype)
 
     def _ensure_device(self):
-        device, dtype = _get_device_dtype()
+        device, dtype = get_device_dtype()
         # If experts weren't materialized on the configured device yet, push them.
         need = (self.cont_dim > 0) and (self.style_gauss._mean_t is None or self.action_gauss._mean_t is None)
         need = need or ((self.bin_dim > 0) and (self.style_bern._p_t is None or self.action_bern._p_t is None))
@@ -425,7 +407,7 @@ class MixedEmissionModel:
         self._ensure_device()
         device, dtype = self._device, self._dtype
 
-        x = _as_torch(obs, device=device, dtype=dtype)
+        x = as_torch(obs, device=device, dtype=dtype)
         if x.ndim != 2 or x.shape[1] != self.obs_dim:
             raise ValueError(f"Expected obs shape (T,{self.obs_dim}), got {tuple(x.shape)}")
 
@@ -468,7 +450,7 @@ class MixedEmissionModel:
         self._ensure_device()
         device, dtype = self._device, self._dtype
 
-        x = _as_torch(obs, device=device, dtype=dtype)
+        x = as_torch(obs, device=device, dtype=dtype)
         T = int(x.shape[0])
         S, A = self.num_style, self.num_action
 
@@ -551,7 +533,7 @@ class MixedEmissionModel:
         - mass_joint:  (S,A) total responsibility mass per (style,action)
         """
         self._ensure_device()
-        device, dtype = _get_device_dtype()
+        device, dtype = get_device_dtype()
         S, A = self.num_style, self.num_action
         Dc, B = self.cont_dim, self.bin_dim
 
@@ -672,7 +654,7 @@ class MixedEmissionModel:
         # Masses for logging (same as your current implementation)
         mass_joint = torch.zeros((S, A), device=device, dtype=dtype)
         for g in gamma_sa_seqs:
-            mass_joint += _as_torch(g, device=device, dtype=dtype).sum(dim=0)
+            mass_joint += as_torch(g, device=device, dtype=dtype).sum(dim=0)
         return {
             "mass_style": mass_joint.sum(dim=1).detach().cpu().numpy(),
             "mass_action": mass_joint.sum(dim=0).detach().cpu().numpy(),
