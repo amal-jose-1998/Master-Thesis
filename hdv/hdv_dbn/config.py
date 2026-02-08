@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple, Optional, Literal, List
 
 # =============================================================================
@@ -321,6 +321,8 @@ class SemanticAnalysisConfig:
     print_action_table: bool = True    # derived marginal over s
 
     
-    semantic_feature_cols: List[str] = list(WINDOW_FEATURE_COLS)
+    semantic_feature_cols: List[str] = field(
+        default_factory=lambda: list(WINDOW_FEATURE_COLS)
+    )
 
 SEMANTIC_CONFIG = SemanticAnalysisConfig()
