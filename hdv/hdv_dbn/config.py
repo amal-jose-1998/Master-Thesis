@@ -141,9 +141,9 @@ class TrainingConfig:
 
     # Transition MAP priors (Dirichlet + stickiness)
     alpha_A_s: float = 0.01   # smoothing for style rows
-    kappa_A_s: float = 5.0    # extra self-transition mass for style (stickier)
+    kappa_A_s: float = 0.0    # extra self-transition mass for style (stickier)
     alpha_A_a: float = 0.01   # smoothing for action rows
-    kappa_A_a: float = 1.0     # extra self-transition mass for action (less sticky than style)
+    kappa_A_a: float = 0.0     # extra self-transition mass for action (less sticky than style)
 
     verbose: int = 1
     use_progress: bool = True
@@ -160,13 +160,13 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "12.1.poe-sticky_cpd-lern_pi-lc_b-bern_on"
+    wandb_run_name: Optional[str] = "28.poe-uni_cpd-learn_pi-lc_b-bern_on"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
     dtype: Literal["float32", "float64"] = "float32"
 
-    cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
+    cpd_init: Literal["uniform", "random", "sticky"] = "uniform"
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123
