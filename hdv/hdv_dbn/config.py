@@ -109,9 +109,9 @@ class TrainingConfig:
     # PoE emission M-step stabilization / regularization
     # -------------------------------------------------------------
     # Weak MAP-style priors to stabilize gradient-based PoE M-step
-    poe_em_lam_mu: float = 1e-5        # L2 penalty on Gaussian means
-    poe_em_lam_logvar: float = 1e-4    # L2 penalty on log-variances
-    poe_em_lam_logit: float = 1e-5     # L2 penalty on Bernoulli logits
+    poe_em_lam_mu: float = 0.0        # L2 penalty on Gaussian means
+    poe_em_lam_logvar: float = 0.0    # L2 penalty on log-variances
+    poe_em_lam_logit: float = 0.0     # L2 penalty on Bernoulli logits
     # Optional optimizer-level damping (usually keep 0.0 if explicit priors are used)
     poe_em_weight_decay: float = 0.0
     # Inner-loop early stopping for PoE M-step
@@ -305,3 +305,22 @@ CONTINUOUS_FEATURES: List[str] = [
     n for n in WINDOW_FEATURE_COLS
     if n not in set(BERNOULLI_FEATURES)
 ]
+
+
+@dataclass(frozen=True)
+class SemanticAnalysisConfig:
+    # Paths (edit these)
+    model_path: str = r"C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\models\\final.npz"
+    data_root: str = r"C:\\Users\\amalj\\OneDrive\\Desktop\\Master's Thesis\\Implementation\\hdv\\data\\highd"
+
+    # Speed/debug controls
+    max_sequences: int | None = None   # e.g. 200 for quick run; None = use all
+    split_name : str = "train"
+    print_joint_table: bool = True     # print (s,a)
+    print_style_table: bool = True     # derived marginal over a
+    print_action_table: bool = True    # derived marginal over s
+
+    
+    semantic_feature_cols: List[str] = list(WINDOW_FEATURE_COLS)
+
+SEMANTIC_CONFIG = SemanticAnalysisConfig()

@@ -17,17 +17,23 @@ In log-space:
 """
 
 import math
-from typing import Optional
-
 import numpy as np
 import torch
 from tqdm.auto import tqdm
 
 from .config import DBN_STATES, TRAINING_CONFIG, BERNOULLI_FEATURES
-from.utils.poe_utils import get_device_dtype, as_torch, build_unconstrained_emission_params_and_opt, regularizer, accumulate_Q_and_mass, snapshot_params, restore_params
+from .utils.poe_utils import (
+    get_device_dtype,
+    as_torch,
+    build_unconstrained_emission_params_and_opt,
+    accumulate_Q_and_mass,
+    regularizer,
+    snapshot_params,
+    restore_params,
+)
+
 
 EPSILON = TRAINING_CONFIG.EPSILON if hasattr(TRAINING_CONFIG, "EPSILON") else 1e-6
-
 
 # =============================================================================
 # Diagonal Gaussian expert (masked)
@@ -56,10 +62,10 @@ class DiagGaussianExpert:
         self._dtype = torch.float32
 
         # cached tensors
-        self._mean_t: Optional[torch.Tensor] = None   # (K,D)
-        self._var_t: Optional[torch.Tensor] = None    # (K,D)
-        self._inv_var_t: Optional[torch.Tensor] = None
-        self._log_var_t: Optional[torch.Tensor] = None
+        self._mean_t = None   # (K,D)
+        self._var_t = None    # (K,D)
+        self._inv_var_t = None
+        self._log_var_t = None
 
     def invalidate_cache(self):
         self._mean_t = None
@@ -226,7 +232,7 @@ class BernoulliExpert:
 
         self._device = torch.device("cpu")
         self._dtype = torch.float32
-        self._p_t: Optional[torch.Tensor] = None  # (K,B)
+        self._p_t = None  # (K,B)
 
     def invalidate_cache(self):
         self._p_t = None
@@ -511,6 +517,7 @@ class MixedEmissionModel:
         Maximizes the exact PoE Q-function:
         sum_{seq} sum_t sum_{s,a} gamma[t,s,a] * (log p_s(x|s) + log p_a(x|a) - log Z_sa(t))
 
+        No separable updates (style/action are coupled via Z_sa).
 
         Parameters
         obs_seqs : list[np.ndarray | torch.Tensor]
@@ -579,83 +586,78 @@ class MixedEmissionModel:
             "lam_mu": lam_mu, "lam_logvar": lam_logvar, "lam_logit": lam_logit,
         }
 
+        if chunk_size is None:
+            cs = int(getattr(TRAINING_CONFIG, "poe_em_chunk_size", 0))
+            chunk_size = None if cs <= 0 else cs
+
+        best_snap = None
+        best_loss = None
+        bad_steps = 0
+        patience = int(getattr(TRAINING_CONFIG, "poe_em_inner_patience", 0))
+
         # ----------------------------
-        # Optimize Q_emit by gradient ascent (mass-normalized + regularized)
+        # Optimize Q_emit by gradient ascent
         # ----------------------------
         it = range(steps)
         if use_progress:
-            it = tqdm(it, total=steps, desc="M-step PoE (joint grad, stabilized)", leave=False)
-        
-        best_snap = None # stores a copy of parameters when the loss was best
-        best_loss = float("inf") # starts at infinity so any real loss will be better
-        bad_steps = 0 # counts how many steps in a row the optimiser failed to improve (for early stopping)
+            it = tqdm(it, total=steps, desc="M-step PoE (joint grad)", leave=False)
 
-        # Mass check ONCE (gamma does not change during this M-step)
-        # Q_sum: total expected log emission score (weighted by gamma)
-        # mass: total responsibility mass = sum of all gamma values
-        Q_sum, mass = accumulate_Q_and_mass(obs_seqs, gamma_sa_seqs, ctx, chunk_size=chunk_size)
-        mass_val = float(mass.detach().cpu().item())
-        if mass_val < 1e-6:
+        for k in it:
+            opt.zero_grad(set_to_none=True)
+            Q_sum, mass = accumulate_Q_and_mass(obs_seqs, gamma_sa_seqs, ctx, chunk_size=chunk_size)
+            if float(mass.detach().cpu().item()) < 1e-6:
+                if verbose >= 0:
+                    print("[PoE M-step] mass ~ 0, skipping emission update.")
+                break
+
+            reg = regularizer(ctx)
+            loss = -Q_sum + reg
+            loss.backward()
+
+            # ----------------------------
+            # Debug logging: Q / reg / loss / mass
+            # ----------------------------
             if verbose >= 0:
-                print("[PoE M-step] mass ~ 0, skipping emission update.")
-        else:
-            # compute initial loss 
-            Q_avg = Q_sum / (mass + EPSILON) # divide by mass to get a mass-normalized objective.
-            reg = regularizer(ctx) # Computes regularization penalty
-            # minimizing -Q_avg is equivalent to maximizing Q_avg
-            loss = -Q_avg + reg # add reg to discourage extreme parameters
-            best_loss = float(loss.detach().cpu().item())
-            best_snap = snapshot_params(ctx)
+                Qv = float(Q_sum.detach().cpu().item())
+                Rv = float(reg.detach().cpu().item()) if torch.is_tensor(reg) else float(reg)
+                Lv = float(loss.detach().cpu().item())
+                Mv = float(mass.detach().cpu().item())
+                print(
+                    f"[PoE M-step] k={k:03d}  Q_sum={Qv:.6e}  reg={Rv:.6e}  "
+                    f"loss={Lv:.6e}  mass={Mv:.6e}"
+                )
 
-            for k in it:
-                opt.zero_grad(set_to_none=True) # Clears gradients from the previous iteration so they don’t accumulate.
+            torch.nn.utils.clip_grad_norm_(params, max_norm=10.0)
+            opt.step()
 
-                # Recompute objective with current params
-                Q_sum, _ = accumulate_Q_and_mass(obs_seqs, gamma_sa_seqs, ctx, chunk_size=chunk_size)     # mass is constant; ignore returned mass
-                Q_avg = Q_sum / (mass + EPSILON) # recompute the mass normalised objective
-                reg = regularizer(ctx) # Recompute regularization
-                loss = -Q_avg + reg # Build the scalar loss to minimize.
-
-                loss.backward() # Computes gradients of loss w.r.t. all optimizable params (mu_*, rho_*, logits).
-                torch.nn.utils.clip_grad_norm_(params, max_norm=10.0) # Clips gradient norm to avoid exploding gradients
-                opt.step() # Applies one AdamW update step to the parameters.
-
-                # Track best parameters + early stopping
-                loss_val = float(loss.detach().cpu().item())
-                if loss_val < best_loss:
-                    best_loss = loss_val
-                    best_snap = snapshot_params(ctx)
-                    bad_steps = 0
-                else:
-                    bad_steps += 1
-
-                if inner_patience > 0 and bad_steps >= inner_patience:
-                    if verbose >= 2:
-                        print(f"[PoE M-step] early stop at step {k+1}/{steps} (no improvement).")
+            # best-snapshot + optional inner early-stop
+            loss_val = float(loss.detach().cpu().item())
+            if best_loss is None or loss_val < best_loss:
+                best_loss = loss_val
+                best_snap = snapshot_params(ctx)
+                bad_steps = 0
+            else:
+                bad_steps += 1
+                if patience > 0 and bad_steps >= patience:
                     break
 
-        # Restore best found inner-step parameters 
         if best_snap is not None:
             restore_params(ctx, best_snap)
- 
 
         # ----------------------------
         # Write back to numpy storage + refresh caches
         # ----------------------------
         with torch.no_grad():
-            # Convert unconstrained rho_* back into valid positive variances.
-            var_s = torch.nn.functional.softplus(rho_s) + vmin + jitter
-            var_a = torch.nn.functional.softplus(rho_a) + vmin + jitter
-
-            self.style_gauss.mean = mu_s.detach().cpu().numpy()
-            self.action_gauss.mean = mu_a.detach().cpu().numpy()
+            var_s = torch.nn.functional.softplus(ctx["rho_s"]) + ctx["vmin"] + ctx["jitter"]
+            var_a = torch.nn.functional.softplus(ctx["rho_a"]) + ctx["vmin"] + ctx["jitter"]
+            self.style_gauss.mean = ctx["mu_s"].detach().cpu().numpy()
+            self.action_gauss.mean = ctx["mu_a"].detach().cpu().numpy()
             self.style_gauss.var = var_s.detach().cpu().numpy()
             self.action_gauss.var = var_a.detach().cpu().numpy()
 
-            if (logit_s is not None) and (logit_a is not None):
-                # logits → probabilities via sigmoid, clamp to avoid exact 0/1
-                ps = torch.sigmoid(logit_s).clamp(EPSILON, 1.0 - EPSILON)
-                pa = torch.sigmoid(logit_a).clamp(EPSILON, 1.0 - EPSILON)
+            if (ctx["logit_s"] is not None) and (ctx["logit_a"] is not None):
+                ps = torch.sigmoid(ctx["logit_s"]).clamp(EPSILON, 1.0 - EPSILON)
+                pa = torch.sigmoid(ctx["logit_a"]).clamp(EPSILON, 1.0 - EPSILON)
                 self.style_bern.p = ps.detach().cpu().numpy()
                 self.action_bern.p = pa.detach().cpu().numpy()
 
