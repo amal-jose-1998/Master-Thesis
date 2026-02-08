@@ -612,6 +612,8 @@ class MixedEmissionModel:
 
             reg = regularizer(ctx)
             loss = -Q_sum + reg
+            loss.backward()
+
             # ----------------------------
             # Debug logging: Q / reg / loss / mass
             # ----------------------------
@@ -624,8 +626,6 @@ class MixedEmissionModel:
                     f"[PoE M-step] k={k:03d}  Q_sum={Qv:.6e}  reg={Rv:.6e}  "
                     f"loss={Lv:.6e}  mass={Mv:.6e}"
                 )
-
-            loss.backward()
 
             torch.nn.utils.clip_grad_norm_(params, max_norm=10.0)
             opt.step()
