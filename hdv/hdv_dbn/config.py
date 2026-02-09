@@ -310,7 +310,7 @@ CONTINUOUS_FEATURES: List[str] = [
 @dataclass(frozen=True)
 class SemanticAnalysisConfig:
     # Paths (edit these)
-    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/1.poe-sticky_cpd-uni_pi-lc_none-bern_off_S2_A4_poe/final.npz"
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/14.hierar-sticky_cpd-uni_pi-lc_none-bern_on_S2_A4_hierarchical/final.npz"
     data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 
     # Speed/debug controls
