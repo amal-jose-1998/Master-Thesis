@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple, Optional, Literal, List
 
 # =============================================================================
@@ -94,7 +94,7 @@ class TrainingConfig:
         Seed used for random CPD initialization (kept separate for clarity).
     """
     seed: int = 123
-    em_num_iters: int = 100
+    em_num_iters: int = 200
 
     # -------------------------------------------------------------
     # Emission model selection
@@ -105,6 +105,19 @@ class TrainingConfig:
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
+    # -------------------------------------------------------------
+    # PoE emission M-step stabilization / regularization
+    # -------------------------------------------------------------
+    # Weak MAP-style priors to stabilize gradient-based PoE M-step
+    poe_em_lam_mu: float = 0.0        # L2 penalty on Gaussian means
+    poe_em_lam_logvar: float = 0.0    # L2 penalty on log-variances
+    poe_em_lam_logit: float = 0.0     # L2 penalty on Bernoulli logits
+    # Optional optimizer-level damping (usually keep 0.0 if explicit priors are used)
+    poe_em_weight_decay: float = 0.0
+    # Inner-loop early stopping for PoE M-step
+    poe_em_inner_patience: int = 3
+    # Optional chunking over time steps (0 = disabled)
+    poe_em_chunk_size: int = 0
 
     learn_pi0: bool = False  
     pi0_alpha: float = 0.0
@@ -292,3 +305,24 @@ CONTINUOUS_FEATURES: List[str] = [
     n for n in WINDOW_FEATURE_COLS
     if n not in set(BERNOULLI_FEATURES)
 ]
+
+
+@dataclass(frozen=True)
+class SemanticAnalysisConfig:
+    # Paths (edit these)
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/1.poe-sticky_cpd-uni_pi-lc_none-bern_off_S2_A4_poe/final.npz"
+    data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
+
+    # Speed/debug controls
+    max_sequences: int | None = None   # e.g. 200 for quick run; None = use all
+    split_name : str = "train"
+    print_joint_table: bool = True     # print (s,a)
+    print_style_table: bool = True     # derived marginal over a
+    print_action_table: bool = True    # derived marginal over s
+
+    
+    semantic_feature_cols: List[str] = field(
+        default_factory=lambda: list(WINDOW_FEATURE_COLS)
+    )
+
+SEMANTIC_CONFIG = SemanticAnalysisConfig()
