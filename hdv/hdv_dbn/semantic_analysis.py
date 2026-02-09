@@ -7,10 +7,22 @@ from pathlib import Path
 from .trainer import HDVTrainer
 from .config import (
     SEMANTIC_CONFIG,
-    WINDOW_FEATURE_COLS,
+    resolve_semantic_feature_cols
 )
-from .utils.semantic_analysis_utils import (load_sequences_from_experiment_split, compute_scale_idx, infer_gamma_on_split, compute_joint_semantics, _write_csv, _write_json, 
-                                            write_joint_csv, write_action_csv, write_style_csv, compute_marginal_semantics, compute_action_style_consistency)
+from .utils.semantic_analysis_utils import (
+    load_sequences_from_experiment_split, 
+    compute_scale_idx, 
+    infer_gamma_on_split,
+    compute_joint_semantics, 
+    _write_csv, 
+    write_json, 
+    write_joint_csv, 
+    write_action_csv, 
+    write_style_csv, 
+    compute_marginal_semantics, 
+    compute_action_style_consistency,
+    make_semantic_out_dir
+    )
 
 
 # -----------------------------
@@ -25,8 +37,7 @@ def run_semantic_analysis(model_path, data_root, split_name="train", semantic_fe
     exp_dir = ckpt_path.parent
     split_name = str(split_name).lower().strip()
 
-    out_dir = exp_dir / "semantic_analysis" / split_name
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir, run_tag = make_semantic_out_dir(exp_dir=exp_dir, split_name=split_name, semantic_cfg=SEMANTIC_CONFIG)
 
     # 1) Load sequences
     seqs, feature_cols, split_payload, split_keys = load_sequences_from_experiment_split(exp_dir=exp_dir, data_root=Path(data_root), split_name=split_name)
@@ -52,16 +63,30 @@ def run_semantic_analysis(model_path, data_root, split_name="train", semantic_fe
     write_joint_csv(out_dir=out_dir, feat_names=feat_names, means_sa=means_sa, stds_sa=stds_sa, mass_sa=mass_sa, frac_sa=frac_sa, S=S, A=A)
 
     # 5) Marginals
-    marg = compute_marginal_semantics(obs_raw_seqs=obs_raw_seqs, gamma_sa_seqs=gamma_sa_seqs, feature_cols=feature_cols, feat_names=feat_names)
+    if bool(getattr(SEMANTIC_CONFIG, "print_style_table", False)) or bool(getattr(SEMANTIC_CONFIG, "print_action_table", False)):
+        marg = compute_marginal_semantics(
+            obs_raw_seqs=obs_raw_seqs, gamma_sa_seqs=gamma_sa_seqs,
+            feature_cols=feature_cols, feat_names=feat_names
+        )
+        if bool(getattr(SEMANTIC_CONFIG, "print_style_table", False)):
+            write_style_csv(out_dir=out_dir, S=S, **{k: marg[k] for k in ("feat_used_s", "mass_s", "means_s", "stds_s")})
+        if bool(getattr(SEMANTIC_CONFIG, "print_action_table", False)):
+            write_action_csv(out_dir=out_dir, A=A, **{k: marg[k] for k in ("feat_used_a", "mass_a", "means_a", "stds_a")})
 
-    write_style_csv(out_dir=out_dir, S=S, **{k: marg[k] for k in ("feat_used_s", "mass_s", "means_s", "stds_s")})
-    write_action_csv(out_dir=out_dir, A=A, **{k: marg[k] for k in ("feat_used_a", "mass_a", "means_a", "stds_a")})
-
-    # 6) Consistency check
-    consistency_rows = compute_action_style_consistency(means_sa=means_sa, feat_names=feat_names, S=S, A=A)
+    # 6) Consistency check (RMSE between style0 and style1 per action)
+    rmse_mode = str(getattr(SEMANTIC_CONFIG, "rmse_mode", "raw")).lower()
+    consistency_rows = compute_action_style_consistency(
+        means_sa=means_sa,
+        feat_names=feat_names,
+        S=S,
+        A=A,
+        rmse_mode=rmse_mode,  
+        stds_sa=stds_sa,      # for zscore mode
+        frac_sa=frac_sa,      # for zscore mode
+    )
     _write_csv(
         out_dir / "action_style_consistency.csv",
-        ["a", "action_name", "rmse_core_features_between_style0_and_style1"],
+        ["a", "action_name", f"rmse_{rmse_mode}_between_style0_and_style1"],
         consistency_rows,
     )
 
@@ -76,7 +101,8 @@ def run_semantic_analysis(model_path, data_root, split_name="train", semantic_fe
         "n_split_vehicles_expected": int(len(split_keys)),
         "S": int(S),
         "A": int(A),
-        "semantic_feature_cols_requested": list(semantic_feature_cols),
+        "semantic_feature_set": str(getattr(SEMANTIC_CONFIG, "semantic_feature_set", "unknown")),
+        "include_risk_block": bool(getattr(SEMANTIC_CONFIG, "include_risk_block", False)),
         "semantic_feature_cols_used": list(feat_names),
         "total_mass": float(total_mass),
         "inactive_joint_cells_mass_frac_lt_0p01": [
@@ -86,12 +112,18 @@ def run_semantic_analysis(model_path, data_root, split_name="train", semantic_fe
         ],
         "artifacts": {
             "joint_semantics_csv": str(out_dir / "joint_semantics.csv"),
-            "style_semantics_csv": str(out_dir / "style_semantics.csv"),
-            "action_semantics_csv": str(out_dir / "action_semantics.csv"),
             "action_style_consistency_csv": str(out_dir / "action_style_consistency.csv"),
-        }
+        },
+        "run_tag": run_tag,
+        "out_dir": str(out_dir),
     }
-    _write_json(out_dir / "summary.json", summary)
+    # only list mixture artifacts if written
+    if bool(getattr(SEMANTIC_CONFIG, "print_style_table", False)):
+        summary["artifacts"]["style_semantics_csv"] = str(out_dir / "style_semantics_mixture_over_action.csv")
+    if bool(getattr(SEMANTIC_CONFIG, "print_action_table", False)):
+        summary["artifacts"]["action_semantics_csv"] = str(out_dir / "action_semantics_mixture_over_style.csv")
+
+    write_json(out_dir / "summary.json", summary)
     print(f"[semantic_analysis:{split_name}] wrote results to: {out_dir}", flush=True)
     return summary
 
@@ -100,14 +132,10 @@ def main():
     model_path = SEMANTIC_CONFIG.model_path
     data_root = SEMANTIC_CONFIG.data_root
     max_sequences = SEMANTIC_CONFIG.max_sequences
-
-    # Default = TRAIN semantics; optionally run TEST later as validation by changing this
     split_name = getattr(SEMANTIC_CONFIG, "split_name", "train")
 
-    semantic_cols = getattr(SEMANTIC_CONFIG, "semantic_feature_cols", None)
-    if semantic_cols is None or len(semantic_cols) == 0:
-        semantic_cols = list(WINDOW_FEATURE_COLS)
-
+    semantic_cols = resolve_semantic_feature_cols(SEMANTIC_CONFIG)
+    
     run_semantic_analysis(
         model_path=model_path,
         data_root=data_root,

@@ -101,7 +101,7 @@ class TrainingConfig:
     # -------------------------------------------------------------
     # "poe"    : Product-of-Experts emissions (your PoE module)
     # "linear" : additive log-likelihoods (no PoE logZ coupling)
-    emission_model: Literal["poe", "hierarchical"] = "poe"
+    emission_model: Literal["poe", "hierarchical"] = "hierarchical"
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
@@ -121,7 +121,7 @@ class TrainingConfig:
 
     learn_pi0: bool = False  
     pi0_alpha: float = 0.0
-    disable_discrete_obs: bool = True 
+    disable_discrete_obs: bool = False     
     bern_weight: float = 1     #(dont change)                
     lc_weight: float = 25   
     # Lane-change imbalance handling in EM
@@ -160,7 +160,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "1.poe-sticky_cpd-uni_pi-lc_none-bern_off"
+    wandb_run_name: Optional[str] = "14.hierar-sticky_cpd-uni_pi-lc_none-bern_on"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
@@ -307,22 +307,84 @@ CONTINUOUS_FEATURES: List[str] = [
 ]
 
 
+SEM_FEATS_CORE: List[str] = (
+    WINDOW_EGO_FEATURES
+    + WINDOW_LC_FEATURES
+    + WINDOW_LANE_GEOM_FEATURES
+)
+
+# Context = “who is around me” signals (useful for style context, not core action labels)
+SEM_FEATS_CONTEXT: List[str] = [
+    "front_exists_frac",
+    "left_side_exists_frac",
+    "right_side_exists_frac",
+    "left_front_exists_frac",
+    "right_front_exists_frac",
+    "front_dx_min",
+    "front_dvx_slope",
+    "left_side_dy_last",
+    "right_side_dy_last",
+]
+
+# Risk signals 
+SEM_FEATS_RISK: List[str] = [
+    "front_thw_last",
+    "front_ttc_min",
+]
+
+# Validity fractions are NOT behavior, so, exclude from semantics by default
+SEM_FEATS_VALIDITY: List[str] = [
+    "front_thw_vfrac",
+    "front_ttc_vfrac",
+]
+
 @dataclass(frozen=True)
 class SemanticAnalysisConfig:
     # Paths (edit these)
-    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/1.poe-sticky_cpd-uni_pi-lc_none-bern_off_S2_A4_poe/final.npz"
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/14.hierar-sticky_cpd-uni_pi-lc_none-bern_on_S2_A4_hierarchical/final.npz"
     data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 
     # Speed/debug controls
     max_sequences: int | None = None   # e.g. 200 for quick run; None = use all
     split_name : str = "train"
-    print_joint_table: bool = True     # print (s,a)
-    print_style_table: bool = True     # derived marginal over a
-    print_action_table: bool = True    # derived marginal over s
 
-    
-    semantic_feature_cols: List[str] = field(
-        default_factory=lambda: list(WINDOW_FEATURE_COLS)
-    )
+     # outputs
+    print_joint_table: bool = True     # print (s,a)
+    # These are mixtures unless you compute conditionals explicitly in the script
+    print_style_table: bool = False     # derived marginal over a
+    print_action_table: bool = False    # derived marginal over s
+
+    # ---------------------------------------------------------
+    # Semantic feature selection 
+    # ---------------------------------------------------------
+    # "core"          : ego kinematics + LC + lane geometry
+    # "core+context"  : core + existence/context
+    # "all"           : WINDOW_FEATURE_COLS
+    semantic_feature_set: Literal["core", "core+context", "all"] = "core"
+
+    # Optional blocks
+    include_risk_block: bool = False      # add front_thw_last / front_ttc_min
+
+    # RMSE / consistency computation
+    rmse_mode: Literal["raw", "zscore"] = "zscore"
 
 SEMANTIC_CONFIG = SemanticAnalysisConfig()
+
+def resolve_semantic_feature_cols(cfg):
+    if cfg.semantic_feature_set == "core":
+        feats = list(SEM_FEATS_CORE)
+    elif cfg.semantic_feature_set == "core+context":
+        feats = list(SEM_FEATS_CORE) + list(SEM_FEATS_CONTEXT)
+    else:
+        feats = list(WINDOW_FEATURE_COLS)
+
+    if cfg.include_risk_block:
+        feats += list(SEM_FEATS_RISK)
+    
+    # de-dup preserve order
+    out, seen = [], set()
+    for f in feats:
+        if f not in seen:
+            out.append(f)
+            seen.add(f)
+    return out

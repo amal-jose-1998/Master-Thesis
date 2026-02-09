@@ -9,7 +9,39 @@ from .eval_core import scale_obs_masked, seq_key
 from ..inference import infer_posterior
 from .trainer_diagnostics import posterior_weighted_feature_stats
 
-def _write_json(path, payload):
+def make_semantic_out_dir(*, exp_dir, split_name, semantic_cfg):
+    """
+    Build a stable output directory for semantic analysis runs so different
+    feature-set / rmse settings do not overwrite each other.
+
+    Returns:
+        out_dir: Path to write artifacts into
+        run_tag: folder tag used (for logging / summary.json)
+    """
+    split_name = str(split_name).lower().strip()
+
+    # Auto-tag output folder from config (prevents overwrites across semantic settings)
+    set_name = str(getattr(semantic_cfg, "semantic_feature_set", "all")).lower()
+    rmse_mode = str(getattr(semantic_cfg, "rmse_mode", "raw")).lower()
+    risk = bool(getattr(semantic_cfg, "include_risk_block", False))
+
+    # filesystem-safe tag
+    set_name = set_name.replace("+", "_")
+
+    tag_parts = [set_name]
+    if risk:
+        tag_parts.append("with_risk_features")
+    
+    tag_parts.append(rmse_mode)
+
+    run_tag = "_".join(tag_parts)
+
+    out_dir = Path(exp_dir) / "semantic_analysis" / split_name / run_tag
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir, run_tag
+
+
+def write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -203,7 +235,7 @@ def compute_joint_semantics(*, obs_raw_seqs, gamma_sa_seqs, feature_cols, semant
       frac_sa:  (S,A)
     """
     feat_names, means_sa, stds_sa = posterior_weighted_feature_stats(obs_names=feature_cols, obs_seqs=obs_raw_seqs, gamma_sa_seqs=gamma_sa_seqs, 
-                                                                     semantic_feature_names=semantic_feature_cols, include_derived=True, S=S, A=A)
+                                                                     semantic_feature_names=semantic_feature_cols, include_derived=False, S=S, A=A)
 
     mass_sa = np.zeros((S, A), dtype=np.float64)
     for g in gamma_sa_seqs:
@@ -256,7 +288,7 @@ def write_style_csv(*, out_dir, feat_used_s, mass_s, means_s, stds_s, S):
     header = ["s", "style_name", "mass", "mass_frac"]
     for fn in feat_used_s:
         header += [f"{fn}_mean", f"{fn}_std"]
-    _write_csv(out_dir / "style_semantics.csv", header, rows)
+    _write_csv(out_dir / "style_semantics_mixture_over_action.csv", header, rows)
 
 
 def write_action_csv(*, out_dir, feat_used_a, mass_a, means_a, stds_a, A):
@@ -277,7 +309,7 @@ def write_action_csv(*, out_dir, feat_used_a, mass_a, means_a, stds_a, A):
     header = ["a", "action_name", "mass", "mass_frac"]
     for fn in feat_used_a:
         header += [f"{fn}_mean", f"{fn}_std"]
-    _write_csv(out_dir / "action_semantics.csv", header, rows)
+    _write_csv(out_dir / "action_semantics_mixture_over_style.csv", header, rows)
 
 
 def compute_marginal_semantics(*, obs_raw_seqs, gamma_sa_seqs, feature_cols, feat_names):
@@ -315,26 +347,58 @@ def compute_marginal_semantics(*, obs_raw_seqs, gamma_sa_seqs, feature_cols, fea
     )
 
 
-def compute_action_style_consistency(*, means_sa, feat_names, S, A):
+def compute_action_style_consistency(*, means_sa, feat_names, S, A, rmse_mode="raw", stds_sa=None, frac_sa=None):
     """
-    Returns rows: [a, action_name, rmse_core_features_between_style0_and_style1]
+    Returns rows: [a, action_name, rmse_between_style0_and_style1]
+
+    rmse_mode:
+      - "raw":    RMSE in raw feature units
+      - "zscore": normalize each feature by a pooled posterior-weighted std to avoid domination by large-range features
     """
     if S < 2:
         return []
 
-    feats = [f for f in feat_names]
-    if len(feats) == 0:
+    if len(feat_names) == 0:
         return []
+    
+    rmse_mode = str(rmse_mode).lower().strip()
 
-    feat_to_j = {n: i for i, n in enumerate(feat_names)}
-    js = [feat_to_j[f] for f in feats]
+    # feature indices (all used)
+    js = np.arange(len(feat_names), dtype=np.int64)
+
+    # Compute feature scales for zscore mode
+    if rmse_mode == "zscore":
+        if stds_sa is None or frac_sa is None:
+            raise ValueError("rmse_mode='zscore' requires stds_sa and frac_sa.")
+        eps = 1e-6
+        F = len(feat_names)
+        scale = np.zeros((F,), dtype=np.float64)
+        wsum = 0.0
+        for s in range(S):
+            for a in range(A):
+                w = float(frac_sa[s, a])
+                if w <= 0:
+                    continue
+                ss = np.asarray(stds_sa[s, a, :], dtype=np.float64)
+                ss = np.where(np.isfinite(ss), ss, 0.0)
+                scale += w * ss
+                wsum += w
+        scale = scale / max(wsum, eps)
+        scale = np.maximum(scale, eps)
+    
+    else:
+        scale = np.ones((len(feat_names),), dtype=np.float64)
 
     rows = []
     for a in range(A):
-        v0 = means_sa[0, a, js]
-        v1 = means_sa[1, a, js]
-        mask = np.isfinite(v0) & np.isfinite(v1)
-        dist = float(np.sqrt(np.mean((v0[mask] - v1[mask]) ** 2))) if np.any(mask) else np.nan
+        v0 = np.asarray(means_sa[0, a, js], dtype=np.float64)
+        v1 = np.asarray(means_sa[1, a, js], dtype=np.float64)
+        mask = np.isfinite(v0) & np.isfinite(v1) & np.isfinite(scale)
+        if not np.any(mask):
+            dist = np.nan
+        else:
+            d = (v0[mask] - v1[mask]) / scale[mask]
+            dist = float(np.sqrt(np.mean(d * d)))
         rows.append([
             a,
             str(DBN_STATES.action[a]) if a < len(DBN_STATES.action) else f"action_{a}",
