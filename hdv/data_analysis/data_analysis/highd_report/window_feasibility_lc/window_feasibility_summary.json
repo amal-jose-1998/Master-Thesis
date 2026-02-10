@@ -1,0 +1,40 @@
+{
+  "config": {
+    "window_len": 150,
+    "stride": 10,
+    "min_gap_frames": 10,
+    "lc_key": "lc",
+    "lane_key_fallback": "lane_id"
+  },
+  "trajectories": {
+    "num_total": 50543,
+    "num_usable_T_ge_W": 50110,
+    "num_shorter_than_W": 433,
+    "length_stats": {
+      "count": 50543,
+      "min": 8,
+      "p10": 280.0,
+      "median": 349.0,
+      "p90": 466.0,
+      "max": 2263
+    }
+  },
+  "lane_change_events": {
+    "num_events_total": 6420,
+    "num_events_valid_centered": 3614,
+    "num_events_dropped_boundary": 2806,
+    "valid_centered_rate": 0.5629283489096574,
+    "event_pos_norm_stats": {
+      "count": 3614,
+      "p10": 0.28142045454545456,
+      "median": 0.5,
+      "p90": 0.7196177407498163
+    }
+  },
+  "windows": {
+    "total_sliding_windows": 1214514,
+    "total_lc_windows": 54354,
+    "total_kl_windows": 1160160,
+    "lc_window_fraction": 0.04475370395071609
+  }
+}
