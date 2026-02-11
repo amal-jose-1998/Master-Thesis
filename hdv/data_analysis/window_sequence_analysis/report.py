@@ -41,8 +41,7 @@ OUT_DIR = EXP_DIR / "data_analysis" / "window_feature_distributions" / SPLIT
 # Helpers
 # =============================================================================
 def _is_binary_feature(name):
-    n = name.lower()
-    return n in BERNOULLI_FEATURES
+    return name.lower() in BERNOULLI_FEATURES
 
 def _is_fraction_feature(name):
     n = name.lower()
@@ -126,18 +125,39 @@ def _to_numeric_finite_1d(x):
     v = v[np.isfinite(v)]
     return v
 
-def compute_stats(v):
+def compute_stats(v, feature_name=None):
     vf = _to_numeric_finite_1d(v)
     if vf.size == 0:
         out = {f"p{int(q*100):02d}": np.nan for q in _QUANTILES}
         out.update({"mean": np.nan, "std": np.nan, "count": 0})
+        out.update({"mass_at_0": np.nan, "mass_at_1": np.nan, "rate_1": np.nan, "mid_count": 0})
         return out
 
     out = {f"p{int(q*100):02d}": float(np.quantile(vf, q)) for q in _QUANTILES}
     out["mean"] = float(vf.mean())
     out["std"] = float(vf.std(ddof=0))
     out["count"] = int(vf.size)
-    return out
+    
+    eps = 1e-12
+    if feature_name is not None and _is_binary_feature(feature_name):
+        xb = (vf > 0.5).astype(np.int64)
+        out["rate_1"] = float(xb.mean())
+        out["mass_at_0"] = float((xb == 0).mean())
+        out["mass_at_1"] = float((xb == 1).mean())
+        out["mid_count"] = 0
+    elif feature_name is not None and _is_fraction_feature(feature_name):
+        x = np.clip(vf, 0.0, 1.0)
+        out["mass_at_0"] = float((x <= eps).mean())
+        out["mass_at_1"] = float((x >= 1.0 - eps).mean())
+        mid = x[(x > eps) & (x < 1.0 - eps)]
+        out["mid_count"] = int(mid.size)
+        out["rate_1"] = np.nan
+    else:
+        out["mass_at_0"] = np.nan
+        out["mass_at_1"] = np.nan
+        out["rate_1"] = np.nan
+        out["mid_count"] = 0
+
 
 def robust_xlim(v, qlo, qhi):
     vf = _to_numeric_finite_1d(v)
@@ -300,7 +320,7 @@ def main():
     stats_rows = []
     for j, feat in enumerate(feature_names):
         v = X[:, j] if X.size else np.array([], dtype=np.float64)
-        st = compute_stats(v)
+        st = compute_stats(v, feat)
         stats_rows.append({"feature": feat, **st})
         save_hist(v, feat, hist_dir / f"{feat}.png")
 
