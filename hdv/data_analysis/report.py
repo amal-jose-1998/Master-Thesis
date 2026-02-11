@@ -216,17 +216,17 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
 
         # ---- Step 4: Lane-pose ----
         # Frame-based fractions (default). If you later want "one vote per vehicle", set count_unique_vehicles=True.
-        cfg = LanePoseReportConfig(
-            lane_pos_col="lane_pos",
-            class_col="meta_class",
-            direction_col="meta_drivingDirection",
-            recording_col="recording_id",
-            vehicle_col="vehicle_id",
-            count_unique_vehicles=False,
-            dpi=160,
-        )
-        run_lane_pose_report(df=df, out_dir=out_dir / "lane_pose", cfg=cfg)
-        pbar.update(1)
+        #cfg = LanePoseReportConfig(
+        #    lane_pos_col="lane_pos",
+        #    class_col="meta_class",
+        #    direction_col="meta_drivingDirection",
+        #    recording_col="recording_id",
+        #    vehicle_col="vehicle_id",
+        #    count_unique_vehicles=False,
+        #    dpi=160,
+        #)
+        #run_lane_pose_report(df=df, out_dir=out_dir / "lane_pose", cfg=cfg)
+        #pbar.update(1)
         
         # ---- Step 5: Build traj dicts for feasibility ----
         trajs = build_trajs_for_feasibility(df, show_progress=show_progress)
@@ -266,7 +266,7 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
         pbar.close()
 
 if __name__ == "__main__":
-    TRACKS_DIR = Path(r"C:\Users\amalj\OneDrive\Desktop\Master's Thesis\Implementation\hdv\data\highd")
+    TRACKS_DIR = Path(r"/home/RUS_CIP/st184634/implementation/hdv/data/highd")
     OUT_DIR = Path(__file__).resolve().parent / "data_analysis" / "highd_report"
 
     print("[report] Starting analysis...")
@@ -276,7 +276,7 @@ if __name__ == "__main__":
     run_report(
         tracks_dir=TRACKS_DIR,
         out_dir=OUT_DIR,
-        max_recordings=5,
+        max_recordings=25,
         show_progress=True,
     )
 

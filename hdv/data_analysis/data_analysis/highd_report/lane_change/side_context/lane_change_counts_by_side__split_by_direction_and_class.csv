@@ -1,0 +1,13 @@
+dir_class,side,count,pct_within_split
+1.0__car,left,1363,43.22867110688233
+1.0__car,right,1790,56.77132889311767
+1.0__car,unknown,0,0.0
+1.0__truck,left,201,63.607594936708864
+1.0__truck,right,115,36.392405063291136
+1.0__truck,unknown,0,0.0
+2.0__car,left,1304,48.13584348468069
+2.0__car,right,1405,51.86415651531931
+2.0__car,unknown,0,0.0
+2.0__truck,left,104,40.15444015444015
+2.0__truck,right,155,59.84555984555985
+2.0__truck,unknown,0,0.0
