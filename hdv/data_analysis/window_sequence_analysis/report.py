@@ -1,0 +1,242 @@
+from pathlib import Path 
+import sys
+import json
+import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+# ---------------------------------------------------------
+# Ensure project root (containing 'hdv/') is on PYTHONPATH
+# ---------------------------------------------------------
+_THIS_FILE = Path(__file__).resolve()
+for parent in [_THIS_FILE] + list(_THIS_FILE.parents):
+    if (parent / "hdv").is_dir():
+        sys.path.insert(0, str(parent))
+        break
+else:
+    raise ImportError("Could not locate project root containing 'hdv/' directory.")
+
+from hdv.hdv_dbn.datasets.highd_loader import load_highd_folder
+from hdv.hdv_dbn.config import WINDOW_FEATURE_COLS, WINDOW_CONFIG, SEMANTIC_CONFIG, TRAINING_CONFIG
+from hdv.hdv_dbn.datasets.highd.sequences import load_or_build_windowized
+
+
+# =============================================================================
+# USER SETTINGS 
+# =============================================================================
+EXP_DIR = Path("/home/RUS_CIP/st184634/implementation/hdv/models/14.hierar-sticky_cpd-uni_pi-lc_none-bern_on_S2_A4_hierarchical").resolve()
+SPLIT = "train" # Which split to analyze: "train" | "val" | "test" | "all"
+
+# Histogram settings
+BINS = 200
+XLIM_Q = (0.01, 0.99)  # robust x-limits using quantiles
+_QUANTILES = [0.01, 0.99]
+
+# Output folder
+OUT_DIR = EXP_DIR / "data_analysis" / "window_feature_distributions" / SPLIT
+
+# =============================================================================
+# Helpers
+# =============================================================================
+def load_split_json(exp_dir):
+    p = exp_dir / "split.json"
+    if not p.exists():
+        raise FileNotFoundError(f"split.json not found: {p}")
+    return json.loads(p.read_text())
+
+def get_split_keys(split_obj, split_name):
+    sn = str(split_name).lower().strip()
+    try:
+        result = split_obj["keys"][sn]
+        if isinstance(result, list):
+            return [str(x) for x in result]
+    except (KeyError, TypeError):
+        pass
+    raise KeyError(f"Split '{sn}' not found in split.json.")
+
+def parse_vehicle_key(key):
+    s = str(key).strip()
+    if ":" not in s:
+        raise ValueError(f"Bad key '{key}', expected 'recording_id:vehicle_id'")
+
+    a, b = s.split(":", 1)
+
+    # tolerate float-formatted strings like "29.0"
+    rid = int(float(a))
+    vid = int(float(b))
+    return rid, vid
+
+def filter_df_to_keys(df, keys):
+    pairs = [parse_vehicle_key(k) for k in keys]
+    kdf = pd.DataFrame(pairs, columns=["recording_id", "vehicle_id"]).astype({"recording_id": "int64", "vehicle_id": "int64"})
+    return df.merge(kdf, on=["recording_id", "vehicle_id"], how="inner")
+
+def stack_windows(win_sequences, feature_names):
+    if not win_sequences:
+        return np.zeros((0, len(feature_names)), dtype=np.float64)
+
+    # sequences.WindowSequence has obs (Nw, F) and obs_names
+    ref = list(win_sequences[0].obs_names)
+    if ref != list(feature_names):
+        raise RuntimeError("WINDOW_FEATURE_COLS mismatch with windowized sequence schema.")
+
+    blocks = []
+    for s in win_sequences:
+        X = np.asarray(s.obs, dtype=np.float64)
+        if X.ndim != 2 or X.shape[1] != len(feature_names):
+            raise RuntimeError(f"Bad obs shape {X.shape}")
+        blocks.append(X)
+
+    return np.vstack(blocks) if blocks else np.zeros((0, len(feature_names)), dtype=np.float64)
+
+def _to_numeric_finite_1d(x):
+    v = pd.to_numeric(pd.Series(np.asarray(x).reshape(-1)), errors="coerce").to_numpy()
+    v = v[np.isfinite(v)]
+    return v
+
+def compute_stats(v):
+    vf = _to_numeric_finite_1d(v)
+    if vf.size == 0:
+        out = {f"p{int(q*100):02d}": np.nan for q in _QUANTILES}
+        out.update({"mean": np.nan, "std": np.nan, "count": 0})
+        return out
+
+    out = {f"p{int(q*100):02d}": float(np.quantile(vf, q)) for q in _QUANTILES}
+    out["mean"] = float(vf.mean())
+    out["std"] = float(vf.std(ddof=0))
+    out["count"] = int(vf.size)
+    return out
+
+def robust_xlim(v, qlo, qhi):
+    vf = _to_numeric_finite_1d(v)
+    if vf.size == 0:
+        return None
+    lo = float(np.quantile(vf, qlo))
+    hi = float(np.quantile(vf, qhi))
+    if not np.isfinite(lo) or not np.isfinite(hi) or lo >= hi:
+        return None
+    return (lo, hi)
+
+def save_hist(v, feature, out_png):
+    out_png.parent.mkdir(parents=True, exist_ok=True)
+
+    vf = _to_numeric_finite_1d(v)
+    if vf.size == 0:
+        return
+
+    fig, ax = plt.subplots()
+    ax.hist(vf, bins=int(BINS), density=True, alpha=0.85, edgecolor="black", linewidth=0.25)
+
+    lim = robust_xlim(vf, XLIM_Q[0], XLIM_Q[1])
+    if lim is not None:
+        ax.set_xlim(*lim)
+
+    mean = float(vf.mean())
+    med = float(np.median(vf))
+    p10 = float(np.quantile(vf, 0.10))
+    p90 = float(np.quantile(vf, 0.90))
+
+    ax.axvline(mean, linestyle="-.", linewidth=2.0, color="red", label="mean")
+    ax.axvline(med, linestyle="-", linewidth=2.2, color="green", label="median")
+    ax.axvline(p10, linestyle="--", linewidth=2.0, color="orange", label="p10")
+    ax.axvline(p90, linestyle="--", linewidth=2.0, color="purple", label="p90")
+    ax.legend(loc="upper left", fontsize=10, framealpha=0.95)
+
+    ax.set_title(feature, fontsize=14)
+    ax.set_xlabel(feature, fontsize=11)
+    ax.set_ylabel("Probability density", fontsize=11)
+
+    fig.savefig(out_png, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+
+# =============================================================================
+# Main
+# =============================================================================
+def main():
+    split_obj = load_split_json(EXP_DIR)
+    if SPLIT.lower() == "all":
+        keys = (
+            get_split_keys(split_obj, "train")
+            + get_split_keys(split_obj, "val")
+            + get_split_keys(split_obj, "test")
+        )
+    else:
+        keys = get_split_keys(split_obj, SPLIT)
+
+    W = int(split_obj.get("W", WINDOW_CONFIG.W))
+    stride = int(split_obj.get("stride", WINDOW_CONFIG.stride))
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    hist_dir = OUT_DIR / "hists"
+    hist_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1) Load canonical highD dataframe 
+    data_root = Path(SEMANTIC_CONFIG.data_root).resolve()
+    df = load_highd_folder(
+        root=data_root,
+        cache_path=None,
+        force_rebuild=False,
+        max_recordings=TRAINING_CONFIG.max_highd_recordings,
+        apply_vehicle_centric=True,
+        flip_lateral=True,
+        flip_positions=False,
+    )
+
+    # 2) Filter by split keys
+    df_split = filter_df_to_keys(df, keys)
+
+    # 3) Windowize
+    cache_dir = data_root / "cache"
+    win_sequences = load_or_build_windowized(
+        df_split,
+        cache_dir=cache_dir,
+        W=W,
+        stride=stride,
+        force_rebuild=False,
+    )
+
+    feature_names = list(WINDOW_FEATURE_COLS)
+    X = stack_windows(win_sequences, feature_names)  # (N_windows_total, F)
+
+    # 4) Stats + plots
+    stats_rows = []
+    for j, feat in enumerate(feature_names):
+        v = X[:, j] if X.size else np.array([], dtype=np.float64)
+        st = compute_stats(v)
+        stats_rows.append({"feature": feat, **st})
+        save_hist(v, feat, hist_dir / f"{feat}.png")
+
+    stats_df = pd.DataFrame(stats_rows)
+
+    stats_df.to_csv(OUT_DIR / "window_feature_stats.csv", index=False)
+
+    meta = {
+        "exp_dir": str(EXP_DIR),
+        "split": SPLIT,
+        "num_vehicle_keys": int(len(keys)),
+        "num_sequences": int(len(win_sequences)),
+        "num_windows_total": int(X.shape[0]),
+        "num_features": int(X.shape[1]) if X.ndim == 2 else int(len(feature_names)),
+        "W": W,
+        "stride": stride,
+        "bins": int(BINS),
+        "xlim_q": [float(XLIM_Q[0]), float(XLIM_Q[1])]
+    }
+    
+    (OUT_DIR / "meta.json").write_text(json.dumps(meta, indent=2))
+
+    print("==== Window feature distribution report ====")
+    print(f"exp_dir:   {EXP_DIR}")
+    print(f"split:     {SPLIT}  (vehicles={len(keys)})")
+    print(f"windows:   {X.shape[0]}  features={len(feature_names)}")
+    print(f"out_dir:   {OUT_DIR}")
+    print(f"stats:     {OUT_DIR / 'window_feature_stats.csv'}")
+    print(f"hists:     {hist_dir}")
+
+
+
+if __name__ == "__main__":
+    main()
