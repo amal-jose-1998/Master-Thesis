@@ -157,6 +157,8 @@ def compute_stats(v, feature_name=None):
         out["mass_at_1"] = np.nan
         out["rate_1"] = np.nan
         out["mid_count"] = 0
+    
+    return out
 
 
 def robust_xlim(v, qlo, qhi):
