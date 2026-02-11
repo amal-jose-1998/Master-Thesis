@@ -96,6 +96,11 @@ class TrainingConfig:
     seed: int = 123
     em_num_iters: int = 200
 
+    risk_ttc_max: float = 200.0   # seconds; treat larger as "not informative"
+    risk_thw_max: float = 20.0    # seconds
+    risk_dhw_max: float = 500.0   # meters 
+    risk_min_pos: float = 1e-3    # filters tiny numerical junk
+
     # -------------------------------------------------------------
     # Emission model selection
     # -------------------------------------------------------------
