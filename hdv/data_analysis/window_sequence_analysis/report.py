@@ -19,7 +19,7 @@ else:
     raise ImportError("Could not locate project root containing 'hdv/' directory.")
 
 from hdv.hdv_dbn.datasets.highd_loader import load_highd_folder
-from hdv.hdv_dbn.config import WINDOW_FEATURE_COLS, WINDOW_CONFIG, SEMANTIC_CONFIG, TRAINING_CONFIG
+from hdv.hdv_dbn.config import WINDOW_FEATURE_COLS, WINDOW_CONFIG, SEMANTIC_CONFIG, TRAINING_CONFIG, BERNOULLI_FEATURES
 from hdv.hdv_dbn.datasets.highd.sequences import load_or_build_windowized
 
 
@@ -40,6 +40,36 @@ OUT_DIR = EXP_DIR / "data_analysis" / "window_feature_distributions" / SPLIT
 # =============================================================================
 # Helpers
 # =============================================================================
+def _is_binary_feature(name):
+    n = name.lower()
+    return n in BERNOULLI_FEATURES
+
+def _is_fraction_feature(name):
+    n = name.lower()
+    # fractions in [0,1] that are often spiky at 0/1
+    return (
+        n.endswith("_frac")
+        or n.endswith("_vfrac")
+        or n.endswith("_exists_frac")
+        or n.endswith("_neg_frac")
+        or n.endswith("_pos_frac")
+        or n.endswith("_zero_frac")
+    )
+
+def _draw_lines(ax, vf):
+    # add summary lines 
+    if vf.size == 0:
+        return
+    mean = float(vf.mean())
+    med = float(np.median(vf))
+    p10 = float(np.quantile(vf, 0.10))
+    p90 = float(np.quantile(vf, 0.90))
+
+    ax.axvline(mean, linestyle="-.", linewidth=2.0, color="red", label="mean")
+    ax.axvline(med,  linestyle="-",  linewidth=2.2, color="green", label="median")
+    ax.axvline(p10,  linestyle="--", linewidth=2.0, color="orange", label="p10")
+    ax.axvline(p90,  linestyle="--", linewidth=2.0, color="purple", label="p90")
+
 def load_split_json(exp_dir):
     p = exp_dir / "split.json"
     if not p.exists():
@@ -127,26 +157,91 @@ def save_hist(v, feature, out_png):
         return
 
     fig, ax = plt.subplots()
-    ax.hist(vf, bins=int(BINS), density=True, alpha=0.85, edgecolor="black", linewidth=0.25)
 
+    # ---------------------------
+    # 1) Binary features: plot counts (0 vs 1)
+    # ---------------------------
+    if _is_binary_feature(feature):
+        xb = (vf > 0.5).astype(np.int64)
+        n0 = int((xb == 0).sum())
+        n1 = int((xb == 1).sum())
+        rate = (n1 / (n0 + n1)) if (n0 + n1) else 0.0
+
+        ax.bar([0, 1], [n0, n1], edgecolor="black", alpha=0.85)
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels(["0", "1"])
+        ax.set_xlim(-0.5, 1.5)
+        ax.set_ylabel("Count", fontsize=11)
+        ax.set_title(f"{feature}  (rate=1: {rate:.6f})", fontsize=14)
+
+        fig.savefig(out_png, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        return
+    
+    # ---------------------------
+    # 2) Fraction features in [0,1] with spikes: show mass at 0/1 explicitly
+    # ---------------------------
+    if _is_fraction_feature(feature):
+        x = np.clip(vf, 0.0, 1.0)
+        eps = 1e-12
+
+        n0 = int((x <= eps).sum())
+        n1 = int((x >= 1.0 - eps).sum())
+        mid = x[(x > eps) & (x < 1.0 - eps)]
+
+        # Plot interior histogram (counts)
+        if mid.size:
+            ax.hist(
+                mid,
+                bins=np.linspace(0.0, 1.0, int(BINS) + 1),
+                density=False,
+                alpha=0.60,
+                edgecolor="black",
+                linewidth=0.25,
+                label="(0,1) interior"
+            )
+
+        # Add explicit bars at 0 and 1
+        ax.bar([0.0, 1.0], [n0, n1], width=0.035, edgecolor="black",
+               alpha=0.90, label="mass at {0,1}")
+
+        # Lines computed on full x (including 0/1)
+        _draw_lines(ax, x)
+
+        ax.set_xlim(-0.02, 1.02)
+        ax.set_xlabel(feature, fontsize=11)
+        ax.set_ylabel("Count", fontsize=11)
+        m0 = n0 / x.size
+        m1 = n1 / x.size
+        ax.set_title(f"{feature}  (mass@0={m0:.3f}, mass@1={m1:.3f}, mid={mid.size})", fontsize=14)
+        ax.legend(loc="upper left", fontsize=10, framealpha=0.95)
+
+        fig.savefig(out_png, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        return
+
+    # ---------------------------
+    # 3) Continuous-ish features: robust clipping + counts histogram
+    # ---------------------------
+    # robust x-limits using quantiles for display only
     lim = robust_xlim(vf, XLIM_Q[0], XLIM_Q[1])
     if lim is not None:
-        ax.set_xlim(*lim)
+        lo, hi = lim
+        # plot clipped view so outliers don't flatten the figure
+        vp = vf[(vf >= lo) & (vf <= hi)]
+    else:
+        vp = vf
 
-    mean = float(vf.mean())
-    med = float(np.median(vf))
-    p10 = float(np.quantile(vf, 0.10))
-    p90 = float(np.quantile(vf, 0.90))
+    ax.hist(vp, bins=int(BINS), density=False, alpha=0.85, edgecolor="black", linewidth=0.25)
+    _draw_lines(ax, vf)  # compute lines on full vf
 
-    ax.axvline(mean, linestyle="-.", linewidth=2.0, color="red", label="mean")
-    ax.axvline(med, linestyle="-", linewidth=2.2, color="green", label="median")
-    ax.axvline(p10, linestyle="--", linewidth=2.0, color="orange", label="p10")
-    ax.axvline(p90, linestyle="--", linewidth=2.0, color="purple", label="p90")
-    ax.legend(loc="upper left", fontsize=10, framealpha=0.95)
+    if lim is not None:
+        ax.set_xlim(lo, hi)
 
     ax.set_title(feature, fontsize=14)
     ax.set_xlabel(feature, fontsize=11)
-    ax.set_ylabel("Probability density", fontsize=11)
+    ax.set_ylabel("Count", fontsize=11)
+    ax.legend(loc="upper left", fontsize=10, framealpha=0.95)
 
     fig.savefig(out_png, dpi=200, bbox_inches="tight")
     plt.close(fig)
