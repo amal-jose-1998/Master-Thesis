@@ -3,6 +3,7 @@ import sys
 import json
 import numpy as np
 import pandas as pd
+import math
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -179,6 +180,43 @@ def save_hist(v, feature, out_png):
         return
 
     fig, ax = plt.subplots()
+
+    if feature == "jerk_x_p95" or feature == "jerk_y_p95":
+        # Keep a robust view but preserve discreteness
+        lim = robust_xlim(vf, XLIM_Q[0], XLIM_Q[1])
+        if lim is not None:
+            lo, hi = lim
+            vp = vf[(vf >= lo) & (vf <= hi)]
+        else:
+            vp = vf
+
+        # Count exact values 
+        s = pd.Series(vp).value_counts().sort_index()
+        xs = s.index.to_numpy(dtype=np.float64)
+        ys = s.to_numpy(dtype=np.int64)
+
+        # Choose a sensible bar width
+        if xs.size >= 2:
+            dx = np.diff(xs)
+            dx = dx[np.isfinite(dx) & (dx > 0)]
+            width = 0.9 * (float(np.median(dx)) if dx.size else 0.02)
+        else:
+            width = 0.02
+
+        ax.bar(xs, ys, width=width, edgecolor="black", alpha=0.85)
+        _draw_lines(ax, vf)  # lines on full vf
+
+        if lim is not None:
+            ax.set_xlim(lo, hi)
+
+        ax.set_title(feature, fontsize=14)
+        ax.set_xlabel(feature, fontsize=11)
+        ax.set_ylabel("Count", fontsize=11)
+        ax.legend(loc="upper left", fontsize=10, framealpha=0.95)
+
+        fig.savefig(out_png, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        return
 
     # ---------------------------
     # 1) Binary features: plot counts (0 vs 1)
