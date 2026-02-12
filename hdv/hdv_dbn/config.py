@@ -160,7 +160,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "14.hierar-sticky_cpd-uni_pi-lc_none-bern_on"
+    wandb_run_name: Optional[str] = "main-model-sticky"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
@@ -341,7 +341,7 @@ SEM_FEATS_VALIDITY: List[str] = [
 @dataclass(frozen=True)
 class SemanticAnalysisConfig:
     # Paths (edit these)
-    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/14.hierar-sticky_cpd-uni_pi-lc_none-bern_on_S2_A4_hierarchical/final.npz"
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/final.npz"
     data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 
     # Speed/debug controls
@@ -351,8 +351,8 @@ class SemanticAnalysisConfig:
      # outputs
     print_joint_table: bool = True     # print (s,a)
     # These are mixtures unless you compute conditionals explicitly in the script
-    print_style_table: bool = False     # derived marginal over a
-    print_action_table: bool = False    # derived marginal over s
+    print_style_table: bool = True     # derived marginal over a
+    print_action_table: bool = True    # derived marginal over s
 
     # ---------------------------------------------------------
     # Semantic feature selection 
@@ -360,10 +360,10 @@ class SemanticAnalysisConfig:
     # "core"          : ego kinematics + LC + lane geometry
     # "core+context"  : core + existence/context
     # "all"           : WINDOW_FEATURE_COLS
-    semantic_feature_set: Literal["core", "core+context", "all"] = "core"
+    semantic_feature_set: Literal["core", "core+context", "all"] = "core+context"
 
     # Optional blocks
-    include_risk_block: bool = False      # add front_thw_last / front_ttc_min
+    include_risk_block: bool = True      # add front_thw_last / front_ttc_min
 
     # RMSE / consistency computation
     rmse_mode: Literal["raw", "zscore"] = "zscore"
