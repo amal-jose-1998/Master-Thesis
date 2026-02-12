@@ -5,7 +5,7 @@ import joblib
 import json
 
 from ..dataset import TrajectorySequence
-from ...config import (FRAME_FEATURE_COLS, META_COLS, WINDOW_FEATURE_COLS, TRAINING_CONFIG)
+from ...config import (FRAME_FEATURE_COLS, META_COLS, WINDOW_FEATURE_COLS)
 
 _REL_SUFFIXES = ("_dx", "_dy", "_dvx", "_dvy", "_dax", "_day")
 
@@ -219,11 +219,8 @@ def _seti(Y, t, j, v):
     if j is not None:
         Y[t, j] = v
 
-def _risk_valid_mask(r, cap=None):
-    m = np.isfinite(r) & (r > float(TRAINING_CONFIG.risk_min_pos))
-    if cap is not None:
-        m &= (r < float(cap))
-    return m
+def _risk_valid_mask(r):
+    return np.isfinite(r) & (r > 0.0)
 
 def _sign_fractions(x):
     x = x[np.isfinite(x)]
@@ -346,11 +343,6 @@ def _compute_lane_boundaries(win, Y, t, in_idx, out):
         _seti(Y, t, out.get("d_right_lane_min"),  _nanmin(dr))
 
 def _compute_risk(win, Y, t, in_idx, out, has_front_exists):
-    caps = {
-        "front_thw": float(getattr(TRAINING_CONFIG, "risk_thw_max", np.inf)),
-        "front_ttc": float(getattr(TRAINING_CONFIG, "risk_ttc_max", np.inf)),
-        "front_dhw": float(getattr(TRAINING_CONFIG, "risk_dhw_max", np.inf)),
-    }
     # Only compute if any risk outputs exist
     for colname in ("front_thw", "front_ttc", "front_dhw"):
         j_last = out.get(f"{colname}_last")
@@ -360,7 +352,7 @@ def _compute_risk(win, Y, t, in_idx, out, has_front_exists):
             continue
 
         r = win[:, in_idx[colname]].astype(np.float64, copy=False)
-        valid = _risk_valid_mask(r, cap=caps.get(colname, None))
+        valid = _risk_valid_mask(r)
         if has_front_exists:
             ex = win[:, in_idx["front_exists"]]
             valid = valid & (ex > 0.5)
