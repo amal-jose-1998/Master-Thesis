@@ -22,7 +22,7 @@ actions_by_style:
       description: Stable car-following with mild control and limited speed change.
   s1:
     a0:
-      name: freeflow_accel
+      name: tactical_acceleration
       description: Acceleration-dominant behavior in the tactical regime; leader often present but interaction risk is low (very large TTC / non-critical gaps).
     a1:
       name: lane_change_speed_adjustments

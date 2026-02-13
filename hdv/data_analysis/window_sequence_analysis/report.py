@@ -27,13 +27,13 @@ from hdv.hdv_dbn.datasets.highd.sequences import load_or_build_windowized
 # =============================================================================
 # USER SETTINGS 
 # =============================================================================
-EXP_DIR = Path("/home/RUS_CIP/st184634/implementation/hdv/models/14.hierar-sticky_cpd-uni_pi-lc_none-bern_on_S2_A4_hierarchical").resolve()
+EXP_DIR = Path("/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical").resolve()
 SPLIT = "train" # Which split to analyze: "train" | "val" | "test" | "all"
 
 # Histogram settings
 BINS = 200
 XLIM_Q = (0.01, 0.99)  # robust x-limits using quantiles
-_QUANTILES = [0.01, 0.99]
+_QUANTILES = [0.01, 0.10, 0.50, 0.90, 0.99]
 
 # Output folder
 OUT_DIR = EXP_DIR / "data_analysis" / "window_feature_distributions" / SPLIT
