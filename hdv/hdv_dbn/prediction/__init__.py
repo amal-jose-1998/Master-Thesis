@@ -8,6 +8,13 @@ from .metrics import (
     MetricsAccumulator,
 )
 from .validate import ValidationStep, TrajectoryData, ValidationConfig
+from .visualize_metrics import (
+    visualize_all_metrics,
+    plot_hit_rate_vs_horizon,
+    plot_time_to_hit_histogram,
+    plot_cumulative_hit_rate,
+    plot_hit_count_summary,
+)
 
 __all__ = [
     # Filtering (core algorithm)
@@ -33,4 +40,11 @@ __all__ = [
     "ValidationStep",
     "TrajectoryData",
     "ValidationConfig",
+    
+    # Visualization
+    "visualize_all_metrics",
+    "plot_hit_rate_vs_horizon",
+    "plot_time_to_hit_histogram",
+    "plot_cumulative_hit_rate",
+    "plot_hit_count_summary",
 ]

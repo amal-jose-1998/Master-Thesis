@@ -16,14 +16,13 @@ Expected input:
              and each column corresponds to a named window feature in `feature_cols`.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 import sys
 import numpy as np
 from tabulate import tabulate
 
 UNKNOWN_Z = -1
-EPS = 1e-8
 
 # -----------------------------
 # (s,a) <-> z
@@ -190,30 +189,53 @@ class RuleThresholds:
     # Split: tactical braking (s1/a3) vs mild braking (s0/a1)
     tactical_brake_ax_last: float = -0.25  # Directly separating the two braking means
     tactical_brake_vx_slope: float = -0.01 # sits between them and is within the global negative tail (p10 = −0.0137).
-    tactical_brake_thw: float = 2.2 # below it looks like the tighter tactical braking.
-    tactical_brake_ttc: float = 80.0
+    tactical_brake_thw: float = 2.0 # below it looks like the tighter tactical braking.
+    tactical_brake_ttc: float = 70.0
+
+    # interaction tightness gate (used outside braking too)
+    interaction_thw_tight: float = 2.0
+    interaction_ttc_tight: float = 60.0
 
     # Strong accel (s1/a0)
+    strong_acc_front_exists_min: float = 0.50
     strong_acc_ax_pos_frac: float = 0.90 # isolates “accel-dominant window”
     strong_acc_ax_last: float = 0.15 # clearly positive acceleration but not too extreme.
 
     # Constrained accel (s0/a2)
     constrained_acc_ax_pos_frac: float = 0.65 # above typical but not extreme tail.
-    constrained_acc_ax_last: float = 0.05 # positive enough to be accelerating
+    constrained_acc_ax_last: float = 0.08 # positive enough to be accelerating
     constrained_acc_front_exists: float = 0.80 # a strong “leader present” gate.
 
     # Free-flow modulation (s0/a0)
-    free_flow_front_exists_max: float = 0.60 # <0.60 => low interaction.
+    free_flow_front_exists_max: float = 0.50 # <0.50 => low interaction.
 
     # Constrained following (s1/a2)
     constrained_follow_front_exists: float = 0.80 # a strong “leader present” gate.
     constrained_follow_vx_last_max: float = 21.0 # low speed
-    constrained_follow_jerk_min: float = 0.20 # sits between the “normal” cluster and the “high-jerk” cluster
+    constrained_follow_jerk_min: float = 0.75 # sits between the “normal” cluster and the “high-jerk” cluster
 
     # Stable following (s0/a3)
     stable_follow_front_exists: float = 0.80 # a strong “leader present” gate.
     stable_follow_vx_slope_abs_max: float = 0.008 # approximately 2× the within-state std
     stable_follow_ax_last_abs_max: float = 0.20 # approximately 1× the within-state std (since ax_last is noisier and overlaps more across states than vx_slope)
+
+    @classmethod
+    def from_dict(cls, d):
+        """
+        Create a RuleThresholds instance from a dict (parsed from YAML).
+        Unknown/missing keys fall back to dataclass defaults.
+        """
+        if not d: # If dict is empty/None, return defaults.
+            return cls()
+        params = {}
+        for f in fields(cls): # Iterates over all dataclass fields defined in RuleThresholds
+            name = f.name # threshold key
+            if name in d: # If the dict provides a value:
+                try: # try converting to float
+                    params[name] = float(d[name])
+                except Exception: # else keep as-is
+                    params[name] = d[name]
+        return cls(**params) # Construct a RuleThresholds object overriding only provided keys. Any missing keys stay at default values.
 
 # -----------------------------
 # Label one window
@@ -249,13 +271,13 @@ def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
         5) constrained following
         6) stable following
         7) free-flow modulation
-        8) fallback based on leader presence or UNKNOWN
+        8) UNKNOWN
     """
     idx = _build_index(feature_cols) # Creates mapping {feature_name: column_index}
 
     # small helper: only build these if debug=True
     values = None
-    def record(reason):
+    def record():
         if not debug:
             return None
         nonlocal values
@@ -275,7 +297,7 @@ def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
                 "front_thw_last": safe("front_thw_last"),
                 "front_ttc_min": safe("front_ttc_min"),
             }
-        return reason, values
+        return values
 
     # Lane change
     lc_l = _get(obs_t, idx, "lc_left_present")
@@ -283,8 +305,8 @@ def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
     if (lc_l > thr.lc_flag_thresh) or (lc_r > thr.lc_flag_thresh):
         z = sa_to_z(1, 1, A)
         if debug:
-            reason, vals = record("lane_change")
-            return z, reason, vals
+            vals = record()
+            return z, vals
         return z
 
     # Common longitudinal + interaction features
@@ -298,6 +320,13 @@ def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
     front_exists_frac = _get(obs_t, idx, "front_exists_frac")
     jerk_x_p95 = _get(obs_t, idx, "jerk_x_p95")
 
+    thw = float(obs_t[idx["front_thw_last"]]) if "front_thw_last" in idx else None
+    ttc = float(obs_t[idx["front_ttc_min"]]) if "front_ttc_min" in idx else None
+
+    tight_by_thw = (thw is not None) and (thw <= thr.interaction_thw_tight)
+    tight_by_ttc = (ttc is not None) and (ttc <= thr.interaction_ttc_tight)
+    is_tight_interaction = (front_exists_frac >= thr.stable_follow_front_exists) and (tight_by_thw or tight_by_ttc)
+
     # Braking + tactical split
     is_brake = (
         (ax_neg_frac >= thr.brake_ax_neg_frac)
@@ -310,27 +339,27 @@ def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
 
         if not tactical:
             # only consult THW/TTC when primary indicators are not decisive
-            if "front_thw_last" in idx:
-                thw = float(obs_t[idx["front_thw_last"]])
-                if thw <= thr.tactical_brake_thw:
-                    tactical = True
-            if "front_ttc_min" in idx:
-                ttc = float(obs_t[idx["front_ttc_min"]])
-                if ttc <= thr.tactical_brake_ttc:
-                    tactical = True
+            if (thw is not None) and (thw <= thr.tactical_brake_thw):
+                tactical = True
+            if (ttc is not None) and (ttc <= thr.tactical_brake_ttc):
+                tactical = True
 
         z = sa_to_z(1, 3, A) if tactical else sa_to_z(0, 1, A)
         if debug:
-            reason, vals = record("tactical_brake" if tactical else "mild_brake")
-            return z, reason, vals
+            vals = record()
+            return z, vals
         return z
     
-    # Strong acceleration (s1/a0)
-    if (ax_pos_frac >= thr.strong_acc_ax_pos_frac) and (ax_last >= thr.strong_acc_ax_last):
+    # Strong acceleration (s1/a0): Fire if strong accel AND (leader present enough OR tight interaction cue exists)
+    if (
+        (ax_pos_frac >= thr.strong_acc_ax_pos_frac)
+        and (ax_last >= thr.strong_acc_ax_last)
+        and ((front_exists_frac >= thr.strong_acc_front_exists_min) or is_tight_interaction)
+    ):
         z = sa_to_z(1, 0, A)
         if debug:
-            reason, vals = record("strong_acc")
-            return z, reason, vals
+            vals = record()
+            return z, vals
         return z
 
     # Constrained acceleration (s0/a2): accel + leader present
@@ -341,40 +370,40 @@ def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
     ):
         z = sa_to_z(0, 2, A)
         if debug:
-            reason, vals = record("constrained_acc")
-            return z, reason, vals
+            vals = record()
+            return z, vals
         return z
 
-    # Constrained following (s1/a2): leader present + low speed + high jerk
-    if (
-        (front_exists_frac >= thr.constrained_follow_front_exists)
-        and (vx_last <= thr.constrained_follow_vx_last_max)
-        and (jerk_x_p95 >= thr.constrained_follow_jerk_min)
-    ):
-        z = sa_to_z(1, 2, A)
-        if debug:
-            reason, vals = record("constrained_follow")
-            return z, reason, vals
-        return z
+    # Constrained following (s1/a2): either low-speed+high-jerk (stop&go) OR tight headway/TTC (pressure)
+    if (front_exists_frac >= thr.constrained_follow_front_exists):
+        stop_go = (vx_last <= thr.constrained_follow_vx_last_max) and (jerk_x_p95 >= thr.constrained_follow_jerk_min)
+        pressure = is_tight_interaction
+        if stop_go or pressure:
+            z = sa_to_z(1, 2, A)
+            if debug:
+                vals = record()
+                return z, vals
+            return z
 
-    # Stable following (s0/a3): leader present + steady speed/acc
+    # Stable following (s0/a3): leader present + steady speed/acc (steady AND explicitly NOT tight interaction)
     if (
         (front_exists_frac >= thr.stable_follow_front_exists)
         and (abs(vx_slope) <= thr.stable_follow_vx_slope_abs_max)
         and (abs(ax_last) <= thr.stable_follow_ax_last_abs_max)
+        and (not is_tight_interaction)
     ):
         z = sa_to_z(0, 3, A)
         if debug:
-            reason, vals = record("stable_follow")
-            return z, reason, vals
+            vals = record()
+            return z, vals
         return z
 
     # Free flow modulation (s0/a0): no strong leader evidence
     if front_exists_frac < thr.free_flow_front_exists_max:
         z = sa_to_z(0, 0, A)
         if debug:
-            reason, vals = record("free_flow")
-            return z, reason, vals
+            vals = record()
+            return z, vals
         return z
 
     # Leader exists but no rule fired -> closer to stable following
@@ -386,8 +415,8 @@ def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
     #    return z
 
     if debug:
-        reason, vals = record("unknown")
-        return UNKNOWN_Z, reason, vals
+        vals = record()
+        return UNKNOWN_Z, vals
     return UNKNOWN_Z
 
 def fill_unknown_nearest(z, unknown=UNKNOWN_Z, max_gap=5, tie_break="future"):
@@ -466,7 +495,19 @@ def compute_gt_latents(obs_seq, feature_cols, thr=None, A=4, debug=False, fill_u
         If any rule-required feature name is missing from feature_cols.
     """
     if thr is None:
-        thr = RuleThresholds()
+        # Try to use thresholds from the semantic map YAML if available
+        sem_map_local = None
+        if SEMANTIC_MAP:
+            try:
+                sem_map_local = _load_semantic_map_yaml(SEMANTIC_MAP)
+            except Exception:
+                sem_map_local = None
+
+        if sem_map_local is not None:
+            thr_cfg = sem_map_local.get("label_rules", {}).get("thresholds", {})
+            thr = RuleThresholds.from_dict(thr_cfg)
+        else:
+            thr = RuleThresholds()
     
     obs_seq = np.asarray(obs_seq)
     if obs_seq.ndim != 2: # Validate obs shape
@@ -485,7 +526,7 @@ def compute_gt_latents(obs_seq, feature_cols, thr=None, A=4, debug=False, fill_u
 
     values = [{} for _ in range(T)]
     for t in range(T):
-        z, r, v = label_one_window_z(obs_seq[t], feature_cols, thr, A=A, debug=True)
+        z, v = label_one_window_z(obs_seq[t], feature_cols, thr, A=A, debug=True)
         out[t] = z # the chosen z before persistence
         values[t] = v # feature snapshot at that timestep
 
@@ -522,9 +563,8 @@ DATA_ROOT = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 CHECKPOINT_NAME = "final.npz"
 SEMANTIC_MAP = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/semantic_map.yaml"
 
-NUM_SEQS_SUMMARY = 20
-DETAIL_FIRST_N = 20          # print detailed tables for first 5 trajectories
-MAX_STEPS_DETAIL = 100
+NUM_SEQS_SUMMARY = 10
+DETAIL_FIRST_N = 10          # print detailed tables for first N trajectories
 
 def main():
     try:
@@ -549,26 +589,29 @@ def main():
     if SEMANTIC_MAP:
         sem_map = _load_semantic_map_yaml(SEMANTIC_MAP)
 
-    thr = RuleThresholds()
+    # Prefer thresholds defined in the semantic map YAML when available
+    if sem_map is not None:
+        thr_cfg = sem_map.get("label_rules", {}).get("thresholds", {})
+        thr = RuleThresholds.from_dict(thr_cfg)
+    else:
+        thr = RuleThresholds()
 
     # 1) quick summary counts for first N sequences
     n = min(NUM_SEQS_SUMMARY, len(test.raw_obs))
     print(f"[gt_labeler] Loaded {len(test.raw_obs)} test sequences. Showing summary for first {n}.")
     for i in range(n):
-        z = compute_gt_latents(test.raw_obs[i], test.feature_cols, thr=thr, A=A, debug=False, fill_unknown="nearest")
+        z = compute_gt_latents(test.raw_obs[i], test.feature_cols, thr=thr, A=A, debug=False, fill_unknown="none")
         uniq, cnt = np.unique(z, return_counts=True)
         pairs = sorted(zip(uniq.tolist(), cnt.tolist()), key=lambda x: -x[1])
-        print(f"  seq[{i}] T={len(z)} label_counts(top10): {pairs[:10]}")
+        print(f"  seq[{i}] T={len(z)} label_counts: {pairs}")
 
     # 2) detailed print for the first N trajectories (with reasons)
     m = min(int(DETAIL_FIRST_N), len(test.raw_obs))
     for i in range(m):
-        out_post, values = compute_gt_latents(test.raw_obs[i], test.feature_cols, thr=thr, A=A, debug=True, fill_unknown="nearest")
-
-        T_show = min(len(out_post), int(MAX_STEPS_DETAIL))
+        out_post, values = compute_gt_latents(test.raw_obs[i], test.feature_cols, thr=thr, A=A, debug=True, fill_unknown="none")
 
         rows = []
-        for t in range(T_show):
+        for t in range(len(out_post)):
             z = int(out_post[t])
             s, a = z_to_sa(z, A)
             sem = _sa_semantic_name(sem_map, s, a) if z != UNKNOWN_Z else "-"
@@ -582,26 +625,31 @@ def main():
                 round(v.get("ax_pos_frac", np.nan), 2),
                 round(v.get("front_exists_frac", np.nan), 2),
                 round(v.get("jerk_x_p95", np.nan), 2),
+                round(v.get("front_thw_last", np.nan), 2),
+                round(v.get("front_ttc_min", np.nan), 2),
+                round(v.get("lc_left_present", np.nan), 2),
+                round(v.get("lc_right_present", np.nan), 2),
             ])
 
         headers = [
             "t", "z", "s", "a", "semantic",
             "ax_last", "vx_last", "vx_slope",
-            "ax_neg", "ax_pos", "front", "jerk_p95"
+            "ax_neg", "ax_pos", "front", "jerk_p95",
+            "THW", "TTC", "lc_L", "lc_R",
         ]
 
         print("\n" + "=" * 120)
-        print(f"DETAIL seq[{i}] T={len(out_post)} (showing first {T_show})")
+        print(f"DETAIL seq[{i}] T={len(out_post)}")
         print("=" * 120)
 
         print(tabulate(
             rows,
             headers=headers,
             tablefmt="simple",
-            floatfmt=("", "", "", "", "", ".2f", ".2f", ".4f", ".2f", ".2f", ".2f", ".2f"),
+            floatfmt=("", "", "", "", "", ".2f", ".2f", ".4f", ".2f", ".2f", ".2f", ".2f", ".2f", ".2f", ".2f", ".2f"),
             stralign="left",
             numalign="right",
-            maxcolwidths=[None, None, None, None, 45, None, None, None, None, None, None, None],
+            maxcolwidths=[None, None, None, None, 45, None, None, None, None, None, None, None, None, None, None, None],
             disable_numparse=True,
         ))
 

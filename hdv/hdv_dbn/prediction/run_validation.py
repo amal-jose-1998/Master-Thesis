@@ -18,6 +18,7 @@ try:
     from . import TrajectoryData, HDVDbnModel, ValidationStep, ValidationConfig
     from .data_loader import load_test_data_for_prediction
     from .apply_gt_labels import compute_gt_latents, z_to_sa
+    from .visualize_metrics import visualize_all_metrics
 
 except ImportError:
     project_root = Path(__file__).resolve().parents[3]
@@ -28,6 +29,7 @@ except ImportError:
     )
     from hdv.hdv_dbn.prediction.data_loader import load_test_data_for_prediction
     from hdv.hdv_dbn.prediction.apply_gt_labels import compute_gt_latents, z_to_sa
+    from hdv.hdv_dbn.prediction.visualize_metrics import visualize_all_metrics
 
 
 def main():
@@ -70,7 +72,9 @@ def main():
             obs_seq=raw_obs,
             feature_cols=test_data.feature_cols,
             thr=None,  # Use default RuleThresholds
-            A=A
+            A=A,
+            debug=False, 
+            fill_unknown="none"
         )
         
         # Convert z to (s, a) pairs for metrics and confusion matrix indexing.
@@ -106,9 +110,17 @@ def main():
     print(f"[run_validation] Model: S={model.num_styles}, A={model.num_actions}\n")
     
     validator = ValidationStep(model, config) # stores handles and copies S and A from the model.
-    metrics = validator.evaluate(trajectories) # actual filtering+prediction loop
+    metrics = validator.evaluate(trajectories) # actual filtering + prediction loop
     
-    # Step 4: Print and save results
+    # Step 4: Collect all predictions for visualization
+    print("[run_validation] Collecting predictions for visualization...")
+    all_predictions = []
+    for i, traj in enumerate(trajectories):
+        predictions = validator.predict_one_trajectory(traj)
+        all_predictions.extend(predictions)
+    print(f"[run_validation] Collected {len(all_predictions)} total predictions")
+    
+    # Step 5: Print summary results
     summary = metrics.summary(S=model.num_styles, A=model.num_actions)
     
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -116,26 +128,39 @@ def main():
     print(f"\n{'='*70}")
     print("VALIDATION RESULTS")
     print(f"{'='*70}")
-    print(f"Exact Accuracy (1-step):  {summary['exact_accuracy']:.4f}") # proportion of times the predicted latent at time t+1 exactly equals the ground‑truth latent at time t+1.
-    print(f"Hit@H{config.horizon}:          {summary['hit_rate']:.4f}") # proportion of predictions where the predicted latent appears at least once within the next H frames
+    print(f"Hit@H{config.horizon}:    {summary['hit_rate']:.4f}") # proportion of predictions where the predicted latent appears at least once within the next H frames
     print(f"Mean TTE (hits only):     {summary['mean_tte_sec']:.2f} sec")
     print(f"Median TTE (hits only):   {summary['median_tte_sec']:.2f} sec")
-    print(f"Total predictions:        {summary['num_total']}") # total number of predictions made.
-    print(f"Hits:                     {summary['num_hits']}")  # number of predictions that were hits.
+    print(f"Percentile 25 TTE:        {summary['p25_tte_sec']:.2f} sec")
+    print(f"Percentile 75 TTE:        {summary['p75_tte_sec']:.2f} sec")
+    print(f"Total predictions:        {summary['num_total']}")
+    print(f"Hits:                     {summary['num_hits']}")
+    print(f"Hit Rate:                 {summary['num_hits'] / summary['num_total']:.1%}")
     print(f"{'='*70}\n")
     
-    # Save results
+    # Step 6: Save summary and generate visualizations
     import json
     summary_path = out_dir / "validation_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2))
-    print(f"[run_validation] Saved summary to {summary_path}")
+    print(f"[run_validation] Saved summary to {summary_path}\n")
     
-    cm = metrics.exact.confusion_matrix(model.num_styles, model.num_actions)
-    cm_path = out_dir / "confusion_matrix.npy"
-    np.save(cm_path, cm)
-    print(f"[run_validation] Saved confusion matrix to {cm_path}")
+    print("[run_validation] Generating visualization plots...")
+    figs = visualize_all_metrics(
+        all_predictions,
+        output_dir=out_dir,
+        fps=config.fps,
+        stride_frames=config.stride_frames,
+        max_horizon=20
+    )
+    print(f"[run_validation] Generated {len(figs)} visualization plots\n")
     
-    print("\n Validation complete")
+    print(f"{'='*70}")
+    print("Visualization plots saved to:")
+    print(f"  - {out_dir / 'hit_rate_vs_horizon.png'}")
+    print(f"  - {out_dir / 'tte_histogram.png'}")
+    print(f"  - {out_dir / 'cumulative_hit_rate.png'}")
+    print(f"  - {out_dir / 'hit_count_summary.png'}")
+    print(f"{'='*70}\n")
 
 
 if __name__ == "__main__":
