@@ -232,31 +232,116 @@ def visualize_all_metrics(*, predictions, output_dir, S, A, labels, fps=25.0, st
     output_dir.mkdir(parents=True, exist_ok=True)
     
     figs = {}
-    
-    # Plot 1: Confusion matrix (computed from predictions)
-    SA = S * A
-    cm = np.zeros((SA, SA), dtype=int) # Empty confusion matrix. Rows are true labels, columns are predicted labels.
-    for pred_z, true_z, _, _ in predictions:
-        idx_pred = pred_z[0] * A + pred_z[1] # Turn predicted (s,a) into a single class index.
-        idx_true = true_z[0] * A + true_z[1] # Turn true (s,a) into a single class index.
-        cm[idx_true, idx_pred] += 1 # Increment the confusion matrix count for this true/pred pair.
+
+    # --- Plot 1: Confusion matrix (use metrics.exact for correctness) ---
+    metrics = None
+    # Accept metrics as a kwarg if present (for backward compatibility)
+    import inspect
+    if 'metrics' in inspect.signature(visualize_all_metrics).parameters:
+        metrics = locals().get('metrics', None)
+    if metrics is None:
+        # Try to get from globals (for patching in run_validation)
+        metrics = globals().get('metrics', None)
+    if metrics is not None and hasattr(metrics, 'exact'):
+        cm = metrics.exact.confusion_matrix(S, A)
+    else:
+        # Fallback: filter predictions to exclude unknowns
+        SA = S * A
+        cm = np.zeros((SA, SA), dtype=int)
+        for pred_z, true_z, _, _ in predictions:
+            if -1 in pred_z or -1 in true_z:
+                continue
+            idx_pred = pred_z[0] * A + pred_z[1]
+            idx_true = true_z[0] * A + true_z[1]
+            cm[idx_true, idx_pred] += 1
     fig = plot_confusion_matrix(cm, labels, output_path=output_dir / "confusion_matrix.png")
     if fig:
         figs['confusion_matrix'] = fig
-    
+
+    # --- Filter predictions for other plots (exclude unknowns) ---
+    filtered_predictions = [p for p in predictions if -1 not in p[0] and -1 not in p[1]]
+
     # Plot 2: TTE histogram
-    fig = plot_time_to_hit_histogram(predictions, fps=fps, stride_frames=stride_frames, output_path=output_dir / "tte_histogram.png")
+    fig = plot_time_to_hit_histogram(filtered_predictions, fps=fps, stride_frames=stride_frames, output_path=output_dir / "tte_histogram.png")
     if fig:
         figs['tte_histogram'] = fig
-    
-    # Plot 3: Cumulative hit rate
-    fig = plot_cumulative_hit_rate(predictions, fps=fps, stride_frames=stride_frames, output_path=output_dir / "cumulative_hit_rate.png")
+
+    # Plot 3: Step-wise hit counts
+    horizon = max((tte for _, _, _, tte in filtered_predictions if tte is not None), default=10)
+    fig = plot_hits_per_horizon_step(filtered_predictions, horizon=horizon, fps=fps, stride_frames=stride_frames, output_path=output_dir / "hits_per_horizon_step.png")
     if fig:
-        figs['cumulative_hit_rate'] = fig
-    
+        figs["hits_per_horizon_step"] = fig
+
     # Plot 4: Hit/miss summary
-    fig = plot_hit_count_summary(predictions, output_path=output_dir / "hit_count_summary.png")
+    fig = plot_hit_count_summary(filtered_predictions, output_path=output_dir / "hit_count_summary.png")
     if fig:
         figs['hit_count_summary'] = fig
-    
+
     return figs
+
+
+def plot_hits_per_horizon_step(predictions, horizon, fps=25.0, stride_frames=10, output_path=None, figsize=(10, 6)):
+    """
+    Bar chart showing number of hits at each time step within the horizon.
+
+    Parameters
+    predictions : list of tuples
+        Each tuple is (pred_z, true_z, hit_h, tte_steps)
+    horizon : int
+        Maximum horizon (H)
+    fps : float
+        Frame rate
+    stride_frames : int
+        Frames per step
+    """
+
+    # Initialize count array for steps 1..H
+    hit_counts = np.zeros(horizon, dtype=int)
+
+    for _, _, hit_h, tte in predictions:
+        if hit_h and tte is not None and 1 <= tte <= horizon:
+            hit_counts[tte - 1] += 1
+
+    if hit_counts.sum() == 0:
+        print("[visualize] No hits found, cannot plot step-wise hit counts")
+        return None
+
+    delta_t = stride_frames / fps
+    time_labels = [(i + 1) * delta_t for i in range(horizon)]
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    bars = ax.bar(
+        range(1, horizon + 1),
+        hit_counts,
+        color="steelblue",
+        edgecolor="black",
+        alpha=0.8
+    )
+
+    ax.set_xlabel("Prediction Horizon Step", fontsize=12)
+    ax.set_ylabel("Number of Hits", fontsize=12)
+    ax.set_title("Number of Hits at Each Horizon Step", fontsize=14, fontweight="bold")
+
+    ax.set_xticks(range(1, horizon + 1))
+    ax.grid(True, axis="y", alpha=0.3)
+
+    # Add count labels on top
+    for bar, count in zip(bars, hit_counts):
+        if count > 0:
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height(),
+                str(count),
+                ha="center",
+                va="bottom",
+                fontsize=10
+            )
+
+    plt.tight_layout()
+
+    if output_path:
+        fig.savefig(output_path, dpi=300, bbox_inches="tight")
+        print(f"[visualize] Saved horizon hit count plot to {output_path}")
+
+    return fig

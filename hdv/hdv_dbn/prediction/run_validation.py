@@ -110,7 +110,7 @@ def main():
     model = HDVDbnModel(trainer) # Wrap the trainer as a generative model
     print(f"[run_validation] Model: S={model.num_styles}, A={model.num_actions}\n")
     
-    validator = ValidationStep(model, config) # stores handles and copies S and A from the model.
+    validator = ValidationStep(model, config) # Creates an evaluator instance holding the model + config.
     metrics, all_predictions = validator.evaluate(trajectories) # actual filtering + prediction loop, returns metrics AND predictions
     print(f"[run_validation] Collected {len(all_predictions)} total predictions from single evaluation pass\n")
     
@@ -144,6 +144,7 @@ def main():
     A = model.num_actions
     semantic_labels = load_semantic_labels_from_yaml(semantic_map_path, S, A)
 
+    # Pass metrics to visualization for correct confusion matrix
     figs = visualize_all_metrics(
         predictions=all_predictions,
         output_dir=out_dir,
@@ -151,16 +152,13 @@ def main():
         A=A,
         labels=semantic_labels,
         fps=config.fps,
-        stride_frames=config.stride_frames
+        stride_frames=config.stride_frames,
+        metrics=metrics
     )
     print(f"[run_validation] Generated {len(figs)} visualization plots\n")
     
     print(f"{'='*70}")
-    print("Visualization plots saved to:")
-    print(f"  - {out_dir / 'tte_histogram.png'}")
-    print(f"  - {out_dir / 'cumulative_hit_rate.png'}")
-    print(f"  - {out_dir / 'hit_count_summary.png'}")
-    print(f"  - {out_dir / 'confusion_matrix.png'}")
+    print("VALIDATION COMPLETE")
     print(f"{'='*70}\n")
 
 

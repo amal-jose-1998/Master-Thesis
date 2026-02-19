@@ -1,5 +1,5 @@
-from .filtering import BayesFilter, StructuredDBNFilter, BeliefState
-from .model_interface import GenerativeModel, HDVDbnModel
+from .filtering import StructuredDBNFilter, BeliefState
+from .model_interface import HDVDbnModel
 from .online_predictor import OnlinePredictor, PredictionOutput
 from .metrics import (
     JointStateMetrics,
@@ -10,20 +10,18 @@ from .metrics import (
 from .validate import ValidationStep, TrajectoryData, ValidationConfig
 from .visualize_metrics import (
     visualize_all_metrics,
-    plot_hit_rate_vs_horizon,
     plot_time_to_hit_histogram,
     plot_cumulative_hit_rate,
     plot_hit_count_summary,
+    plot_confusion_matrix
 )
 
 __all__ = [
     # Filtering (core algorithm)
-    "BayesFilter",
     "StructuredDBNFilter",
     "BeliefState",
     
     # Model interface (model-agnostic)
-    "GenerativeModel",
     "HDVDbnModel",
     
     # Online prediction (streaming)
@@ -43,8 +41,8 @@ __all__ = [
     
     # Visualization
     "visualize_all_metrics",
-    "plot_hit_rate_vs_horizon",
     "plot_time_to_hit_histogram",
     "plot_cumulative_hit_rate",
     "plot_hit_count_summary",
+    "plot_confusion_matrix",
 ]
