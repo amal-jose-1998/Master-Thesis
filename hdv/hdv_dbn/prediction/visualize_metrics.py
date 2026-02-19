@@ -1,94 +1,43 @@
-"""
-Visualization utilities for validation metrics (Hit@H and TTE).
-Replaces confusion matrix visualization with more informative graphs.
-"""
-
+"""Visualization utilities for validation metrics (Hit@H and TTE)."""
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
-from typing import List, Tuple, Dict
+import seaborn as sns
 
-
-def plot_hit_rate_vs_horizon(
-    predictions: List[Tuple],
-    max_horizon: int = None,
-    output_path: Path = None,
-    figsize: Tuple[int, int] = (10, 6)
-) -> plt.Figure:
+def plot_confusion_matrix(cm, labels, title="Confusion Matrix", output_path=None, figsize=(12, 10)):
     """
-    Plot hit rate as a function of horizon length.
-    
-    For each measured horizon H (1 to max_H), shows what % of predictions
-    "hit" (appear at least once) within H steps.
-    
+    Plot a confusion matrix with semantic labels.
+
     Parameters
-    predictions : list of tuples
-        Each tuple is (pred_z, true_z, hit_h, tte_steps) from ValidationStep.
-    max_horizon : int, optional
-        Maximum horizon to compute (default: longest tte_steps in data).
+    cm : np.ndarray
+        Confusion matrix of shape (N, N).
+    labels : list of str
+        Semantic labels for each class (length N).
+    title : str
+        Plot title.
     output_path : Path, optional
         If provided, saves figure to this path.
     figsize : tuple
-        Figure size (width, height) in inches.
-    
+        Figure size.
     Returns
     fig : matplotlib.figure.Figure
     """
-    
-    # Extract TTE steps, excluding misses
-    tte_list = [tte for _, _, _, tte in predictions if tte is not None]
-    
-    if not tte_list:
-        print("[visualize] No hits found, cannot plot hit rate vs horizon")
-        return None
-    
-    if max_horizon is None:
-        max_horizon = max(tte_list)
-    
-    horizons = np.arange(1, max_horizon + 1)
-    hit_rates = []
-    hit_counts = []
-    
-    total_predictions = len(predictions)
-    
-    for h in horizons:
-        # Count how many predictions hit within horizon h
-        hits_at_h = sum(1 for _, _, _, tte in predictions if tte is not None and tte <= h)
-        hit_rates.append(hits_at_h / total_predictions)
-        hit_counts.append(hits_at_h)
-    
     fig, ax = plt.subplots(figsize=figsize)
-    ax.plot(horizons, hit_rates, 'o-', linewidth=2, markersize=6, color='steelblue')
-    ax.set_xlabel('Horizon (steps)', fontsize=12)
-    ax.set_ylabel('Hit Rate', fontsize=12)
-    ax.set_title('Prediction Hit Rate vs Horizon Length', fontsize=14, fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.set_ylim([0, 1.05])
-    
-    # Add count annotations
-    for h, rate, count in zip(horizons[::max(1, len(horizons)//5)], 
-                               hit_rates[::max(1, len(horizons)//5)],
-                               hit_counts[::max(1, len(horizons)//5)]):
-        ax.annotate(f'{count}', xy=(h, rate), xytext=(0, 5), 
-                   textcoords='offset points', ha='center', fontsize=9)
-    
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=labels, yticklabels=labels, ax=ax, cbar=True, linewidths=0.5)
+    ax.set_xlabel('Predicted', fontsize=12)
+    ax.set_ylabel('True', fontsize=12)
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    plt.xticks(rotation=45, ha='right', fontsize=10)
+    plt.yticks(rotation=0, fontsize=10)
     plt.tight_layout()
-    
     if output_path:
         fig.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"[visualize] Saved hit rate vs horizon to {output_path}")
-    
+        print(f"[visualize] Saved confusion matrix to {output_path}")
     return fig
 
 
-def plot_time_to_hit_histogram(
-    predictions: List[Tuple],
-    fps: float = 25.0,
-    stride_frames: int = 10,
-    bins: int = 15,
-    output_path: Path = None,
-    figsize: Tuple[int, int] = (10, 6)
-) -> plt.Figure:
+def plot_time_to_hit_histogram(predictions, fps=25.0, stride_frames=10, bins=10, output_path=None, figsize=(10, 6)):
     """
     Histogram of time-to-hit (TTE) for predictions that hit.
     
@@ -131,8 +80,7 @@ def plot_time_to_hit_histogram(
     
     # Add statistics
     stats_text = f'Mean: {np.mean(tte_seconds):.2f}s\nMedian: {np.median(tte_seconds):.2f}s\nN: {len(tte_seconds)}'
-    ax.text(0.98, 0.97, stats_text, transform=ax.transAxes, 
-           fontsize=10, verticalalignment='top', horizontalalignment='right',
+    ax.text(0.98, 0.97, stats_text, transform=ax.transAxes, fontsize=10, verticalalignment='top', horizontalalignment='right',
            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
     plt.tight_layout()
@@ -144,13 +92,7 @@ def plot_time_to_hit_histogram(
     return fig
 
 
-def plot_cumulative_hit_rate(
-    predictions: List[Tuple],
-    fps: float = 25.0,
-    stride_frames: int = 10,
-    output_path: Path = None,
-    figsize: Tuple[int, int] = (10, 6)
-) -> plt.Figure:
+def plot_cumulative_hit_rate(predictions, fps=25.0, stride_frames=10, output_path=None, figsize=(10, 6)):
     """
     Cumulative hit rate over time.
     
@@ -210,8 +152,7 @@ def plot_cumulative_hit_rate(
     
     # Add reference lines and stats
     hit_rate = len(tte_finite) / len(tte_list)
-    ax.axhline(y=hit_rate, color='red', linestyle='--', alpha=0.5, 
-              label=f'Overall Hit Rate: {hit_rate:.1%}')
+    ax.axhline(y=hit_rate, color='red', linestyle='--', alpha=0.5, label=f'Overall Hit Rate: {hit_rate:.1%}')
     ax.legend(loc='lower right', fontsize=10)
     
     plt.tight_layout()
@@ -223,11 +164,7 @@ def plot_cumulative_hit_rate(
     return fig
 
 
-def plot_hit_count_summary(
-    predictions: List[Tuple],
-    output_path: Path = None,
-    figsize: Tuple[int, int] = (8, 6)
-) -> plt.Figure:
+def plot_hit_count_summary(predictions, output_path=None, figsize=(8, 6)):
     """
     Simple bar chart showing hits vs misses.
     
@@ -244,8 +181,7 @@ def plot_hit_count_summary(
     misses = len(predictions) - hits
     
     fig, ax = plt.subplots(figsize=figsize)
-    bars = ax.bar(['Hits', 'Misses'], [hits, misses], color=['steelblue', 'coral'], 
-                   edgecolor='black', alpha=0.7)
+    bars = ax.bar(['Hits', 'Misses'], [hits, misses], color=['steelblue', 'coral'], edgecolor='black', alpha=0.7)
     
     ax.set_ylabel('Count', fontsize=12)
     ax.set_title('Overall Prediction Performance', fontsize=14, fontweight='bold')
@@ -255,8 +191,7 @@ def plot_hit_count_summary(
     for bar, count in zip(bars, [hits, misses]):
         height = bar.get_height()
         pct = count / len(predictions) * 100
-        ax.text(bar.get_x() + bar.get_width() / 2, height,
-               f'{int(count)}\n({pct:.1f}%)',
+        ax.text(bar.get_x() + bar.get_width() / 2, height, f'{int(count)}\n({pct:.1f}%)',
                ha='center', va='bottom', fontsize=11, fontweight='bold')
     
     plt.tight_layout()
@@ -268,13 +203,7 @@ def plot_hit_count_summary(
     return fig
 
 
-def visualize_all_metrics(
-    predictions: List[Tuple],
-    output_dir: Path,
-    fps: float = 25.0,
-    stride_frames: int = 10,
-    max_horizon: int = None
-) -> Dict[str, plt.Figure]:
+def visualize_all_metrics(*, predictions, output_dir, S, A, labels, fps=25.0, stride_frames=10):
     """
     Generate all visualization plots and save to output_dir.
     
@@ -283,12 +212,16 @@ def visualize_all_metrics(
         Each tuple is (pred_z, true_z, hit_h, tte_steps) from ValidationStep.predict_one_trajectory.
     output_dir : Path
         Directory to save plots.
+    S : int
+        Number of styles.
+    A : int
+        Number of actions.
+    labels : list of str
+        Semantic labels for each (s, a) pair.
     fps : float
         Frame rate for TTE conversion.
     stride_frames : int
         Stride in frames per step.
-    max_horizon : int, optional
-        Maximum horizon for hit rate vs horizon plot.
     
     Returns
     dict
@@ -300,40 +233,29 @@ def visualize_all_metrics(
     
     figs = {}
     
-    # Plot 1: Hit rate vs horizon
-    fig = plot_hit_rate_vs_horizon(
-        predictions,
-        max_horizon=max_horizon,
-        output_path=output_dir / "hit_rate_vs_horizon.png"
-    )
+    # Plot 1: Confusion matrix (computed from predictions)
+    SA = S * A
+    cm = np.zeros((SA, SA), dtype=int) # Empty confusion matrix. Rows are true labels, columns are predicted labels.
+    for pred_z, true_z, _, _ in predictions:
+        idx_pred = pred_z[0] * A + pred_z[1] # Turn predicted (s,a) into a single class index.
+        idx_true = true_z[0] * A + true_z[1] # Turn true (s,a) into a single class index.
+        cm[idx_true, idx_pred] += 1 # Increment the confusion matrix count for this true/pred pair.
+    fig = plot_confusion_matrix(cm, labels, output_path=output_dir / "confusion_matrix.png")
     if fig:
-        figs['hit_rate_vs_horizon'] = fig
+        figs['confusion_matrix'] = fig
     
     # Plot 2: TTE histogram
-    fig = plot_time_to_hit_histogram(
-        predictions,
-        fps=fps,
-        stride_frames=stride_frames,
-        output_path=output_dir / "tte_histogram.png"
-    )
+    fig = plot_time_to_hit_histogram(predictions, fps=fps, stride_frames=stride_frames, output_path=output_dir / "tte_histogram.png")
     if fig:
         figs['tte_histogram'] = fig
     
     # Plot 3: Cumulative hit rate
-    fig = plot_cumulative_hit_rate(
-        predictions,
-        fps=fps,
-        stride_frames=stride_frames,
-        output_path=output_dir / "cumulative_hit_rate.png"
-    )
+    fig = plot_cumulative_hit_rate(predictions, fps=fps, stride_frames=stride_frames, output_path=output_dir / "cumulative_hit_rate.png")
     if fig:
         figs['cumulative_hit_rate'] = fig
     
     # Plot 4: Hit/miss summary
-    fig = plot_hit_count_summary(
-        predictions,
-        output_path=output_dir / "hit_count_summary.png"
-    )
+    fig = plot_hit_count_summary(predictions, output_path=output_dir / "hit_count_summary.png")
     if fig:
         figs['hit_count_summary'] = fig
     

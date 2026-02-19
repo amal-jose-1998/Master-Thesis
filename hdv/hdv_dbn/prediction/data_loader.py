@@ -13,50 +13,40 @@ This module prepares the input in the right form for both:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, cast
 import numpy as np
 
 from ..evaluate_highd_dbn import load_test_sequences_from_experiment_split
 from ..utils.eval_common import scale_obs_masked
 from ..trainer import HDVTrainer
 from ..config import WINDOW_FEATURE_COLS, CONTINUOUS_FEATURES
+from ..datasets.dataset import TrajectorySequence
 
 
 @dataclass(frozen=True)
 class TestSequences:
     """
     Test-split sequences prepared for prediction-time evaluation.
-    This container intentionally provides both RAW and SCALED window features:
+    Provides RAW and SCALED window features:
         - RAW: used for rule-based GT labeling (thresholds in physical units)
         - SCALED: used for model inference (must match training-time scaling)
 
     Attributes
-    raw_seqs:
-        List of per-vehicle window sequences from the test split. Each sequence
-        is expected to follow `TrajectorySequence`, with fields:
-            - seq.obs: (T,F) RAW window features
-            - seq.obs_names: list[str] of length F
-            - seq.meta: optional dict with keys like "meta_class"
     raw_obs:
         List of RAW observation matrices (T,F).
     scaled_obs:
         List of SCALED observation matrices (T,F) in training feature space.
     feature_cols:
         The feature name list aligned with columns of raw_obs/scaled_obs.
-        This is taken from the sequences (and should match seq.obs_names).
-    split_payload:
-        Parsed split.json dictionary (contains W, stride, keys, etc.).
-    test_keys:
-        Set of vehicle keys ("recording_id:vehicle_id") for the test split.
+    trajectory_ids:
+        Trajectory identifier for each sequence (for logging/tracking).
     scaler_mode:
         Either "global" or "classwise" depending on checkpoint scalers.
     """
-    raw_seqs: List[object]
-    raw_obs: List[np.ndarray] # for rule labels
-    scaled_obs: List[np.ndarray] # for model inference
+    raw_obs: List[np.ndarray]
+    scaled_obs: List[np.ndarray]
     feature_cols: List[str]
-    split_payload: dict # contents of split.json
-    test_keys: set # set of "recording:vehicle" strings.
+    trajectory_ids: List[str]
     scaler_mode: str
 
 def _get_meta_class(seq):
@@ -97,7 +87,8 @@ def load_test_data_for_prediction(*, exp_dir, data_root, checkpoint_name="final.
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
     # 1) Load sequences (split.json + window cache)
-    raw_seqs, feature_cols, split_payload, test_keys = load_test_sequences_from_experiment_split(exp_dir=exp_dir, data_root=data_root)  # feature_cols aligns with seq.obs columns
+    raw_seqs, feature_cols, _, _ = load_test_sequences_from_experiment_split(exp_dir=exp_dir, data_root=data_root)  # feature_cols aligns with seq.obs columns
+    # Note: split_payload and test_keys discarded (not needed for validation)
     
     feature_cols = list(feature_cols) # Verify feature column ordering matches config
     if list(feature_cols) != list(WINDOW_FEATURE_COLS):
@@ -116,11 +107,11 @@ def load_test_data_for_prediction(*, exp_dir, data_root, checkpoint_name="final.
         )
 
     # 2) Load checkpoint to get scaler + model params
-    trainer = HDVTrainer.load(ckpt_path)
+    trainer: HDVTrainer = HDVTrainer.load(ckpt_path)
 
     # 3) Build scale indices 
     cont_set = set(CONTINUOUS_FEATURES)
-    scale_idx = np.array([i for i, name in enumerate(feature_cols) if name in cont_set], dtype=np.int64)
+    scale_idx = np.array([i for i, name in enumerate(feature_cols) if name in cont_set], dtype=np.int64) # indices of only CONTINUOUS_FEATURES. (Binary flags etc. remain unscaled.)
 
     # 4) Decide scaler mode from checkpoint contents.
     is_classwise = isinstance(trainer.scaler_mean, dict) and isinstance(trainer.scaler_std, dict)
@@ -128,9 +119,16 @@ def load_test_data_for_prediction(*, exp_dir, data_root, checkpoint_name="final.
 
     raw_obs = []
     scaled_obs = []
+    trajectory_ids = []
 
-    for seq in raw_seqs: # For each test sequence: store RAW and compute SCALED
-        obs_raw = np.asarray(seq.obs, dtype=np.float64)
+    # For each test sequence in raw_seqs: store RAW and compute SCALED
+    raw_seqs_typed: List[TrajectorySequence] = cast(List[TrajectorySequence], raw_seqs)
+    for seq in raw_seqs_typed: 
+        # Create trajectory ID from recording_id and vehicle_id
+        traj_id = f"{seq.recording_id}:{seq.vehicle_id}"
+        trajectory_ids.append(str(traj_id))
+        
+        obs_raw = np.asarray(seq.obs, dtype=np.float64) # shape (T,F)
         if obs_raw.ndim != 2:
             raise ValueError(f"Expected seq.obs to be (T,F), got {obs_raw.shape}")
         if obs_raw.shape[1] != len(feature_cols):
@@ -138,21 +136,23 @@ def load_test_data_for_prediction(*, exp_dir, data_root, checkpoint_name="final.
                 f"Feature dimension mismatch: seq.obs has F={obs_raw.shape[1]}, "
                 f"but feature_cols has {len(feature_cols)}"
             )
-
         raw_obs.append(obs_raw)
-
+        
+        # scales with either global or classwise scalers
         if is_classwise:
             cls = _get_meta_class(seq)
             if cls is None:
                 raise AttributeError(
                     "Classwise scaling enabled, but seq.meta['meta_class'] is missing."
                 )
-            if cls not in trainer.scaler_mean or cls not in trainer.scaler_std:
+            scaler_mean_dict = cast(dict, trainer.scaler_mean)
+            scaler_std_dict = cast(dict, trainer.scaler_std)
+            if cls not in scaler_mean_dict or cls not in scaler_std_dict:
                 raise KeyError(
                     f"meta_class='{cls}' missing in checkpoint scalers. "
-                    f"Available: {sorted(trainer.scaler_mean.keys())}"
+                    f"Available: {sorted(str(k) for k in scaler_mean_dict.keys())}"
                 )
-            obs_scaled = scale_obs_masked(obs_raw, trainer.scaler_mean[cls], trainer.scaler_std[cls], scale_idx)
+            obs_scaled = scale_obs_masked(obs_raw, scaler_mean_dict[cls], scaler_std_dict[cls], scale_idx)
         else:
             if trainer.scaler_mean is None or trainer.scaler_std is None:
                 raise RuntimeError("Checkpoint missing global scaler_mean/std.")
@@ -161,11 +161,9 @@ def load_test_data_for_prediction(*, exp_dir, data_root, checkpoint_name="final.
         scaled_obs.append(obs_scaled.astype(np.float32, copy=False))
 
     return trainer, TestSequences(
-        raw_seqs=raw_seqs,
         raw_obs=raw_obs,
         scaled_obs=scaled_obs,
         feature_cols=feature_cols,
-        split_payload=split_payload,
-        test_keys=test_keys,
+        trajectory_ids=trajectory_ids,
         scaler_mode=scaler_mode,
     )

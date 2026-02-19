@@ -2,7 +2,7 @@ from .filtering import BayesFilter, StructuredDBNFilter, BeliefState
 from .model_interface import GenerativeModel, HDVDbnModel
 from .online_predictor import OnlinePredictor, PredictionOutput
 from .metrics import (
-    ExactAccuracy,
+    JointStateMetrics,
     HitAtHorizon,
     TimeToEvent,
     MetricsAccumulator,
@@ -31,7 +31,7 @@ __all__ = [
     "PredictionOutput",
     
     # Metrics (evaluation)
-    "ExactAccuracy",
+    "JointStateMetrics",
     "HitAtHorizon",
     "TimeToEvent",
     "MetricsAccumulator",

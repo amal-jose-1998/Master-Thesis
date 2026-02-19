@@ -13,12 +13,14 @@ End-to-end validation script.
 from pathlib import Path
 import numpy as np
 import sys
+import json
 
 try:
     from . import TrajectoryData, HDVDbnModel, ValidationStep, ValidationConfig
     from .data_loader import load_test_data_for_prediction
     from .apply_gt_labels import compute_gt_latents, z_to_sa
     from .visualize_metrics import visualize_all_metrics
+    from .semantic_label_utils import load_semantic_labels_from_yaml
 
 except ImportError:
     project_root = Path(__file__).resolve().parents[3]
@@ -30,12 +32,14 @@ except ImportError:
     from hdv.hdv_dbn.prediction.data_loader import load_test_data_for_prediction
     from hdv.hdv_dbn.prediction.apply_gt_labels import compute_gt_latents, z_to_sa
     from hdv.hdv_dbn.prediction.visualize_metrics import visualize_all_metrics
+    from hdv.hdv_dbn.prediction.semantic_label_utils import load_semantic_labels_from_yaml
 
 
 def main():
-    script_dir = Path(__file__).parent
-    workspace_root = script_dir.parent.parent.parent
+    script_dir = Path(__file__).parent # Directory containing run_validation.py.
+    workspace_root = script_dir.parent.parent.parent # “workspace root” that contains hdv/.
     
+    # Construct paths
     data_root = workspace_root / "hdv" / "data" / "highd"
     exp_dir = workspace_root / "hdv" / "models" / "main-model-sticky_S2_A4_hierarchical"
     checkpoint_path = exp_dir / "final.npz"
@@ -47,41 +51,38 @@ def main():
     print(f"[run_validation] Checkpoint: {checkpoint_path}\n")
     
     # Step 1: Load test data and trainer
-    print("[run_validation] Loading test sequences from split.json...")
+    print("\n[run_validation] Loading test sequences from split.json...")
     trainer, test_data = load_test_data_for_prediction(
         exp_dir=exp_dir,
         data_root=data_root,
         checkpoint_name="final.npz"
     )
-    print(f"[run_validation] Loaded {len(test_data.raw_seqs)} test sequences")
+    print(f"\n[run_validation] Loaded {len(test_data.trajectory_ids)} test sequences")
     print(f"[run_validation] Feature columns: {test_data.feature_cols}")
     print(f"[run_validation] Scaler mode: {test_data.scaler_mode}\n")
     
-    # Step 2: Convert to TrajectoryData objects
-    print("[run_validation] Converting sequences to TrajectoryData...")
+    # Step 2: Convert each test sequence into a TrajectoryData object
+    print("\n[run_validation] Converting sequences to TrajectoryData...")
     trajectories = []
     
     A = trainer.A  # Number of actions
     
-    for i, (raw_seq, scaled_obs) in enumerate(zip(test_data.raw_seqs, test_data.scaled_obs)): # Iterate over raw sequences and corresponding scaled observations
-        traj_id = test_data.raw_seqs[i].__dict__.get("trajectory_id", None) or f"seq_{i:03d}" # Use trajectory_id if available, else fallback to seq_{i:03d}
-        
+    for i, (traj_id, scaled_obs, raw_obs) in enumerate(zip(test_data.trajectory_ids, test_data.scaled_obs, test_data.raw_obs)): # iterate over each test vehicle trajectory
         # Apply rule-based ground truth labels (use raw observations for physical-unit thresholds)
-        raw_obs = test_data.raw_obs[i]
-        z_labels = compute_gt_latents(
+        z_labels = compute_gt_latents( # shape: (T,); array of joint labels z using raw features + thresholds.
             obs_seq=raw_obs,
             feature_cols=test_data.feature_cols,
             thr=None,  # Use default RuleThresholds
             A=A,
             debug=False, 
-            fill_unknown="none"
+            fill_unknown="none" # UNKNOWN windows stay -1.
         )
         
-        # Convert z to (s, a) pairs for metrics and confusion matrix indexing.
+        # Converts each joint label z to (s, a) pairs for metrics 
         latents_gt = np.array(
             [z_to_sa(z, A) for z in z_labels],
             dtype=np.int32
-        )
+        ) # if z is unknown (-1), z_to_sa returns (-1,-1)
         
         # For each test trajectory, creates a clean evaluation object
         traj = TrajectoryData(
@@ -92,35 +93,28 @@ def main():
         trajectories.append(traj)
         
         if (i + 1) % 10 == 0:
-            print(f"  → Processed {i + 1}/{len(test_data.raw_seqs)} sequences")
+            print(f"  -> Processed {i + 1}/{len(test_data.trajectory_ids)} sequences")
     
     print(f"[run_validation] Created {len(trajectories)} TrajectoryData objects\n")
     
     # Step 3: Run validation (prediction + metric computation).
     print("[run_validation] Running validation...")
     config = ValidationConfig(
-        warmup_steps=10,
+        warmup_steps=5,
         horizon=10,
         fps=25.0,
         stride_frames=10,
-        skip_partial_horizons=True
+        skip_partial_horizons=True # don’t score near the end if we can’t see H future steps
     )
     
     model = HDVDbnModel(trainer) # Wrap the trainer as a generative model
     print(f"[run_validation] Model: S={model.num_styles}, A={model.num_actions}\n")
     
     validator = ValidationStep(model, config) # stores handles and copies S and A from the model.
-    metrics = validator.evaluate(trajectories) # actual filtering + prediction loop
+    metrics, all_predictions = validator.evaluate(trajectories) # actual filtering + prediction loop, returns metrics AND predictions
+    print(f"[run_validation] Collected {len(all_predictions)} total predictions from single evaluation pass\n")
     
-    # Step 4: Collect all predictions for visualization
-    print("[run_validation] Collecting predictions for visualization...")
-    all_predictions = []
-    for i, traj in enumerate(trajectories):
-        predictions = validator.predict_one_trajectory(traj)
-        all_predictions.extend(predictions)
-    print(f"[run_validation] Collected {len(all_predictions)} total predictions")
-    
-    # Step 5: Print summary results
+    # Step 4: Print summary results
     summary = metrics.summary(S=model.num_styles, A=model.num_actions)
     
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -138,28 +132,35 @@ def main():
     print(f"Hit Rate:                 {summary['num_hits'] / summary['num_total']:.1%}")
     print(f"{'='*70}\n")
     
-    # Step 6: Save summary and generate visualizations
-    import json
+    # Step 5: Save summary and generate visualizations
     summary_path = out_dir / "validation_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2))
     print(f"[run_validation] Saved summary to {summary_path}\n")
     
     print("[run_validation] Generating visualization plots...")
+    # Load semantic labels from semantic_map.yaml for this experiment
+    semantic_map_path = exp_dir / "semantic_map.yaml"
+    S = model.num_styles
+    A = model.num_actions
+    semantic_labels = load_semantic_labels_from_yaml(semantic_map_path, S, A)
+
     figs = visualize_all_metrics(
-        all_predictions,
+        predictions=all_predictions,
         output_dir=out_dir,
+        S=S,
+        A=A,
+        labels=semantic_labels,
         fps=config.fps,
-        stride_frames=config.stride_frames,
-        max_horizon=20
+        stride_frames=config.stride_frames
     )
     print(f"[run_validation] Generated {len(figs)} visualization plots\n")
     
     print(f"{'='*70}")
     print("Visualization plots saved to:")
-    print(f"  - {out_dir / 'hit_rate_vs_horizon.png'}")
     print(f"  - {out_dir / 'tte_histogram.png'}")
     print(f"  - {out_dir / 'cumulative_hit_rate.png'}")
     print(f"  - {out_dir / 'hit_count_summary.png'}")
+    print(f"  - {out_dir / 'confusion_matrix.png'}")
     print(f"{'='*70}\n")
 
 

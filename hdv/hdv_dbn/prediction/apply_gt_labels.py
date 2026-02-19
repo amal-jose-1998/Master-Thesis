@@ -24,6 +24,14 @@ from tabulate import tabulate
 
 UNKNOWN_Z = -1
 
+EXP_DIR = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical"
+DATA_ROOT = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"  
+CHECKPOINT_NAME = "final.npz"
+SEMANTIC_MAP = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/semantic_map.yaml"
+
+NUM_SEQS_SUMMARY = 10        # number of sequences to summarize in the final table output
+DETAIL_FIRST_N = 10          # number of sequences to show detailed per-sequence results for 
+
 # -----------------------------
 # (s,a) <-> z
 # -----------------------------
@@ -240,7 +248,7 @@ class RuleThresholds:
 # -----------------------------
 # Label one window
 # -----------------------------
-def label_one_window_z(obs_t, feature_cols, thr, A=4, debug=False):
+def label_one_window_z(obs_t, feature_cols, thr: RuleThresholds, A=4, debug=False):
     """
     Assign a joint latent label z to a single window feature vector using rule thresholds.
 
@@ -558,13 +566,6 @@ def _sa_semantic_name(sem_map, s, a):
         return "-"
     return "-"
 
-EXP_DIR = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical"
-DATA_ROOT = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"  
-CHECKPOINT_NAME = "final.npz"
-SEMANTIC_MAP = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/semantic_map.yaml"
-
-NUM_SEQS_SUMMARY = 10
-DETAIL_FIRST_N = 10          # print detailed tables for first N trajectories
 
 def main():
     try:

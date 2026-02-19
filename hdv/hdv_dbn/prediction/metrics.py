@@ -1,25 +1,20 @@
 """
 Prediction evaluation metrics decoupled from filtering logic (bookkeeping + reporting).
-
 Implements:
   Exact accuracy (1-step confusion matrix)
   Hit@H (target appears within horizon)
   Time-to-Event (latency to first match, in seconds)
 """
-
 from dataclasses import dataclass, field
 from typing import List, Tuple
 import numpy as np
 
 
 @dataclass
-class ExactAccuracy:
+class JointStateMetrics:
     """
-    One-step prediction accuracy (confusion matrix).
-    
-    Compares predicted z_hat_{t+1} vs ground truth z_{t+1}.
+    One-step prediction accuracy (confusion matrix). Compares predicted z_hat_{t+1} vs ground truth z_{t+1}.
     """
-    
     true_labels: List[Tuple[int, int]] = field(default_factory=list)  # (s, a) pairs
     pred_labels: List[Tuple[int, int]] = field(default_factory=list)  # (s, a) pairs
     
@@ -30,7 +25,7 @@ class ExactAccuracy:
     
     def confusion_matrix(self, S, A):
         """
-        Compute confusion matrix for joint (S, A) states.
+        Builds a joint-state confusion matrix of size (S*A, S*A).
         
         Returns
         np.ndarray
@@ -39,10 +34,13 @@ class ExactAccuracy:
         """
         SA = S * A
         cm = np.zeros((SA, SA), dtype=np.int64)
+        # cm[i,j] counts how many times true joint state i was predicted as j.
         
-        for (s_pred, a_pred), (s_true, a_true) in zip(self.pred_labels, self.true_labels):
+        for (s_pred, a_pred), (s_true, a_true) in zip(self.pred_labels, self.true_labels): # Iterates aligned predicted/true pairs.
+            # Converts (s,a) pairs to joint indices in [0, S*A-1].
             idx_pred = s_pred * A + a_pred
             idx_true = s_true * A + a_true
+            # Increment the confusion matrix entry for this true/predicted pair.
             cm[idx_true, idx_pred] += 1
         
         return cm
@@ -54,6 +52,49 @@ class ExactAccuracy:
         correct = sum(p == t for p, t in zip(self.pred_labels, self.true_labels))
         return float(correct) / len(self.pred_labels)
 
+    def precision_recall_f1(self, S, A, average="macro"):
+        """
+        Compute precision, recall, and F1 score for each joint class, and macro/micro averages.
+        Args:
+            S: Number of s classes
+            A: Number of a classes
+            average: 'macro', 'micro', or None (per-class)
+        Returns:
+            precision, recall, f1: np.ndarray of shape (SA,) if average=None, else float
+        """
+        cm = self.confusion_matrix(S, A)
+        SA = S * A
+        # True Positives for each class: diagonal
+        tp = np.diag(cm)
+        # Predicted Positives for each class: sum over columns
+        pred_pos = np.sum(cm, axis=0)
+        # Actual Positives for each class: sum over rows
+        actual_pos = np.sum(cm, axis=1)
+        # Avoid division by zero
+        precision = np.divide(tp, pred_pos, out=np.zeros_like(tp, dtype=float), where=pred_pos!=0) # for each class, precision = TP / (TP + FP) = TP / predicted positives
+        recall = np.divide(tp, actual_pos, out=np.zeros_like(tp, dtype=float), where=actual_pos!=0) # for each class, recall = TP / (TP + FN) = TP / actual positives
+        f1 = np.divide(2 * precision * recall, precision + recall, out=np.zeros_like(tp, dtype=float), where=(precision+recall)!=0) # for each class, F1 = 2 * (precision * recall) / (precision + recall)
+
+        if average is None:
+            return precision, recall, f1
+        elif average == "macro":
+            # Macro: mean over classes
+            return np.mean(precision), np.mean(recall), np.mean(f1)
+        elif average == "micro":
+            # Micro: sum over all classes
+            total_tp = np.sum(tp)
+            total_pred_pos = np.sum(pred_pos)
+            total_actual_pos = np.sum(actual_pos)
+            micro_precision = total_tp / total_pred_pos if total_pred_pos > 0 else 0.0
+            micro_recall = total_tp / total_actual_pos if total_actual_pos > 0 else 0.0
+            if micro_precision + micro_recall == 0:
+                micro_f1 = 0.0
+            else:
+                micro_f1 = 2 * micro_precision * micro_recall / (micro_precision + micro_recall)
+            return micro_precision, micro_recall, micro_f1
+        else:
+            raise ValueError("average must be one of None, 'macro', or 'micro'")
+
 
 @dataclass
 class HitAtHorizon:
@@ -62,7 +103,7 @@ class HitAtHorizon:
       Hit@H(t) = 1[ ∃h ∈ {1, ..., H} : z_{t+h}^{GT} == z_hat_{t+1} ]
     """
     
-    hits: List[bool] = field(default_factory=list)
+    hits: List[bool] = field(default_factory=list) # Stores a boolean per scored timestep.
     
     def add(self, hit):
         """Record hit/miss for one trajectory."""
@@ -85,7 +126,7 @@ class HitAtHorizon:
 class TimeToEvent:
     """
     Time (in seconds) until predicted event appears.
-      h*(t) = min{ h ∈ {1, ..., H} : z_{t+h}^{GT} == z_hat_{t+1} }
+      First match index: h*(t) = min{ h ∈ {1, ..., H} : z_{t+h}^{GT} == z_hat_{t+1} }
       TTE(t) = h*(t) if hit else ∞
       TTE_sec(t) = TTE(t) * Δt where Δt = r / fps
     
@@ -103,7 +144,7 @@ class TimeToEvent:
     @property
     def delta_t(self):
         """Window step duration in seconds."""
-        return self.stride_frames / self.fps
+        return self.stride_frames / self.fps # With 25 fps and stride 10 frames: 0.4 s per step.
     
     def add(self, time_to_hit_steps):
         """
@@ -113,7 +154,7 @@ class TimeToEvent:
         time_to_hit_steps : int or None
             Number of steps until hit (1-indexed), or None if no hit.
         """
-        if time_to_hit_steps is None:
+        if time_to_hit_steps is None: # No hit within horizon, record as infinity.
             self.times.append(np.inf)
         else:
             # Convert steps to seconds
@@ -121,21 +162,21 @@ class TimeToEvent:
     
     def mean_tte_hits_only(self):
         """Mean TTE over hits only (excludes infinity's)."""
-        hits = [t for t in self.times if np.isfinite(t)]
+        hits = [t for t in self.times if np.isfinite(t)] # Filters out misses (infinity) to compute mean TTE over hits only.
         if not hits:
             return np.nan
         return np.mean(hits)
     
     def median_tte_hits_only(self) :
         """Median TTE over hits only."""
-        hits = [t for t in self.times if np.isfinite(t)]
+        hits = [t for t in self.times if np.isfinite(t)] # Filters out misses (infinity) to compute median TTE over hits only.
         if not hits:
             return np.nan
         return np.median(hits)
     
     def percentile_tte(self, q):
         """Percentile TTE over hits only (q in [0, 100])."""
-        hits = [t for t in self.times if np.isfinite(t)]
+        hits = [t for t in self.times if np.isfinite(t)] # Filters out misses (infinity) to compute percentile TTE over hits only.
         if not hits:
             return np.nan
         return np.percentile(hits, q)
@@ -143,39 +184,42 @@ class TimeToEvent:
     def hit_count(self):
         """(num_hits, total)."""
         total = len(self.times)
-        hits = sum(np.isfinite(t) for t in self.times)
+        hits = sum(np.isfinite(t) for t in self.times) # Count only finite times as hits
         return (hits, total)
 
 
 @dataclass
 class MetricsAccumulator:
-    """Combines all three metrics for batch evaluation."""
-    exact: ExactAccuracy = field(default_factory=ExactAccuracy)
+    """Bundles the three metrics into a single object."""
+    exact: JointStateMetrics = field(default_factory=JointStateMetrics)
     hit_h: HitAtHorizon = field(default_factory=HitAtHorizon)
     tte: TimeToEvent = field(default_factory=TimeToEvent)
     
     def summary(self, S, A):
-        n_exact = len(self.exact.pred_labels)
-        n_hit = len(self.hit_h.hits)
-        n_tte = len(self.tte.times)
+        n_exact = len(self.exact.pred_labels) # Total number of scored predictions (excluding unknown GT).
+        n_hit = len(self.hit_h.hits) # Should be the same as n_exact, since we add one hit/miss per scored prediction.
+        n_tte = len(self.tte.times) # Should also be the same as n_exact, since we add one TTE per scored prediction.
 
-        if not (n_exact == n_hit == n_tte):
+        if not (n_exact == n_hit == n_tte): # Ensures metrics were updated under identical conditions.
             raise RuntimeError(
                 f"Metric count mismatch: exact={n_exact}, hit={n_hit}, tte={n_tte}"
             )
 
-        num_hits, num_total_hit = self.hit_h.hit_count()
+        num_hits, _ = self.hit_h.hit_count()
+
+        # Compute macro-averaged precision, recall, F1
+        macro_precision, macro_recall, macro_f1 = self.exact.precision_recall_f1(S, A, average="macro")
 
         return {
-        "exact_accuracy": float(self.exact.accuracy()),
-        "hit_rate": float(self.hit_h.hit_rate()),
-        "mean_tte_sec": float(self.tte.mean_tte_hits_only()),
-        "median_tte_sec": float(self.tte.median_tte_hits_only()),
-        "p25_tte_sec": float(self.tte.percentile_tte(25)),
-        "p75_tte_sec": float(self.tte.percentile_tte(75)),
-        "num_hits": int(num_hits),
-        "num_total": int(n_exact),         
-        "num_total_hit": int(num_total_hit),
-        "num_total_exact": int(n_exact),
-        "num_total_tte": int(n_tte),
-    }
+            "exact_accuracy": float(self.exact.accuracy()),
+            "macro_precision": float(macro_precision),
+            "macro_recall": float(macro_recall),
+            "macro_f1": float(macro_f1),
+            "hit_rate": float(self.hit_h.hit_rate()),
+            "mean_tte_sec": float(self.tte.mean_tte_hits_only()),
+            "median_tte_sec": float(self.tte.median_tte_hits_only()),
+            "p25_tte_sec": float(self.tte.percentile_tte(25)),
+            "p75_tte_sec": float(self.tte.percentile_tte(75)),
+            "num_hits": int(num_hits),
+            "num_total": int(n_exact),
+        }
