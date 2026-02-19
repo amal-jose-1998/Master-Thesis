@@ -203,7 +203,7 @@ def plot_hit_count_summary(predictions, output_path=None, figsize=(8, 6)):
     return fig
 
 
-def visualize_all_metrics(*, predictions, output_dir, S, A, labels, fps=25.0, stride_frames=10):
+def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps=25.0, stride_frames=10):
     """
     Generate all visualization plots and save to output_dir.
     
@@ -234,26 +234,8 @@ def visualize_all_metrics(*, predictions, output_dir, S, A, labels, fps=25.0, st
     figs = {}
 
     # --- Plot 1: Confusion matrix (use metrics.exact for correctness) ---
-    metrics = None
-    # Accept metrics as a kwarg if present (for backward compatibility)
-    import inspect
-    if 'metrics' in inspect.signature(visualize_all_metrics).parameters:
-        metrics = locals().get('metrics', None)
-    if metrics is None:
-        # Try to get from globals (for patching in run_validation)
-        metrics = globals().get('metrics', None)
-    if metrics is not None and hasattr(metrics, 'exact'):
-        cm = metrics.exact.confusion_matrix(S, A)
-    else:
-        # Fallback: filter predictions to exclude unknowns
-        SA = S * A
-        cm = np.zeros((SA, SA), dtype=int)
-        for pred_z, true_z, _, _ in predictions:
-            if -1 in pred_z or -1 in true_z:
-                continue
-            idx_pred = pred_z[0] * A + pred_z[1]
-            idx_true = true_z[0] * A + true_z[1]
-            cm[idx_true, idx_pred] += 1
+    cm = metrics.exact.confusion_matrix(S, A)
+
     fig = plot_confusion_matrix(cm, labels, output_path=output_dir / "confusion_matrix.png")
     if fig:
         figs['confusion_matrix'] = fig
