@@ -227,6 +227,11 @@ def _select_scaler_for_seq(trainer, seq):
 
 def compute_joint_semantics(*, obs_raw_seqs, gamma_sa_seqs, feature_cols, semantic_feature_cols, S, A):
     """
+    computes joint (style, action) semantics using weights derived from gamma_sa by using the formula: 
+        mean_sa = sum_t gamma_sa[t,s,a] * obs_raw[t] / sum_t gamma_sa[t,s,a]
+        var_sa = sum_t gamma_sa[t,s,a] * (obs_raw[t] - mean_sa)^2 / sum_t gamma_sa[t,s,a]
+    The final values are the average over all sequences in the split.
+    
     Returns:
       feat_names: list[str]
       means_sa: (S,A,F)
