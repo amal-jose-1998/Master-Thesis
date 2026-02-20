@@ -27,7 +27,7 @@ from hdv.hdv_dbn.datasets.highd.sequences import load_or_build_windowized
 # =============================================================================
 # USER SETTINGS 
 # =============================================================================
-EXP_DIR = Path("/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical").resolve()
+EXP_DIR = Path("/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_S1_A4_hierarchical").resolve()
 SPLIT = "train" # Which split to analyze: "train" | "val" | "test" | "all"
 
 # Histogram settings
