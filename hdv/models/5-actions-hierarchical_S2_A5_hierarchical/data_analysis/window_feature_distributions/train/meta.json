@@ -1,0 +1,15 @@
+{
+  "exp_dir": "/home/RUS_CIP/st184634/implementation/hdv/models/5-actions-hierarchical_S2_A5_hierarchical",
+  "split": "train",
+  "num_vehicle_keys": 35318,
+  "num_sequences": 50455,
+  "num_windows_total": 1717548,
+  "num_features": 43,
+  "W": 50,
+  "stride": 10,
+  "bins": 200,
+  "xlim_q": [
+    0.01,
+    0.99
+  ]
+}
