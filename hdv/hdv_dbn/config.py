@@ -141,9 +141,9 @@ class TrainingConfig:
 
     # Transition MAP priors (Dirichlet + stickiness)
     alpha_A_s: float = 0.01   # smoothing for style rows
-    kappa_A_s: float = 0.0    # extra self-transition mass for style (stickier)
+    kappa_A_s: float = 5.0    # extra self-transition mass for style (stickier)
     alpha_A_a: float = 0.01   # smoothing for action rows
-    kappa_A_a: float = 0.0     # extra self-transition mass for action (less sticky than style)
+    kappa_A_a: float = 1.0     # extra self-transition mass for action (less sticky than style)
 
     verbose: int = 1
     use_progress: bool = True
@@ -160,13 +160,13 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "5-actions-hierarchical"
+    wandb_run_name: Optional[str] = "5-actions-hierarchical-sticky"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
     dtype: Literal["float32", "float64"] = "float32"
 
-    cpd_init: Literal["uniform", "random", "sticky"] = "uniform"
+    cpd_init: Literal["uniform", "random", "sticky"] = "sticky"
     cpd_alpha: float = 1.0
     cpd_stay_style: float = 0.8
     cpd_seed: int = 123
@@ -341,7 +341,7 @@ SEM_FEATS_VALIDITY: List[str] = [
 @dataclass(frozen=True)
 class SemanticAnalysisConfig:
     # Paths (edit these)
-    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/5-actions-hierarchical_S2_A5_hierarchical/final.npz"
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/5-actions-hierarchical-sticky_S2_A5_hierarchical/final.npz"
     data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 
     # Speed/debug controls
