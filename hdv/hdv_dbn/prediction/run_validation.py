@@ -41,7 +41,7 @@ def main():
     
     # Construct paths
     data_root = workspace_root / "hdv" / "data" / "highd"
-    exp_dir = workspace_root / "hdv" / "models" / "main-model-sticky_S2_A4_hierarchical"
+    exp_dir = workspace_root / "hdv" / "models" / "3-actions-hierarchical_S2_A3_hierarchical"
     checkpoint_path = exp_dir / "final.npz"
     out_dir = exp_dir / "prediction"
     
