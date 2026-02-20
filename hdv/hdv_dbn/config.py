@@ -23,7 +23,7 @@ class DBNStates:
 DBN_STATES = DBNStates(
     driving_style=("style_0", "style_1",),
     #driving_style=("dummy",),
-    action=("action_0", "action_1", "action_2")
+    action=("action_0", "action_1", "action_2", "action_3", "action_4")
     #action=("dummy")
     )
 
@@ -160,7 +160,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "3-actions-hierarchical"
+    wandb_run_name: Optional[str] = "5-actions-hierarchical"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
