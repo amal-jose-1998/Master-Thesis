@@ -1,0 +1,205 @@
+label_rules:
+  unknown_z: -1
+  S: 2
+  A: 5
+
+  thresholds:
+    # -----------------------
+    # Lane change (only s0-a0)
+    # -----------------------
+    lc_flag_thresh: 0.02
+    # (Your lc means for s0-a0 are ~0.15; others are ~0)
+
+    # -----------------------
+    # Braking detection
+    # -----------------------
+    brake_ax_neg_frac: 0.90
+    brake_ax_last: -0.15
+
+    # Critical/tight braking (s0-a3 vs s1-a3 split)
+    # s1-a3 is much harsher: ax_last ~ -0.65, vx_slope ~ -0.026, low vx.
+    critical_brake_ax_last: -0.35
+    critical_brake_vx_slope: -0.015
+    critical_brake_vx_last_max: 20.0
+
+    # Tight interaction (for braking and dense following)
+    front_exists_gate: 0.80
+    interaction_thw_tight: 2.0
+    interaction_ttc_tight: 60.0
+    interaction_front_dx_close: 55.0
+
+    # -----------------------
+    # Acceleration detection
+    # -----------------------
+    acc_ax_pos_frac: 0.90
+
+    # s0 acceleration split: strong vs smooth/free-space
+    s0_strong_acc_ax_last: 0.18
+    s0_smooth_acc_ax_last: 0.06
+    s0_free_space_front_exists_max: 0.75
+    s0_free_space_front_dx_min: 70.0
+    s0_strong_acc_vx_slope_min: 0.007
+
+    # s1 acceleration split: constrained following accel vs stop-and-go pickup
+    s1_pickup_vx_last_max: 20.0
+    s1_pickup_jerk_x_p95_min: 0.20
+    s1_constrained_acc_front_exists_min: 0.90
+    s1_constrained_acc_ax_last_min: 0.04
+
+    # -----------------------
+    # Regulation / mild braking states
+    # -----------------------
+    mild_brake_ax_last_max: -0.02
+    mild_brake_ax_neg_frac_min: 0.55
+
+    # Open-gap regulation (s1-a2)
+    open_gap_front_exists_max: 0.50
+    open_gap_front_dx_min: 80.0
+
+    # Stable following (s0-a1)
+    stable_follow_vx_slope_abs_max: 0.006
+    stable_follow_ax_last_abs_max: 0.12
+
+  # Priority matters: we want the most "unique" patterns first.
+  priority:
+    - s0_a0_lane_change
+    - brake_then_split_critical_vs_tight_follow_brake
+    - acceleration_then_split_s0_strong_vs_s0_smooth
+    - s1_a4_stop_and_go_pickup
+    - s1_a1_constrained_following_acc
+    - s1_a2_open_gap_regulation
+    - s1_a0_brake_biased_regulation
+    - s0_a1_stable_following_regulation
+    - unknown
+
+  # -----------------------
+  # Helper definitions
+  # -----------------------
+  tight_interaction_definition:
+    all_of:
+      - "front_exists_frac >= front_exists_gate"
+      - any_of:
+          - "front_dx_min <= interaction_front_dx_close"
+          - "front_thw_last <= interaction_thw_tight"
+          - "front_ttc_min <= interaction_ttc_tight"
+
+  critical_brake_definition:
+    any_of:
+      - "ax_last <= critical_brake_ax_last"
+      - "vx_slope <= critical_brake_vx_slope"
+      - "vx_last <= critical_brake_vx_last_max"
+
+styles:
+  s0:
+    name: free_flow
+    description: Higher-speed, maneuver-capable regime with lane-change activity and structured accel/brake patterns.
+  s1:
+    name: interaction_dominant
+    description: Car-following / stop-and-go regime dominated by traffic constraints and reactive longitudinal control.
+
+actions_by_style:
+  s0:
+    a0:
+      name: lane_change
+      description: Lane-change / overtaking maneuver with elevated lateral dynamics; may include mixed longitudinal control.
+      condition:
+        any_of:
+          - "lc_left_present >= lc_flag_thresh"
+          - "lc_right_present >= lc_flag_thresh"
+
+    a1:
+      name: adaptive_follow_regulation
+      description: Stable following/regulation with small longitudinal corrections; leader typically present but not tight-critical.
+      condition:
+        all_of:
+          - "front_exists_frac >= front_exists_gate"
+          - "abs(vx_slope) <= stable_follow_vx_slope_abs_max"
+          - "abs(ax_last) <= stable_follow_ax_last_abs_max"
+          - "NOT tight_interaction"
+
+    a2:
+      name: strong_acceleration_speedup
+      description: Strong acceleration / speed-up; typically increases speed and tends to reduce closing pressure.
+      condition:
+        all_of:
+          - "ax_pos_frac >= acc_ax_pos_frac"
+          - "ax_last >= s0_strong_acc_ax_last"
+          - "vx_slope >= s0_strong_acc_vx_slope_min"
+
+    a3:
+      name: tight_interaction_braking
+      description: Sustained braking under tight lead-vehicle interaction (close gaps / increasing closing tendency).
+      condition:
+        all_of:
+          - "ax_neg_frac >= brake_ax_neg_frac"
+          - "ax_last <= brake_ax_last"
+          - "tight_interaction"
+          - "NOT critical_brake"
+
+    a4:
+      name: smooth_free_space_acceleration
+      description: Gentle acceleration in lower-pressure/free-space context (smoother than a2).
+      condition:
+        all_of:
+          - "ax_pos_frac >= acc_ax_pos_frac"
+          - "ax_last >= s0_smooth_acc_ax_last"
+          - any_of:
+              - "front_exists_frac <= s0_free_space_front_exists_max"
+              - "front_dx_min >= s0_free_space_front_dx_min"
+
+    a0:
+      name: strategic_lane_change
+      description: Lane-change / overtaking maneuver with elevated lateral dynamics; may include mixed longitudinal control.
+      condition:
+        any_of:
+          - "lc_left_present >= lc_flag_thresh"
+          - "lc_right_present >= lc_flag_thresh"
+        all_of:
+          - "abs(ay_last) > 0.02"
+          - "abs(vy_last) > 0.02"
+          - "abs(vy_slope) > 0.0005"
+          - "ay_pos_frac > 0.2 or ay_neg_frac > 0.2"
+          
+    a1:
+      name: constrained_following_acceleration
+      description: Acceleration while following in dense traffic; leader typically present (steady flow pickup).
+      condition:
+        all_of:
+          - "front_exists_frac >= s1_constrained_acc_front_exists_min"
+          - "ax_pos_frac >= 0.60"
+          - "ax_last >= s1_constrained_acc_ax_last_min"
+          - "vx_last > s1_pickup_vx_last_max"  # separates from stop-and-go pickup
+
+    a2:
+      name: open_gap_speed_regulation
+      description: Open-ahead / far-lead regulation; front often missing, speed maintained with mild corrections.
+      condition:
+        all_of:
+          - "front_exists_frac <= open_gap_front_exists_max"
+          - "front_dx_min >= open_gap_front_dx_min"
+
+    a3:
+      name: critical_braking_episode
+      description: Harsh braking episode (often low-speed) under tightening/critical interaction.
+      condition:
+        all_of:
+          - "ax_neg_frac >= brake_ax_neg_frac"
+          - "ax_last <= brake_ax_last"
+          - "front_exists_frac >= 0.70"  # allow some missing, but not open-gap
+          - "critical_brake"
+
+    a4:
+      name: stop_and_go_pickup_acceleration
+      description: Low-speed aggressive acceleration (stop-and-go pickup), often with tight lead and high jerk.
+      condition:
+        all_of:
+          - "front_exists_frac >= front_exists_gate"
+          - "vx_last <= s1_pickup_vx_last_max"
+          - "ax_pos_frac >= 0.60"
+          - "jerk_x_p95 >= s1_pickup_jerk_x_p95_min"
+
+other_cases:
+  unknown:
+    description: No condition matched; assign UNKNOWN_Z.
+    condition:
+      - "no_other_condition_matched"

@@ -24,10 +24,10 @@ from tabulate import tabulate
 
 UNKNOWN_Z = -1
 
-EXP_DIR = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical"
+EXP_DIR = r"/home/RUS_CIP/st184634/implementation/hdv/models/5-actions-hierarchical_S2_A5_hierarchical"
 DATA_ROOT = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"  
 CHECKPOINT_NAME = "final.npz"
-SEMANTIC_MAP = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/semantic_map.yaml"
+SEMANTIC_MAP = r"/home/RUS_CIP/st184634/implementation/hdv/models/5-actions-hierarchical_S2_A5_hierarchical/semantic_map.yaml"
 
 NUM_SEQS_SUMMARY = 10        # number of sequences to summarize in the final table output
 DETAIL_FIRST_N = 10          # number of sequences to show detailed per-sequence results for 
@@ -144,142 +144,112 @@ def _get(obs_t, idx, name):
 @dataclass(frozen=True)
 class RuleThresholds:
     """
-    Numeric thresholds used by the rule-based labeling logic.
+    Thresholds tuned for S2A5 map.
 
-    Attributes
-    lc_flag_thresh : float
-        Lane-change presence flag threshold (probability/indicator) for firing LC rule.
-    brake_ax_neg_frac : float
-        Minimum fraction of samples in the window with negative longitudinal accel
-        to consider the window "sustained braking".
-    brake_ax_last : float
-        Maximum allowed `ax_last` (more negative is stronger braking) to be considered braking.
-    tactical_brake_ax_last : float
-        Threshold to classify braking as "tactical/stronger" vs "mild".
-    tactical_brake_vx_slope : float
-        Additional tactical braking indicator using speed trend (negative slope).
-    tactical_brake_thw : float
-        Optional tactical braking indicator using time headway (smaller -> tighter).
-    tactical_brake_ttc : float
-        Optional tactical braking indicator using TTC (smaller -> higher urgency).
-    strong_acc_ax_pos_frac : float
-        Minimum fraction of positive accel samples to consider a window accel-dominant.
-    strong_acc_ax_last : float
-        Minimum `ax_last` to consider "strong acceleration".
-    constrained_acc_ax_pos_frac : float
-        Minimum positive accel fraction for "constrained acceleration".
-    constrained_acc_ax_last : float
-        Minimum `ax_last` for "constrained acceleration".
-    constrained_acc_front_exists : float
-        Minimum leader presence fraction to gate constrained acceleration.
-    free_flow_front_exists_max : float
-        Maximum leader presence fraction to consider free-flow (low interaction).
-    constrained_follow_front_exists : float
-        Minimum leader presence fraction to consider constrained following.
-    constrained_follow_vx_last_max : float
-        Maximum speed to consider constrained following (lower speeds imply congestion).
-    constrained_follow_jerk_min : float
-        Minimum jerk statistic to indicate stop-go / high variability following.
-    stable_follow_front_exists : float
-        Minimum leader presence fraction to consider stable following.
-    stable_follow_vx_slope_abs_max : float
-        Maximum absolute speed slope (near zero -> steady).
-    stable_follow_ax_last_abs_max : float
-        Maximum absolute accel value (near zero -> steady).
+    Notes on robustness:
+    - THW/TTC are only used when front_exists_frac is sufficiently high.
+    - front_dx_min is preferred for interaction tightness when available.
     """
-    # Lane change
-    lc_flag_thresh: float = 0.5
 
-    # Sustained braking
-    brake_ax_neg_frac: float = 0.90 # almost the whole window is braking
-    brake_ax_last: float = -0.15 # it sits between the mild braking mean (−0.154) and strong braking mean (−0.321), and safely away from near-zero following
+    # Lane change (s0-a0)
+    lc_flag_thresh: float = 0.02
 
-    # Split: tactical braking (s1/a3) vs mild braking (s0/a1)
-    tactical_brake_ax_last: float = -0.25  # Directly separating the two braking means
-    tactical_brake_vx_slope: float = -0.01 # sits between them and is within the global negative tail (p10 = −0.0137).
-    tactical_brake_thw: float = 2.0 # below it looks like the tighter tactical braking.
-    tactical_brake_ttc: float = 70.0
+    # Sustained braking (generic gate)
+    brake_ax_neg_frac: float = 0.90
+    brake_ax_last: float = -0.15
 
-    # interaction tightness gate (used outside braking too)
+    # Critical braking (s1-a3) vs non-critical tight braking (s0-a3)
+    critical_brake_ax_last: float = -0.35
+    critical_brake_vx_slope: float = -0.015
+    critical_brake_vx_last_max: float = 20.0
+
+    # Interaction tightness (for s0-a3 and other “tight” checks)
+    front_exists_gate: float = 0.80
     interaction_thw_tight: float = 2.0
     interaction_ttc_tight: float = 60.0
+    interaction_front_dx_close: float = 55.0  # smaller = closer lead
 
-    # Strong accel (s1/a0)
-    strong_acc_front_exists_min: float = 0.50
-    strong_acc_ax_pos_frac: float = 0.90 # isolates “accel-dominant window”
-    strong_acc_ax_last: float = 0.15 # clearly positive acceleration but not too extreme.
+    # Acceleration detection
+    acc_ax_pos_frac: float = 0.90
 
-    # Constrained accel (s0/a2)
-    constrained_acc_ax_pos_frac: float = 0.65 # above typical but not extreme tail.
-    constrained_acc_ax_last: float = 0.08 # positive enough to be accelerating
-    constrained_acc_front_exists: float = 0.80 # a strong “leader present” gate.
+    # s0 strong accel vs s0 smooth accel
+    s0_strong_acc_ax_last: float = 0.18
+    s0_strong_acc_vx_slope_min: float = 0.007
+    s0_smooth_acc_ax_last: float = 0.06
+    s0_free_space_front_exists_max: float = 0.75
+    s0_free_space_front_dx_min: float = 70.0
 
-    # Free-flow modulation (s0/a0)
-    free_flow_front_exists_max: float = 0.50 # <0.50 => low interaction.
+    # s1 accel split: constrained flow vs stop-and-go pickup
+    s1_constrained_acc_front_exists_min: float = 0.90
+    s1_constrained_acc_ax_last_min: float = 0.04
+    s1_constrained_acc_ax_pos_frac_min: float = 0.60
+    s1_pickup_vx_last_max: float = 20.0
+    s1_pickup_jerk_x_p95_min: float = 0.20
 
-    # Constrained following (s1/a2)
-    constrained_follow_front_exists: float = 0.80 # a strong “leader present” gate.
-    constrained_follow_vx_last_max: float = 21.0 # low speed
-    constrained_follow_jerk_min: float = 0.75 # sits between the “normal” cluster and the “high-jerk” cluster
+    # Brake-biased regulation (s1-a0) (mild braking, not sustained)
+    mild_brake_ax_last_max: float = -0.02
+    mild_brake_ax_neg_frac_min: float = 0.55
 
-    # Stable following (s0/a3)
-    stable_follow_front_exists: float = 0.80 # a strong “leader present” gate.
-    stable_follow_vx_slope_abs_max: float = 0.008 # approximately 2× the within-state std
-    stable_follow_ax_last_abs_max: float = 0.20 # approximately 1× the within-state std (since ax_last is noisier and overlaps more across states than vx_slope)
+    # Open-gap regulation (s1-a2)
+    open_gap_front_exists_max: float = 0.50
+    open_gap_front_dx_min: float = 80.0
+
+    # Stable/adaptive regulation (s0-a1)
+    stable_follow_vx_slope_abs_max: float = 0.006
+    stable_follow_ax_last_abs_max: float = 0.12
 
     @classmethod
     def from_dict(cls, d):
-        """
-        Create a RuleThresholds instance from a dict (parsed from YAML).
-        Unknown/missing keys fall back to dataclass defaults.
-        """
-        if not d: # If dict is empty/None, return defaults.
+        if not d:
             return cls()
         params = {}
-        for f in fields(cls): # Iterates over all dataclass fields defined in RuleThresholds
-            name = f.name # threshold key
-            if name in d: # If the dict provides a value:
-                try: # try converting to float
+        for f in fields(cls):
+            name = f.name
+            if name in d:
+                try:
                     params[name] = float(d[name])
-                except Exception: # else keep as-is
+                except Exception:
                     params[name] = d[name]
-        return cls(**params) # Construct a RuleThresholds object overriding only provided keys. Any missing keys stay at default values.
+        return cls(**params)
+
+# -----------------------------
+# Helper predicates
+# -----------------------------
+def _tight_interaction(front_exists_frac, front_dx_min, thw, ttc, thr: RuleThresholds):
+    if front_exists_frac < thr.front_exists_gate:
+        return False
+
+    tight = False
+    if front_dx_min is not None:
+        tight = tight or (front_dx_min <= thr.interaction_front_dx_close)
+    if thw is not None:
+        tight = tight or (thw <= thr.interaction_thw_tight)
+    if ttc is not None:
+        tight = tight or (ttc <= thr.interaction_ttc_tight)
+    return bool(tight)
+
+def _critical_brake(ax_last, vx_slope, vx_last, thr: RuleThresholds):
+    return (
+        (ax_last <= thr.critical_brake_ax_last)
+        or (vx_slope <= thr.critical_brake_vx_slope)
+        or (vx_last <= thr.critical_brake_vx_last_max)
+    )
 
 # -----------------------------
 # Label one window
 # -----------------------------
-def label_one_window_z(obs_t, feature_cols, thr: RuleThresholds, A=4, debug=False):
+def label_one_window_z(obs_t, feature_cols, thr: RuleThresholds, A=5, debug=False):
     """
-    Assign a joint latent label z to a single window feature vector using rule thresholds.
-
-    Parameters
-    obs_t : array-like of shape (D,)
-        Window feature vector at time/window index t.
-    feature_cols : Sequence[str]
-        Names for the D features, aligned with obs_t.
-    thr : RuleThresholds
-        Threshold configuration used by the rule set.
-    A : int, default=4
-        Number of actions per style. Used for (s,a)->z encoding.
-
-    Returns
-    int
-        Joint label z in [0, 2*A - 1] if a rule fires, otherwise UNKNOWN_Z (-1).
-
-    Raises
-    KeyError
-        If any required feature used by a rule is missing from `feature_cols`.
-
-    Notes
-    The rules are applied in priority order:
-        1) lane change
-        2) braking (with split mild vs tactical)
-        3) strong acceleration
-        4) constrained acceleration
-        5) constrained following
-        6) stable following
-        7) free-flow modulation
-        8) UNKNOWN
+    Priority order (S2A5):
+      1) s0-a0 lane change
+      2) sustained braking -> split critical (s1-a3) vs tight (s0-a3)
+      3) s0 acceleration -> strong (s0-a2) vs smooth/free-space (s0-a4)
+      4) s1 stop-and-go pickup accel (s1-a4)
+      5) s1 constrained following accel (s1-a1)
+      6) s1 open-gap regulation (s1-a2)
+      7) s1 brake-biased regulation (s1-a0)
+      8) s0 adaptive follow regulation (s0-a1)
+      9) UNKNOWN
     """
     idx = _build_index(feature_cols) # Creates mapping {feature_name: column_index}
 
@@ -307,126 +277,108 @@ def label_one_window_z(obs_t, feature_cols, thr: RuleThresholds, A=4, debug=Fals
             }
         return values
 
-    # Lane change
-    lc_l = _get(obs_t, idx, "lc_left_present")
-    lc_r = _get(obs_t, idx, "lc_right_present")
-    if (lc_l > thr.lc_flag_thresh) or (lc_r > thr.lc_flag_thresh):
-        z = sa_to_z(1, 1, A)
-        if debug:
-            vals = record()
-            return z, vals
-        return z
-
-    # Common longitudinal + interaction features
+    # Required core features
     ax_last = _get(obs_t, idx, "ax_last")
-    vx_slope = _get(obs_t, idx, "vx_slope")
     vx_last = _get(obs_t, idx, "vx_last")
-
+    vx_slope = _get(obs_t, idx, "vx_slope")
     ax_neg_frac = _get(obs_t, idx, "ax_neg_frac")
     ax_pos_frac = _get(obs_t, idx, "ax_pos_frac")
-
     front_exists_frac = _get(obs_t, idx, "front_exists_frac")
+
+    front_dx_min = _get(obs_t, idx, "front_dx_min")
+    thw = _get(obs_t, idx, "front_thw_last")
+    ttc = _get(obs_t, idx, "front_ttc_min")
     jerk_x_p95 = _get(obs_t, idx, "jerk_x_p95")
 
-    thw = float(obs_t[idx["front_thw_last"]]) if "front_thw_last" in idx else None
-    ttc = float(obs_t[idx["front_ttc_min"]]) if "front_ttc_min" in idx else None
+    # 1) Lane change -> s0-a0
+    lc_l = _get(obs_t, idx, "lc_left_present")
+    lc_r = _get(obs_t, idx, "lc_right_present")
+    if (lc_l >= thr.lc_flag_thresh) or (lc_r >= thr.lc_flag_thresh):
+        z = sa_to_z(0, 0, A)
+        return (z, record()) if debug else z
 
-    tight_by_thw = (thw is not None) and (thw <= thr.interaction_thw_tight)
-    tight_by_ttc = (ttc is not None) and (ttc <= thr.interaction_ttc_tight)
-    is_tight_interaction = (front_exists_frac >= thr.stable_follow_front_exists) and (tight_by_thw or tight_by_ttc)
+    # Interaction predicate
+    is_tight = _tight_interaction(front_exists_frac, front_dx_min, thw, ttc, thr)
 
-    # Braking + tactical split
+    # 2) Sustained braking -> s1-a3 critical vs s0-a3 tight braking
     is_brake = (
         (ax_neg_frac >= thr.brake_ax_neg_frac)
         and (ax_last <= thr.brake_ax_last)
-        and (front_exists_frac >= thr.stable_follow_front_exists)  
+        and (front_exists_frac >= 0.70)  # allow some missing, but avoid open-gap
     )
     if is_brake:
-        # Split braking into s0/a1 vs s1/a3 (tactical tends to be stronger/tighter)
-        tactical = (ax_last <= thr.tactical_brake_ax_last) or (vx_slope <= thr.tactical_brake_vx_slope)
+        critical = _critical_brake(ax_last, vx_slope, vx_last, thr)
+        z = sa_to_z(1, 3, A) if critical else sa_to_z(0, 3, A)
+        return (z, record()) if debug else z
 
-        if not tactical:
-            # only consult THW/TTC when primary indicators are not decisive
-            if (thw is not None) and (thw <= thr.tactical_brake_thw):
-                tactical = True
-            if (ttc is not None) and (ttc <= thr.tactical_brake_ttc):
-                tactical = True
+    # 3) s0 acceleration: strong (a2) vs smooth/free-space (a4)
+    if ax_pos_frac >= thr.acc_ax_pos_frac:
+        # strong accel requires higher ax_last AND positive vx trend
+        if (ax_last >= thr.s0_strong_acc_ax_last) and (vx_slope >= thr.s0_strong_acc_vx_slope_min):
+            z = sa_to_z(0, 2, A)
+            return (z, record()) if debug else z
 
-        z = sa_to_z(1, 3, A) if tactical else sa_to_z(0, 1, A)
-        if debug:
-            vals = record()
-            return z, vals
-        return z
-    
-    # Strong acceleration (s1/a0): Fire if strong accel AND (leader present enough OR tight interaction cue exists)
+        # smooth/free-space accel: gentler ax_last and open-ish context
+        openish = (
+            (front_exists_frac <= thr.s0_free_space_front_exists_max)
+            or (front_dx_min is not None and front_dx_min >= thr.s0_free_space_front_dx_min)
+        )
+        if (ax_last >= thr.s0_smooth_acc_ax_last) and openish:
+            z = sa_to_z(0, 4, A)
+            return (z, record()) if debug else z
+
+    # 4) s1 stop-and-go pickup accel (a4): low speed + high jerk + accel-dominant + leader present
     if (
-        (ax_pos_frac >= thr.strong_acc_ax_pos_frac)
-        and (ax_last >= thr.strong_acc_ax_last)
-        and ((front_exists_frac >= thr.strong_acc_front_exists_min) or is_tight_interaction)
+        (front_exists_frac >= thr.front_exists_gate)
+        and (vx_last <= thr.s1_pickup_vx_last_max)
+        and (ax_pos_frac >= thr.s1_constrained_acc_ax_pos_frac_min)
+        and (ax_last >= thr.s1_constrained_acc_ax_last_min)
+        and (jerk_x_p95 >= thr.s1_pickup_jerk_x_p95_min)
+    ):
+        z = sa_to_z(1, 4, A)
+        return (z, record()) if debug else z
+
+    # 5) s1 constrained following acceleration (a1): accel-dominant + leader present, not stop-and-go
+    if (
+        (front_exists_frac >= thr.s1_constrained_acc_front_exists_min)
+        and (ax_pos_frac >= thr.s1_constrained_acc_ax_pos_frac_min)
+        and (ax_last >= thr.s1_constrained_acc_ax_last_min)
+        and (vx_last > thr.s1_pickup_vx_last_max)
+    ):
+        z = sa_to_z(1, 1, A)
+        return (z, record()) if debug else z
+
+    # 6) s1 open-gap regulation (a2): leader often missing AND far dx if available
+    if front_exists_frac <= thr.open_gap_front_exists_max:
+        if (front_dx_min is None) or (front_dx_min >= thr.open_gap_front_dx_min):
+            z = sa_to_z(1, 2, A)
+            return (z, record()) if debug else z
+
+    # 7) s1 brake-biased regulation (a0): mild braking tendency but not sustained braking
+    sustained_brake_gate = (ax_neg_frac >= thr.brake_ax_neg_frac) and (ax_last <= thr.brake_ax_last)
+    if (
+        (ax_last <= thr.mild_brake_ax_last_max)
+        and (ax_neg_frac >= thr.mild_brake_ax_neg_frac_min)
+        and (not sustained_brake_gate)
     ):
         z = sa_to_z(1, 0, A)
-        if debug:
-            vals = record()
-            return z, vals
-        return z
+        return (z, record()) if debug else z
 
-    # Constrained acceleration (s0/a2): accel + leader present
+    # 8) s0 adaptive follow regulation (a1): leader present, near steady, not tight
     if (
-        (ax_pos_frac >= thr.constrained_acc_ax_pos_frac)
-        and (ax_last >= thr.constrained_acc_ax_last)
-        and (front_exists_frac >= thr.constrained_acc_front_exists)
-    ):
-        z = sa_to_z(0, 2, A)
-        if debug:
-            vals = record()
-            return z, vals
-        return z
-
-    # Constrained following (s1/a2): either low-speed+high-jerk (stop&go) OR tight headway/TTC (pressure)
-    if (front_exists_frac >= thr.constrained_follow_front_exists):
-        stop_go = (vx_last <= thr.constrained_follow_vx_last_max) and (jerk_x_p95 >= thr.constrained_follow_jerk_min)
-        pressure = is_tight_interaction
-        if stop_go or pressure:
-            z = sa_to_z(1, 2, A)
-            if debug:
-                vals = record()
-                return z, vals
-            return z
-
-    # Stable following (s0/a3): leader present + steady speed/acc (steady AND explicitly NOT tight interaction)
-    if (
-        (front_exists_frac >= thr.stable_follow_front_exists)
+        (front_exists_frac >= thr.front_exists_gate)
         and (abs(vx_slope) <= thr.stable_follow_vx_slope_abs_max)
         and (abs(ax_last) <= thr.stable_follow_ax_last_abs_max)
-        and (not is_tight_interaction)
+        and (not is_tight)
     ):
-        z = sa_to_z(0, 3, A)
-        if debug:
-            vals = record()
-            return z, vals
-        return z
+        z = sa_to_z(0, 1, A)
+        return (z, record()) if debug else z
 
-    # Free flow modulation (s0/a0): no strong leader evidence
-    if front_exists_frac < thr.free_flow_front_exists_max:
-        z = sa_to_z(0, 0, A)
-        if debug:
-            vals = record()
-            return z, vals
-        return z
+    return (UNKNOWN_Z, record()) if debug else UNKNOWN_Z
 
-    # Leader exists but no rule fired -> closer to stable following
-    #if front_exists_frac >= thr.stable_follow_front_exists:
-    #    z = sa_to_z(0, 3, A)
-    #    if debug:
-    #        reason, vals = record("fallback_to_stable_follow")
-    #        return z, reason, vals
-    #    return z
-
-    if debug:
-        vals = record()
-        return UNKNOWN_Z, vals
-    return UNKNOWN_Z
-
+# -----------------------------
+# Utilities
+# -----------------------------
 def fill_unknown_nearest(z, unknown=UNKNOWN_Z, max_gap=5, tie_break="future"):
     """
     Fill UNKNOWN blocks between known labels by nearest label (split at midpoint).
@@ -472,7 +424,7 @@ def fill_unknown_nearest(z, unknown=UNKNOWN_Z, max_gap=5, tie_break="future"):
 # -----------------------------
 # Main API
 # -----------------------------
-def compute_gt_latents(obs_seq, feature_cols, thr=None, A=4, debug=False, fill_unknown="none"):
+def compute_gt_latents(obs_seq, feature_cols, thr=None, A=5, debug=False, fill_unknown="none"):
     """
     Compute rule-based "ground-truth" joint latents for a sequence of window features.
 
@@ -542,7 +494,9 @@ def compute_gt_latents(obs_seq, feature_cols, thr=None, A=4, debug=False, fill_u
         out = fill_unknown_nearest(out, tie_break="future")
     return out, values
 
-
+# -----------------------------
+# Semantic map helpers
+# -----------------------------
 def _load_semantic_map_yaml(path):
     try:
         import yaml
@@ -566,7 +520,9 @@ def _sa_semantic_name(sem_map, s, a):
         return "-"
     return "-"
 
-
+# -----------------------------
+# Standalone debug runner
+# -----------------------------
 def main():
     try:
         # When executed/imported as part of the package
@@ -584,13 +540,11 @@ def main():
         checkpoint_name=CHECKPOINT_NAME,
     )  
 
-    A = int(getattr(trainer, "A", 4))
+    A = int(getattr(trainer, "A", 5))
+    if A != 5:
+        print(f"[gt_labeler] Warning: trainer.A={A} but this script is tuned for A=5.")
 
-    sem_map = None
-    if SEMANTIC_MAP:
-        sem_map = _load_semantic_map_yaml(SEMANTIC_MAP)
-
-    # Prefer thresholds defined in the semantic map YAML when available
+    sem_map = _load_semantic_map_yaml(SEMANTIC_MAP) if SEMANTIC_MAP else None
     if sem_map is not None:
         thr_cfg = sem_map.get("label_rules", {}).get("thresholds", {})
         thr = RuleThresholds.from_dict(thr_cfg)
