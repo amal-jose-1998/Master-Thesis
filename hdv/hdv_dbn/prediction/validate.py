@@ -143,18 +143,36 @@ class ValidationStep:
             # Ground truth is taken at t+1
             true_z = tuple(traj.latents_gt[t + 1])  
             
-            # 5. Compute Hit@H and TTE
-            # Look for match in horizon [t+1, ..., t+H]
-            horizon_latents = traj.latents_gt[t+1:t+1+self.config.horizon]  # (≤H, 2); Slices the future GT labels from t+1 inclusive, up to t+H (exclusive end index).
-            
+            # 5. Compute Hit@H and TTE with maneuver group mapping
+            horizon_latents = traj.latents_gt[t+1:t+1+self.config.horizon]  # (≤H, 2)
+            # Define maneuver groups
+            MANEUVER_GROUPS = {
+                (0, 1): 'brake',
+                (1, 4): 'brake',
+                (0, 2): 'acceleration',
+                (1, 0): 'acceleration',
+                (0, 3): 'following',
+                (1, 2): 'following',
+            }
+            def get_maneuver_group(style, action):
+                return MANEUVER_GROUPS.get((style, action), None)
+
             hit_h = False
             tte_steps = None
+            pred_group = get_maneuver_group(s_hat, a_hat)
             for h, lat_h in enumerate(horizon_latents, start=1):  # 1-indexed
-                if tuple(lat_h) == pred_z:
+                gt_style, gt_action = lat_h
+                # Exact match
+                if (gt_style, gt_action) == pred_z:
                     hit_h = True
                     tte_steps = h
-                    break # Break at first match (so TTE is the earliest time-to-hit).
-            
+                    break
+                # Group match
+                gt_group = get_maneuver_group(gt_style, gt_action)
+                if pred_group is not None and gt_group is not None and pred_group == gt_group:
+                    hit_h = True
+                    tte_steps = h
+                    break
             predictions.append((pred_z, true_z, hit_h, tte_steps))
         
         return predictions

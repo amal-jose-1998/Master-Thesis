@@ -243,6 +243,10 @@ def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps
     # --- Filter predictions for other plots (exclude unknowns) ---
     filtered_predictions = [p for p in predictions if -1 not in p[0] and -1 not in p[1]]
 
+    fig = plot_cumulative_hit_rate(filtered_predictions, fps=fps, stride_frames=stride_frames, output_path=output_dir / "cumulative_hit_rate.png")
+    if fig:
+        figs['cumulative_hit_rate'] = fig   
+
     # Plot 2: TTE histogram
     fig = plot_time_to_hit_histogram(filtered_predictions, fps=fps, stride_frames=stride_frames, output_path=output_dir / "tte_histogram.png")
     if fig:

@@ -5,6 +5,10 @@ label_rules:
   thresholds:
     # Lane change
     lc_flag_thresh: 0.5
+    lateral_velocity_threshold: 0.1 # to confirm actual lateral movement
+    lateral_acceleration_threshold: 0.1 # to confirm active lane change rather than just a small lateral drift
+    lateral_velocity_slope_threshold: 0.003 # to confirm sustained lateral movement consistent with a lane change
+    ay_zero_frac_threshold: 0.5 # at least 50% of the lane change window should have near-zero lateral acceleration, indicating a steady lane change rather than a quick swerve
 
     # Sustained braking
     brake_ax_neg_frac: 0.90 # almost the whole window is braking
@@ -127,6 +131,11 @@ actions_by_style:
           any_of:
             - "lc_left_present > lc_flag_thresh"
             - "lc_right_present > lc_flag_thresh"
+            - all_of:
+              - "lateral_velocity >= lateral_velocity_threshold"
+              - "lateral_acceleration >= lateral_acceleration_threshold"
+              - "lateral_velocity_slope >= lateral_velocity_slope_threshold"
+              - "ay_zero_frac >= ay_zero_frac_threshold"
     a2:
       name: constrained_following
       description: Constrained following with frequent speed corrections (often low-speed / stop-and-go effects), not purely steady.
@@ -135,8 +144,8 @@ actions_by_style:
           - "front_exists_frac >= constrained_follow_front_exists"
           - any_of:
             - all_of: 
-              - vx_last <= constrained_follow_vx_last_max 
-              - jerk_x_p95 >= constrained_follow_jerk_min
+              - "vx_last <= constrained_follow_vx_last_max" 
+              - "jerk_x_p95 >= constrained_follow_jerk_min"
             - "tight_interaction"
     a3:
       name: tactical_brake

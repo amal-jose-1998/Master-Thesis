@@ -189,6 +189,10 @@ class RuleThresholds:
     """
     # Lane change
     lc_flag_thresh: float = 0.5
+    lateral_velocity_threshold: float = 0.1 # m/s, to confirm actual lateral movement
+    lateral_acceleration_threshold: float = 0.1 # m/s², to confirm active lane change rather than just a small lateral drift
+    lateral_velocity_slope_threshold: float = 0.003 # m/s², to confirm sustained lateral movement over the window rather than a brief swerve
+    ay_zero_frac_threshold: float = 0.5 # at least 50% of the lane change window should have near-zero lateral acceleration, indicating a steady lane change rather than a quick swerve
 
     # Sustained braking
     brake_ax_neg_frac: float = 0.90 # almost the whole window is braking
@@ -304,13 +308,29 @@ def label_one_window_z(obs_t, feature_cols, thr: RuleThresholds, A=4, debug=Fals
                 "lc_right_present": safe("lc_right_present"),
                 "front_thw_last": safe("front_thw_last"),
                 "front_ttc_min": safe("front_ttc_min"),
+                "ay_zero_frac": safe("ay_zero_frac"),
+                "vy_last": safe("vy_last"),
+                "ay_last": safe("ay_last"),
+                "vy_slope": safe("vy_slope"),
             }
         return values
 
     # Lane change
     lc_l = _get(obs_t, idx, "lc_left_present")
     lc_r = _get(obs_t, idx, "lc_right_present")
-    if (lc_l > thr.lc_flag_thresh) or (lc_r > thr.lc_flag_thresh):
+    vy_last = _get(obs_t, idx, "vy_last") if "vy_last" in idx else None
+    ay_last = _get(obs_t, idx, "ay_last") if "ay_last" in idx else None
+    vy_slope = _get(obs_t, idx, "vy_slope") if "vy_slope" in idx else None
+    ay_zero_frac = _get(obs_t, idx, "ay_zero_frac") if "ay_zero_frac" in idx else None
+
+    lc_basic = (lc_l > thr.lc_flag_thresh) or (lc_r > thr.lc_flag_thresh)
+    lc_composite = (
+        (vy_last is not None and abs(vy_last) >= getattr(thr, 'lateral_velocity_threshold', 0.1)) and
+        (ay_last is not None and abs(ay_last) >= getattr(thr, 'lateral_acceleration_threshold', 0.1)) and
+        (vy_slope is not None and abs(vy_slope) >= getattr(thr, 'lateral_velocity_slope_threshold', 0.003)) and
+        (ay_zero_frac is not None and ay_zero_frac <= getattr(thr, 'ay_zero_frac_threshold', 0.5))
+    )
+    if lc_basic or lc_composite:
         z = sa_to_z(1, 1, A)
         if debug:
             vals = record()
@@ -630,13 +650,18 @@ def main():
                 round(v.get("front_ttc_min", np.nan), 2),
                 round(v.get("lc_left_present", np.nan), 2),
                 round(v.get("lc_right_present", np.nan), 2),
+                round(v.get("ay_zero_frac", np.nan), 2),
+                round(v.get("vy_last", np.nan), 2),
+                round(v.get("ay_last", np.nan), 2),
+                round(v.get("vy_slope", np.nan), 4),    
             ])
 
         headers = [
             "t", "z", "s", "a", "semantic",
             "ax_last", "vx_last", "vx_slope",
             "ax_neg", "ax_pos", "front", "jerk_p95",
-            "THW", "TTC", "lc_L", "lc_R",
+            "THW", "TTC", "lc_L", "lc_R", "ay_zero_frac",
+            "vy_last", "ay_last", "vy_slope",
         ]
 
         print("\n" + "=" * 120)
@@ -647,10 +672,10 @@ def main():
             rows,
             headers=headers,
             tablefmt="simple",
-            floatfmt=("", "", "", "", "", ".2f", ".2f", ".4f", ".2f", ".2f", ".2f", ".2f", ".2f", ".2f", ".2f", ".2f"),
+            floatfmt=("", "", "", "", "", ".2f", ".2f", ".4f", ".2f", ".2f", ".2f", ".2f", ".2f", ".2f",".2f", ".2f", ".2f", ".2f", ".2f", ".4f"),
             stralign="left",
             numalign="right",
-            maxcolwidths=[None, None, None, None, 45, None, None, None, None, None, None, None, None, None, None, None],
+            maxcolwidths=[None, None, None, None, 45, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None],
             disable_numparse=True,
         ))
 
