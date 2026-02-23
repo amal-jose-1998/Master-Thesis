@@ -483,3 +483,111 @@ def run_kinematics_analysis(
                 save_std_hist(subset_dir_class(dd, cls), sig, f"dir{dd}__class_{cls}")
 
     print(f"[kinematics] Outputs written to: {out_dir}")
+
+
+# =========================================================
+# Motion-centric (vehicle-centric, no direction split) analysis
+# =========================================================
+def run_kinematics_analysis_motion_centric(
+    df,
+    out_dir,
+    signals=("vx", "ax", "vy", "ay"),
+    class_col="meta_class",
+    recording_col="recording_id",
+    vehicle_col="vehicle_id",
+    frame_col="frame",
+    min_T_std=10,
+):
+    """
+    Run kinematics analysis for motion-centric (vehicle-centric, all vehicles aligned forward) data.
+    Generates:
+      - Histogram plots (global, by class)
+      - Per-vehicle variability plots (global, by class)
+      - Per-recording statistics CSV
+
+    Parameters
+    df : pandas.DataFrame
+        Vehicle-centric Feather dataframe.
+    out_dir : pathlib.Path
+        Root output directory for kinematics.
+    signals : sequence of str
+        Kinematic signals to analyze.
+    class_col : str
+        Vehicle class column.
+    recording_col : str
+        Recording identifier column.
+    vehicle_col : str
+        Vehicle identifier column.
+    frame_col : str
+        Frame index column.
+    min_T_std : int
+        Minimum trajectory length for std computation.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    hist_dir = out_dir / "hist"
+    var_dir = out_dir / "variability"
+    stats_dir = out_dir / "per_recording"
+    for p in (hist_dir, var_dir, stats_dir):
+        p.mkdir(parents=True, exist_ok=True)
+
+    # Validate schema (no direction_col)
+    assert_cols(
+        df,
+        [recording_col, vehicle_col, frame_col, class_col, *signals],
+        context="run_kinematics_analysis_motion_centric",
+    )
+
+    dfk = df.copy()
+    dfk["class_bucket"] = class_bucket_series(dfk[class_col])
+
+    # Per-recording statistics
+    save_per_recording_stats(
+        dfk,
+        signals,
+        stats_dir / "per_recording_motion_centric.csv",
+        recording_col,
+    )
+
+    def subset_class(cls):
+        return dfk.loc[dfk["class_bucket"] == cls]
+
+    # ---- Histograms ----
+    for sig in signals:
+        save_hist_1d(
+            dfk[sig],
+            f"{sig} (motion-centric) - global",
+            sig,
+            hist_dir / f"{sig}__global.png",
+        )
+
+        for cls in ("car", "truck"):
+            save_hist_1d(
+                subset_class(cls)[sig],
+                f"{sig} (motion-centric) - class={cls}",
+                sig,
+                hist_dir / f"{sig}__class_{cls}.png",
+            )
+
+    # ---- Variability (per-vehicle std) ----
+    id_cols = [recording_col, vehicle_col]
+
+    def save_std_hist(df_sub, sig, tag):
+        vals = per_vehicle_std(df_sub, sig, id_cols, min_T_std)
+        if vals.size == 0:
+            return
+        save_hist_1d(
+            vals,
+            f"std({sig}) (motion-centric) - {tag}",
+            f"std({sig})",
+            var_dir / f"std__{sig}__{tag}.png",
+        )
+
+    for sig in signals:
+        save_std_hist(dfk, sig, "global")
+
+        for cls in ("car", "truck"):
+            save_std_hist(subset_class(cls), sig, f"class_{cls}")
+
+    print(f"[kinematics][motion-centric] Outputs written to: {out_dir}")

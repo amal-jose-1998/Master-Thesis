@@ -3,12 +3,13 @@ Standalone analysis entry point for highD *_tracks.csv files.
 
 This script:
 1) loads (or builds) the highD Feather cache (vehicle-centric),
-2) runs kinematics analysis,
-3) runs lane-change analysis (+ side context),
-4) runs lane-pose report,
-5) runs feasibility reports:
-   - LC window feasibility (using lc directly)
-   - Longitudinal window feasibility (using ax)
+2) runs kinematics analysis (global/original),
+3) runs kinematics analysis (vehicle-centric/motion-centric: all vehicles' motion aligned so forward is positive, left/right are consistent),
+4) runs lane-change analysis (+ side context),
+5) runs lane-pose report,
+6) runs feasibility reports:
+    - LC window feasibility (using lc directly)
+    - Longitudinal window feasibility (using ax)
 """
 
 import sys
@@ -31,7 +32,7 @@ else:
 
 from hdv.hdv_dbn.datasets.highd_loader import load_highd_folder
 
-from kinematic_summary import run_kinematics_analysis
+from kinematic_summary import run_kinematics_analysis, run_kinematics_analysis_motion_centric
 from lane_change_summary import run_lane_change_analysis
 from lane_pose_analysis import run_lane_pose_report, LanePoseReportConfig
 from window_feasibility import save_window_feasibility_report, WindowFeasibilityConfig
@@ -165,7 +166,7 @@ def compute_longitudinal_thresholds_from_df(df, ax_col="ax"):
 def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
     """
     Run the dataset analysis and write outputs to disk.
-    
+
     Parameters
     tracks_dir : str or pathlib.Path
         Directory containing highD files and/or Feather cache.
@@ -175,6 +176,14 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
         Optional subset size.
     show_progress : bool
         If True, show a single report-level progress bar.
+
+    Output folders:
+        - kinematics/ : Kinematics plots (global/original, as in dataset)
+        - kinematics_motion_centric/ : Kinematics plots (vehicle-centric/motion-centric: all vehicles' motion aligned so forward is positive, left/right are consistent)
+        - lane_change/ : Lane-change analysis
+        - lane_pose/ : Lane-pose report
+        - window_feasibility_lc/ : Lane-change window feasibility
+        - window_feasibility_longitudinal/ : Longitudinal window feasibility
     """
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -186,7 +195,7 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
         df = load_highd_cached_or_build(tracks_dir=tracks_dir, max_recordings=max_recordings, force_rebuild=False)
         pbar.update(1)
 
-        # ---- Step 2: Kinematics ----
+        # ---- Step 2: Kinematics (global/original) ----
         run_kinematics_analysis(
             df=df,
             out_dir=out_dir / "kinematics",
@@ -199,6 +208,34 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
             min_T_std=10,
         )
         pbar.update(1)
+
+        # ---- Step 2b: Kinematics (vehicle-centric/motion-centric) ----
+        try:
+            from hdv.hdv_dbn.datasets.highd.normalise import normalize_vehicle_centric
+        except ImportError:
+            from hdv_dbn.datasets.highd.normalise import normalize_vehicle_centric
+
+        # Make a copy to avoid modifying the original df
+        df_motion = df.copy()
+        # Use the correct direction column name as in the rest of the code
+        df_motion = normalize_vehicle_centric(
+            df_motion,
+            dir_col="meta_drivingDirection",
+            flip_longitudinal=True,
+            flip_lateral=True,
+            flip_positions=False,
+        )
+        run_kinematics_analysis_motion_centric(
+            df=df_motion,
+            out_dir=out_dir / "kinematics_motion_centric",
+            signals=("vx", "ax", "vy", "ay"),
+            class_col="meta_class",
+            recording_col="recording_id",
+            vehicle_col="vehicle_id",
+            frame_col="frame",
+            min_T_std=10,
+        )
+        # No pbar update, as this is an extra step
 
         # ---- Step 3: Lane-change ----
         run_lane_change_analysis(
