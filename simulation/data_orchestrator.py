@@ -1,7 +1,10 @@
 import os
-import json
 import pandas as pd
 from road_renderer import RoadSceneRenderer
+from vehicle_utils import get_test_vehicle_ids, select_meaningful_vehicles_in_test
+import multiprocessing as mp
+from combined_visualizer import visualizer_process
+
 
 # Path to split.json
 SPLIT_JSON_PATH = os.path.join(
@@ -9,25 +12,20 @@ SPLIT_JSON_PATH = os.path.join(
     '..', 'hdv', 'models', 'main-model-sticky_S2_A4_hierarchical', 'split.json'
 )
 
-# Select a recording
-RECORDING_ID = '04'  # Change as needed
-TRACKS_CSV_PATH = os.path.join(
-    os.path.dirname(__file__),
-    '..', 'hdv', 'data', 'highd', f'{RECORDING_ID}_tracks.csv'
-)
+# User parameters for single vehicle simulation
+SIMULATE_SINGLE_VEHICLE = False  # Set True to simulate a specific vehicle
+SINGLE_REC_ID = 33                # Recording ID (int)
+SINGLE_VEHICLE_ID = 1008            # Vehicle ID (int)
 
-# Load split.json and extract test vehicles for a recording from the 'test' group
-def load_test_vehicles(split_json_path, recording_id, group='test'):
-    with open(split_json_path, 'r') as f:
-        split_data = json.load(f)
-    test_keys = split_data['keys'][group]
-    # Extract vehicle IDs for the selected recording
-    vehicles = []
-    for key in test_keys:
-        rec_id, veh_id = key.split(':')
-        if float(rec_id) == float(recording_id):
-            vehicles.append(int(float(veh_id)))  # Convert to int
-    return vehicles
+
+# User options for meaningful vehicle selection from test set
+LANE_CHANGE = True      # Set True to include lane-changing vehicles
+ACCEL_BRAKE = False      # Set True to include acceleration/braking vehicles
+FOLLOWING = False       # Set True to include following vehicles
+ACCEL_THRESHOLD = 5.0   # Threshold for acceleration/braking
+MIN_FRAMES = 150        # Minimum frames for a vehicle
+
+
 
 # Load tracks CSV
 def load_tracks(tracks_csv_path, vehicle_id=None, tracks_meta_df=None):
@@ -40,7 +38,7 @@ def load_tracks(tracks_csv_path, vehicle_id=None, tracks_meta_df=None):
         df = df[(df['frame'] >= initial_frame) & (df['frame'] <= final_frame)]
     return df
 
-# Load recording and tracks metadata
+# Load recording metadata
 def load_recording_meta(recording_meta_path):
     df = pd.read_csv(recording_meta_path)
     # Extract lane markings and other relevant info
@@ -51,37 +49,79 @@ def load_recording_meta(recording_meta_path):
         'lane_markings_lower': lane_markings_lower,
     }
 
+# Load tracks metadata
 def load_tracks_meta(tracks_meta_path):
     return pd.read_csv(tracks_meta_path)
 
 
-# Main 
+# Main
 def main():
-    test_vehicles = load_test_vehicles(SPLIT_JSON_PATH, RECORDING_ID)
-    tracks_csv_path = os.path.join(
-        os.path.dirname(__file__),
-        '..', 'hdv', 'data', 'highd', f'{RECORDING_ID}_tracks.csv'
-    )
-    recording_meta_path = os.path.join(
-        os.path.dirname(__file__),
-        '..', 'hdv', 'data', 'highd', f'{RECORDING_ID}_recordingMeta.csv'
-    )
-    tracks_meta_path = os.path.join(
-        os.path.dirname(__file__),
-        '..', 'hdv', 'data', 'highd', f'{RECORDING_ID}_tracksMeta.csv'
-    )
-    tracks_meta_df = load_tracks_meta(tracks_meta_path)
-    recording_meta = load_recording_meta(recording_meta_path)
-    
-    print(f'Test vehicles for recording {RECORDING_ID}: ', len(test_vehicles))
-    print(f'Lane markings from recording meta:', recording_meta)
-    
-    renderer = RoadSceneRenderer(recording_meta, tracks_meta_df)
-    for vehicle_id in test_vehicles:
-        print(f'Animating vehicle {vehicle_id}...')
-        vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
-        renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)
+    test_vehicle_ids = get_test_vehicle_ids(SPLIT_JSON_PATH) # {recording_id: set of vehicle_ids}
+    data_dir = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'data', 'highd')
 
+    # Start the combined visualizer in a separate process
+    queue = mp.Queue()
+    vis_process = mp.Process(target=visualizer_process, args=(queue,))
+    vis_process.start()
+
+    try:
+        # If SIMULATE_SINGLE_VEHICLE is True, simulate only that vehicle
+        if SIMULATE_SINGLE_VEHICLE:
+            from vehicle_utils import simulate_single_vehicle
+            simulate_single_vehicle(
+                SINGLE_REC_ID,
+                SINGLE_VEHICLE_ID,
+                data_dir,
+                lambda *args, **kwargs: RoadSceneRenderer(*args, **kwargs, visualizer_queue=queue), # Pass the visualizer queue to the renderer
+                load_tracks_meta,
+                load_recording_meta,
+                load_tracks
+            )
+            return
+
+        for rec in sorted(test_vehicle_ids.keys()): # Only process recordings that have test vehicles
+            tracks_meta_path = os.path.join(data_dir, f"{rec:02d}_tracksMeta.csv")
+            tracks_csv_path = os.path.join(data_dir, f"{rec:02d}_tracks.csv")
+            recording_meta_path = os.path.join(data_dir, f"{rec:02d}_recordingMeta.csv")
+            tracks_meta_df = load_tracks_meta(tracks_meta_path)
+            recording_meta = load_recording_meta(recording_meta_path)
+            # If all selection flags are False, render all test vehicles one by one
+            if not (LANE_CHANGE or ACCEL_BRAKE or FOLLOWING):
+                for vehicle_id in test_vehicle_ids[rec]:
+                    print(f'Animating test vehicle {vehicle_id} in recording {rec:02d}...')
+                    vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
+                    renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=queue)
+                    renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)
+                continue
+            selected = select_meaningful_vehicles_in_test(
+                tracks_meta_path, test_vehicle_ids,
+                lane_change=LANE_CHANGE,
+                accel_brake=ACCEL_BRAKE,
+                following=FOLLOWING,
+                accel_threshold=ACCEL_THRESHOLD,
+                min_frames=MIN_FRAMES
+            )
+            if selected.empty:
+                print(f"No meaningful vehicles found in test set for recording {rec:02d}.")
+                continue
+            flags = []
+            if LANE_CHANGE:
+                flags.append('LANE_CHANGE')
+            if ACCEL_BRAKE:
+                flags.append('ACCEL_BRAKE')
+            if FOLLOWING:
+                flags.append('FOLLOWING')
+            flags_str = ', '.join(flags) if flags else 'None'
+            print(f"Test vehicles for recording {rec:02d} with flags [{flags_str}]: {len(selected)}")
+            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=queue)
+            for vehicle_id in selected['id']:
+                print(f'Animating vehicle {vehicle_id}...')
+                vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
+                renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)
+    finally:
+        # Tell the visualizer process to quit and wait for it to finish
+        queue.put('quit')
+        vis_process.join()
 
 if __name__ == '__main__':
     main()
