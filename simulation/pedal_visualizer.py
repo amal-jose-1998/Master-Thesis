@@ -1,18 +1,29 @@
 from matplotlib.patches import Rectangle
+from matplotlib import pyplot as plt
 
 class PedalVisualizer:
     """
-    Visualizes accelerator and brake pedal states based on speed and acceleration.
+    Visualizes accelerator and brake pedal states based on acceleration and speed values. 
+    The accelerator pedal is shown in green when accelerating forward, and the brake pedal 
+    is shown in red when braking (negative acceleration). Speed and acceleration values are also displayed as text.
     """
     def __init__(self):
         pass
 
-    def draw(self, ax, ax_val, vx_val):
+    def draw(self, ax: plt.Axes, ax_val, vx_val):
+        """
+        Draws the pedal visualization on the given axes based on the acceleration (ax_val) and speed (vx_val).
+
+        parameters:
+        - ax: The matplotlib Axes object to draw the visualization on.
+        - ax_val: The acceleration value (positive for acceleration, negative for braking).
+        - vx_val: The speed value to display on the visualization.
+        """
         ax.clear()
         ax.axis('off')
         # Accelerator pedal logic: green if accelerating forward
         accel_color = 'green' if ax_val > 0 else 'gray'
-        # Brake pedal logic: red if braking (negative acceleration and speed)
+        # Brake pedal logic: red if braking (negative acceleration)
         brake_color = 'red' if ax_val < 0 else 'gray'
         # Accelerator pedal
         accel_rect = Rectangle((0.1, 0.6), 0.8, 0.3, facecolor=accel_color, edgecolor='black', lw=2)

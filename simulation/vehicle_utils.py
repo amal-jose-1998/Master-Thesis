@@ -2,7 +2,18 @@ import json
 import pandas as pd
 import os
 
+from road_renderer import RoadSceneRenderer
+
 def get_test_vehicle_ids(split_json_path):
+    """
+    Reads the split JSON file and returns a dictionary mapping recording IDs to sets of test vehicle IDs.
+
+    parameters: 
+    - split_json_path: Path to the JSON file containing the train/test split information.
+
+    returns:
+    - Dictionary where keys are recording IDs (integers) and values are sets of vehicle IDs (integers) that are in the test set for that recording.
+    """
     with open(split_json_path, 'r') as f:
         split = json.load(f)
     test_keys = split['keys']['test']
@@ -16,7 +27,22 @@ def get_test_vehicle_ids(split_json_path):
         test_ids[rec].add(vid)
     return test_ids # {recording_id: set of vehicle_ids}
 
-def select_meaningful_vehicles_in_test(tracks_meta_path, test_vehicle_ids, lane_change=True, accel_brake=True, following=False, accel_threshold=2.0, min_frames=100):
+def select_meaningful_vehicles_in_test(tracks_meta_path, test_vehicle_ids, lane_change=True, accel_brake=True, following=False, accel_threshold=2.0, min_frames=150):
+    """
+    Selects meaningful vehicles from the test set based on specified criteria and flags.
+
+    parameters:
+    - tracks_meta_path: Path to the tracks metadata CSV file for a specific recording.  
+    - test_vehicle_ids: Dictionary mapping recording IDs to sets of test vehicle IDs, as returned by get_test_vehicle_ids().
+    - lane_change: If True, include vehicles that performed lane changes.
+    - accel_brake: If True, include vehicles that showed significant acceleration or braking (change in speed above accel_threshold).
+    - following: If True, include vehicles that were mostly following (not changing lanes and not showing significant accel/brake).
+    - accel_threshold: Threshold for change in speed to consider a vehicle as accelerating or braking.
+    - min_frames: Minimum number of frames a vehicle must have to be considered.
+
+    returns:
+    - DataFrame containing the selected vehicles from the test set based on the specified criteria.
+    """
     df = pd.read_csv(tracks_meta_path)
     rec_id = int(os.path.basename(tracks_meta_path).split('_')[0])
     if rec_id not in test_vehicle_ids:
@@ -43,6 +69,15 @@ def select_meaningful_vehicles_in_test(tracks_meta_path, test_vehicle_ids, lane_
 def simulate_single_vehicle(rec, vehicle_id, data_dir, renderer_class, load_tracks_meta, load_recording_meta, load_tracks):
     """
     Simulate a particular vehicle from a particular recording.
+
+    parameters:
+    - rec: Recording ID (integer) of the vehicle to simulate.
+    - vehicle_id: Vehicle ID (integer) of the vehicle to simulate.
+    - data_dir: Directory where the data files are located.
+    - renderer_class: The class of the renderer to use for visualization (e.g., RoadSceneRenderer).
+    - load_tracks_meta: Function to load the tracks metadata DataFrame from a given path.
+    - load_recording_meta: Function to load the recording metadata from a given path.
+    - load_tracks: Function to load the tracks DataFrame for a specific vehicle, given the tracks CSV path, vehicle ID, and tracks metadata DataFrame.
     """
     tracks_meta_path = os.path.join(data_dir, f"{rec:02d}_tracksMeta.csv")
     tracks_csv_path = os.path.join(data_dir, f"{rec:02d}_tracks.csv")
@@ -51,5 +86,5 @@ def simulate_single_vehicle(rec, vehicle_id, data_dir, renderer_class, load_trac
     recording_meta = load_recording_meta(recording_meta_path)
     print(f'Animating test vehicle {vehicle_id} in recording {rec:02d}...')
     vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
-    renderer = renderer_class(recording_meta, tracks_meta_df)
+    renderer: RoadSceneRenderer = renderer_class(recording_meta, tracks_meta_df)
     renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)

@@ -19,11 +19,11 @@ SINGLE_VEHICLE_ID = 1008            # Vehicle ID (int)
 
 
 # User options for meaningful vehicle selection from test set
-LANE_CHANGE = True      # Set True to include lane-changing vehicles
-ACCEL_BRAKE = False      # Set True to include acceleration/braking vehicles
+LANE_CHANGE = False      # Set True to include lane-changing vehicles
+ACCEL_BRAKE = True      # Set True to include acceleration/braking vehicles
 FOLLOWING = False       # Set True to include following vehicles
 ACCEL_THRESHOLD = 5.0   # Threshold for acceleration/braking
-MIN_FRAMES = 150        # Minimum frames for a vehicle
+MIN_FRAMES = 200        # Minimum frames for a vehicle
 
 
 
