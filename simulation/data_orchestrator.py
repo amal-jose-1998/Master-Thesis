@@ -97,6 +97,7 @@ def main():
                 SINGLE_REC_ID,
                 SINGLE_VEHICLE_ID,
                 data_dir,
+                # Pass a lambda that creates a RoadSceneRenderer with the visualizer queue to the simulate_single_vehicle function, so it can send pedal/steering state updates to the visualizer
                 lambda *args, **kwargs: RoadSceneRenderer(*args, **kwargs, visualizer_queue=queue), # Pass the visualizer queue to the renderer
                 load_tracks_meta,
                 load_recording_meta,
@@ -110,15 +111,15 @@ def main():
             recording_meta_path = os.path.join(data_dir, f"{rec:02d}_recordingMeta.csv")
             tracks_meta_df = load_tracks_meta(tracks_meta_path)
             recording_meta = load_recording_meta(recording_meta_path)
+            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=queue) # Pass the visualizer queue to the renderer so it can send pedal/steering state updates
             # If all selection flags are False, render all test vehicles one by one
             if not (LANE_CHANGE or ACCEL_BRAKE or FOLLOWING):
                 for vehicle_id in test_vehicle_ids[rec]:
                     print(f'Animating test vehicle {vehicle_id} in recording {rec:02d}...')
-                    vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
-                    renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=queue)
-                    renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)
+                    vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df) # Load tracks for the specific vehicle, using the tracks_meta_df to filter for the correct frame range
+                    renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id) # Animate the scene for the specific vehicle
                 continue
-            selected = select_meaningful_vehicles_in_test(
+            selected = select_meaningful_vehicles_in_test( # Select meaningful vehicles from the test set based on the specified criteria and flags
                 tracks_meta_path, test_vehicle_ids,
                 lane_change=LANE_CHANGE,
                 accel_brake=ACCEL_BRAKE,
@@ -138,7 +139,6 @@ def main():
                 flags.append('FOLLOWING')
             flags_str = ', '.join(flags) if flags else 'None'
             print(f"Test vehicles for recording {rec:02d} with flags [{flags_str}]: {len(selected)}")
-            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=queue)
             for vehicle_id in selected['id']:
                 print(f'Animating vehicle {vehicle_id}...')
                 vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
@@ -146,7 +146,7 @@ def main():
     finally:
         # Tell the visualizer process to quit and wait for it to finish
         queue.put('quit')
-        vis_process.join()
+        vis_process.join() 
 
 if __name__ == '__main__':
     main()
