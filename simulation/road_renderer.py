@@ -66,14 +66,11 @@ class RoadSceneRenderer:
             y0 = vehicle_data['y'].iloc[0]
             if vid == test_vehicle_id:
                 color = 'red'
-                z = 3
             elif direction == 1:
                 color = 'blue'
-                z = 2
             else:
                 color = 'green'
-                z = 2
-            rect = Rectangle((x0, y0), width, height, edgecolor=color, facecolor='none', lw=2, zorder=z)
+            rect = Rectangle((x0, y0), width, height, edgecolor=color, facecolor="none", lw=2, zorder=3)
             ax.add_patch(rect)
 
     def animate_scene(self, tracks_df, test_vehicle_id, window_width=150, window_height=50, x_offset=10):

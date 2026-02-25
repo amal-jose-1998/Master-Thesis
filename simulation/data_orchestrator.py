@@ -27,8 +27,18 @@ MIN_FRAMES = 150        # Minimum frames for a vehicle
 
 
 
-# Load tracks CSV
 def load_tracks(tracks_csv_path, vehicle_id=None, tracks_meta_df=None):
+    """
+    Loads tracks CSV and optionally filters for a specific vehicle and frame range.
+    
+    parameters:
+    - tracks_csv_path: Path to the tracks CSV file. 
+    - vehicle_id: (Optional) ID of the vehicle to filter for. If None, loads all vehicles.
+    - tracks_meta_df: (Optional) DataFrame containing metadata for all vehicles. Required if vehicle_id is provided to determine the frame range for that vehicle.
+
+    returns:
+    - DataFrame containing the tracks data, filtered by vehicle_id and frame range if specified.
+    """
     df = pd.read_csv(tracks_csv_path)
     if vehicle_id is not None and tracks_meta_df is not None:
         meta = tracks_meta_df[tracks_meta_df['id'] == vehicle_id].iloc[0]
@@ -38,8 +48,16 @@ def load_tracks(tracks_csv_path, vehicle_id=None, tracks_meta_df=None):
         df = df[(df['frame'] >= initial_frame) & (df['frame'] <= final_frame)]
     return df
 
-# Load recording metadata
 def load_recording_meta(recording_meta_path):
+    """
+    Loads recording metadata from the specified CSV file and extracts lane markings and other relevant info.
+
+    parameters:
+    - recording_meta_path: Path to the recording metadata CSV file.
+
+    returns:
+    - Dictionary containing lane markings for the recording.
+    """
     df = pd.read_csv(recording_meta_path)
     # Extract lane markings and other relevant info
     lane_markings_upper = [float(x) for x in df['upperLaneMarkings'].iloc[0].split(';')]
@@ -49,20 +67,27 @@ def load_recording_meta(recording_meta_path):
         'lane_markings_lower': lane_markings_lower,
     }
 
-# Load tracks metadata
 def load_tracks_meta(tracks_meta_path):
+    """
+    Reads the tracks metadata CSV file and returns it as a DataFrame.
+
+    parameters:
+    - tracks_meta_path: Path to the tracks metadata CSV file.
+
+    returns:
+    - DataFrame containing the tracks metadata.
+    """
     return pd.read_csv(tracks_meta_path)
 
 
-# Main
 def main():
     test_vehicle_ids = get_test_vehicle_ids(SPLIT_JSON_PATH) # {recording_id: set of vehicle_ids}
-    data_dir = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'data', 'highd')
+    data_dir = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'data', 'highd') 
 
     # Start the combined visualizer in a separate process
-    queue = mp.Queue()
-    vis_process = mp.Process(target=visualizer_process, args=(queue,))
-    vis_process.start()
+    queue = mp.Queue() # Create a multiprocessing queue for communication between the main process and the visualizer process
+    vis_process = mp.Process(target=visualizer_process, args=(queue,)) # Create the visualizer process, passing the queue as an argument
+    vis_process.start() # Start the visualizer process
 
     try:
         # If SIMULATE_SINGLE_VEHICLE is True, simulate only that vehicle
