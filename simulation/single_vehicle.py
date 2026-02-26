@@ -94,6 +94,11 @@ class SingleVehicleSimulation:
 		# Setup for animation
 		fig, ax = plt.subplots(figsize=(10, 6))
 
+		# Draw static road ONCE over a wide span so we only move the camera (xlim) per frame
+		xmin = float(self.vehicle_tracks["x"].min()) - 50.0
+		xmax = float(self.vehicle_tracks["x"].max()) + 50.0
+		self.renderer.render_road(ax, xlim=(xmin, xmax), ylim=(y_center - window_height/2, y_center + window_height/2))
+
 		last_frame_num = None
 		
 		def _safe_get_direction():
@@ -111,9 +116,6 @@ class SingleVehicleSimulation:
 			if last_frame_num is not None and frame_num < last_frame_num:
 				_reset_prediction_state()
 			last_frame_num = frame_num
-
-			ax.clear()
-			ax.set_aspect('auto')
 			
 			tv_row: pd.DataFrame = self.vehicle_tracks[ # Get the row for the test vehicle at the current frame number
 				(self.vehicle_tracks["id"] == self.vehicle_id) & (self.vehicle_tracks["frame"] == frame_num)
@@ -134,10 +136,8 @@ class SingleVehicleSimulation:
 				
 			ylim = (y_center - window_height/2, y_center + window_height/2) # Set ylim so that lower y is at the top (image coordinates)
 
-			self.renderer.render_road(ax, xlim, ylim) # # Render the road for the current window  
-			self.renderer.render_vehicles(
-				ax, self.vehicle_tracks[self.vehicle_tracks["frame"] == frame_num], self.vehicle_id
-			) # Render all vehicles in the current frame, highlighting the test vehicle
+			frame_df = self.vehicle_tracks[self.vehicle_tracks["frame"] == frame_num] 
+			self.renderer.render_vehicles(ax, frame_df, self.vehicle_id) # Render all vehicles in the current frame, highlighting the test vehicle
 
 			# ONLINE feature engineering + windowization + prediction
 			try:
@@ -195,8 +195,6 @@ class SingleVehicleSimulation:
 			ax.set_xlim(xlim)
 			ax.set_ylim(ylim)
 			ax.invert_yaxis() # Invert y-axis so that lower y is at the top (image coordinates)
-			ax.set_xlabel('x (meters)')
-			ax.set_ylabel('y (meters)')
 			ax.set_title(f'Frame {frame_num} - Test Vehicle {self.vehicle_id}')
 
 		ani = animation.FuncAnimation(fig, update, frames=range(min_frame, max_frame+1), interval=40, repeat=True)
