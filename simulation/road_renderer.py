@@ -1,4 +1,5 @@
 from queue import Queue
+import time
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -184,7 +185,11 @@ class RoadSceneRenderer:
             pedal_ax: plt.Axes = fig.add_axes([0.7, 0.05, 0.25, 0.18])  # Position for pedal visualizer [left, bottom, width, height]
             pedal_ax.axis('off') 
 
+        fps_count = 0
+        fps_window_start = time.perf_counter()
+
         def update(frame_num):
+            nonlocal fps_count, fps_window_start
             """
             Update function for animation, called for each frame number in the animation range. Renders the road, vehicles, 
             and updates pedal/steering visualization for the current frame.
@@ -247,5 +252,13 @@ class RoadSceneRenderer:
             ax.set_xlabel('x (meters)')
             ax.set_ylabel('y (meters)')
             ax.set_title(f'Frame {frame_num} - Test Vehicle {test_vehicle_id}')
+
+            fps_count += 1
+            now = time.perf_counter()
+            elapsed = now - fps_window_start
+            if elapsed >= 1.0:
+                print(f"[render] {fps_count / elapsed:.2f} FPS")
+                fps_count = 0
+                fps_window_start = now
         ani = animation.FuncAnimation(fig, update, frames=range(min_frame, max_frame+1), interval=40, repeat=True) # Create the animation, calling the update function for each frame in the test vehicle's frame range, with a 40ms interval between frames (25 FPS)
         plt.show()

@@ -4,6 +4,7 @@ import torch
 import multiprocessing as mp
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import time
 
 from live_windowizer import LiveWindowizer, OnlineFrameFeatureEngineer
 from hdv.hdv_dbn.prediction.online_predictor import OnlinePredictor
@@ -100,6 +101,8 @@ class SingleVehicleSimulation:
 		self.renderer.render_road(ax, xlim=(xmin, xmax), ylim=(y_center - window_height/2, y_center + window_height/2))
 
 		last_frame_num = None
+		fps_count = 0
+		fps_window_start = time.perf_counter()
 		
 		def _safe_get_direction():
 			"""Safely get the driving direction for the test vehicle"""
@@ -112,7 +115,7 @@ class SingleVehicleSimulation:
 		
 
 		def update(frame_num):
-			nonlocal last_frame_num
+			nonlocal last_frame_num, fps_count, fps_window_start
 			if last_frame_num is not None and frame_num < last_frame_num:
 				_reset_prediction_state()
 			last_frame_num = frame_num
@@ -196,6 +199,14 @@ class SingleVehicleSimulation:
 			ax.set_ylim(ylim)
 			ax.invert_yaxis() # Invert y-axis so that lower y is at the top (image coordinates)
 			ax.set_title(f'Frame {frame_num} - Test Vehicle {self.vehicle_id}')
+
+			fps_count += 1
+			now = time.perf_counter()
+			elapsed = now - fps_window_start
+			if elapsed >= 1.0:
+				print(f"[render] {fps_count / elapsed:.2f} FPS")
+				fps_count = 0
+				fps_window_start = now
 
 		ani = animation.FuncAnimation(fig, update, frames=range(min_frame, max_frame+1), interval=40, repeat=True)
 		plt.show()
