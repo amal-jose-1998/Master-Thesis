@@ -2,7 +2,6 @@ import multiprocessing as mp
 import matplotlib.pyplot as plt
 from pedal_visualizer import PedalVisualizer
 from steering_visualizer import SteeringVisualizer
-import time
 
 class CombinedVisualizer:
     """

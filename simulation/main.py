@@ -1,30 +1,42 @@
 import os
-import pandas as pd
-from road_renderer import RoadSceneRenderer
-from vehicle_utils import get_test_vehicle_ids, select_meaningful_vehicles_in_test
+import sys
 import multiprocessing as mp
+import pandas as pd
+from pathlib import Path
+
+# Ensure workspace root is in sys.path for hdv imports
+WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if WORKSPACE_ROOT not in sys.path:
+    sys.path.insert(0, WORKSPACE_ROOT)
+
+from hdv.hdv_dbn.config import DBN_STATES
+from hdv.hdv_dbn.trainer import HDVTrainer
+from hdv.hdv_dbn.datasets.highd_loader import load_highd_folder
+from hdv.hdv_dbn.prediction.semantic_label_utils import load_semantic_labels_from_yaml
+from hdv.hdv_dbn.prediction.model_interface import HDVDbnModel
+from hdv.hdv_dbn.prediction.online_predictor import OnlinePredictor
+from road_renderer import RoadSceneRenderer
+from vehicle_utils import get_test_vehicle_ids, select_meaningful_vehicles_in_test, get_vehicle_class, pick_classwise_scaler
 from combined_visualizer import visualizer_process
+from prediction_visualizer import prediction_visualizer_process
 
 
-# Path to split.json
-SPLIT_JSON_PATH = os.path.join(
-    os.path.dirname(__file__),
-    '..', 'hdv', 'models', 'main-model-sticky_S2_A4_hierarchical', 'split.json'
-)
+EXP_DIR = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'models', 'main-model-sticky_S2_A4_hierarchical')
+DATA_ROOT = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'data', 'highd')
+CHECKPOINT_NAME = 'final.npz'
 
 # User parameters for single vehicle simulation
-SIMULATE_SINGLE_VEHICLE = False  # Set True to simulate a specific vehicle
+SIMULATE_SINGLE_VEHICLE = True  # Set True to simulate a specific vehicle
 SINGLE_REC_ID = 33                # Recording ID (int)
 SINGLE_VEHICLE_ID = 1008            # Vehicle ID (int)
 
 
 # User options for meaningful vehicle selection from test set
-LANE_CHANGE = False      # Set True to include lane-changing vehicles
-ACCEL_BRAKE = True      # Set True to include acceleration/braking vehicles
+LANE_CHANGE = True      # Set True to include lane-changing vehicles
+ACCEL_BRAKE = False      # Set True to include acceleration/braking vehicles
 FOLLOWING = False       # Set True to include following vehicles
 ACCEL_THRESHOLD = 5.0   # Threshold for acceleration/braking
-MIN_FRAMES = 200        # Minimum frames for a vehicle
-
+MIN_FRAMES = 150        # Minimum frames for a vehicle
 
 
 def load_tracks(tracks_csv_path, vehicle_id=None, tracks_meta_df=None):
@@ -81,72 +93,71 @@ def load_tracks_meta(tracks_meta_path):
 
 
 def main():
-    test_vehicle_ids = get_test_vehicle_ids(SPLIT_JSON_PATH) # {recording_id: set of vehicle_ids}
-    data_dir = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'data', 'highd') 
+    # Load maneuver/action labels from semantic_map.yaml
+    S = len(DBN_STATES.driving_style)
+    A = len(DBN_STATES.action)
+    SEMANTIC_MAP_PATH = os.path.join(EXP_DIR, 'semantic_map.yaml')
+    SPLIT_JSON_PATH = os.path.join(EXP_DIR, 'split.json')
+    maneuver_labels = load_semantic_labels_from_yaml(SEMANTIC_MAP_PATH, S, A) # semantic labels for each (style, action) pair, used for annotation in the prediction visualizer
+    test_vehicle_ids = get_test_vehicle_ids(SPLIT_JSON_PATH) # {recording_id: set of vehicle_ids} 
 
-    # Start the combined visualizer in a separate process
-    queue = mp.Queue() # Create a multiprocessing queue for communication between the main process and the visualizer process
-    vis_process = mp.Process(target=visualizer_process, args=(queue,)) # Create the visualizer process, passing the queue as an argument
+    # Start the combined visualizer for pedal and steering in a separate process
+    pedal_steering_queue = mp.Queue() # Create a multiprocessing queue for communication between the main process and the visualizer process for pedal/steering updates
+    vis_process = mp.Process(target=visualizer_process, args=(pedal_steering_queue,)) # Create the visualizer process, passing the queue as an argument
     vis_process.start() # Start the visualizer process
 
-    try:
-        # If SIMULATE_SINGLE_VEHICLE is True, simulate only that vehicle
-        if SIMULATE_SINGLE_VEHICLE:
-            from vehicle_utils import simulate_single_vehicle
-            simulate_single_vehicle(
-                SINGLE_REC_ID,
-                SINGLE_VEHICLE_ID,
-                data_dir,
-                # Pass a lambda that creates a RoadSceneRenderer with the visualizer queue to the simulate_single_vehicle function, so it can send pedal/steering state updates to the visualizer
-                lambda *args, **kwargs: RoadSceneRenderer(*args, **kwargs, visualizer_queue=queue), # Pass the visualizer queue to the renderer
-                load_tracks_meta,
-                load_recording_meta,
-                load_tracks
-            )
-            return
+    # Start the prediction visualizer in a separate process
+    prediction_queue = mp.Queue()
+    prediction_vis_process = mp.Process(target=prediction_visualizer_process, args=(prediction_queue, maneuver_labels))
+    prediction_vis_process.start()
 
-        for rec in sorted(test_vehicle_ids.keys()): # Only process recordings that have test vehicles
-            tracks_meta_path = os.path.join(data_dir, f"{rec:02d}_tracksMeta.csv")
-            tracks_csv_path = os.path.join(data_dir, f"{rec:02d}_tracks.csv")
-            recording_meta_path = os.path.join(data_dir, f"{rec:02d}_recordingMeta.csv")
+    ckpt_path = os.path.join(EXP_DIR, CHECKPOINT_NAME) # Path to the model checkpoint file
+    trainer = HDVTrainer.load(ckpt_path) # Load the HDVTrainer instance from the checkpoint, which includes the trained model and scalers for feature normalization
+    model = HDVDbnModel(trainer) # Create an instance of the HDVDbnModel using the loaded trainer, which will be used for making online predictions during the simulation
+    predictor = OnlinePredictor(model, warmup_steps=2) # Create an instance of the OnlinePredictor, which wraps the HDVDbnModel and provides an interface for making predictions in an online manner during the simulation
+
+    try:
+        if SIMULATE_SINGLE_VEHICLE: # If SIMULATE_SINGLE_VEHICLE is True, simulate only that vehicle instead of looping through all test vehicles in all recordings
+            from single_vehicle import SingleVehicleSimulation
+
+            tracks_meta_path = os.path.join(DATA_ROOT, f"{SINGLE_REC_ID:02d}_tracksMeta.csv")
+            tracks_csv_path = os.path.join(DATA_ROOT, f"{SINGLE_REC_ID:02d}_tracks.csv")
+            recording_meta_path = os.path.join(DATA_ROOT, f"{SINGLE_REC_ID:02d}_recordingMeta.csv")
             tracks_meta_df = load_tracks_meta(tracks_meta_path)
             recording_meta = load_recording_meta(recording_meta_path)
-            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=queue) # Pass the visualizer queue to the renderer so it can send pedal/steering state updates
-            # If all selection flags are False, render all test vehicles one by one
-            if not (LANE_CHANGE or ACCEL_BRAKE or FOLLOWING):
-                for vehicle_id in test_vehicle_ids[rec]:
-                    print(f'Animating test vehicle {vehicle_id} in recording {rec:02d}...')
-                    vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df) # Load tracks for the specific vehicle, using the tracks_meta_df to filter for the correct frame range
-                    renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id) # Animate the scene for the specific vehicle
-                continue
-            selected = select_meaningful_vehicles_in_test( # Select meaningful vehicles from the test set based on the specified criteria and flags
-                tracks_meta_path, test_vehicle_ids,
-                lane_change=LANE_CHANGE,
-                accel_brake=ACCEL_BRAKE,
-                following=FOLLOWING,
-                accel_threshold=ACCEL_THRESHOLD,
-                min_frames=MIN_FRAMES
+            vehicle_tracks = load_tracks(tracks_csv_path, SINGLE_VEHICLE_ID, tracks_meta_df) # Load the tracks for the single vehicle, filtering for the vehicle ID and frame range based on the tracks metadata
+            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=pedal_steering_queue)
+            vehicle_class = get_vehicle_class(tracks_meta_df, SINGLE_VEHICLE_ID)
+            scaler_mean_vec = pick_classwise_scaler(trainer.scaler_mean, vehicle_class)
+            scaler_std_vec  = pick_classwise_scaler(trainer.scaler_std,  vehicle_class)
+            
+            print(f"[main] vehicle_id={SINGLE_VEHICLE_ID} class='{vehicle_class}' "
+                  f"scaler_mean_type={'dict' if isinstance(trainer.scaler_mean, dict) else 'array'} "
+                  f"scaler_std_type={'dict' if isinstance(trainer.scaler_std, dict) else 'array'}")
+            
+            simulator = SingleVehicleSimulation(
+                predictor=predictor,
+                renderer=renderer,
+                vehicle_id=SINGLE_VEHICLE_ID,
+                recording_id=SINGLE_REC_ID,
+                vehicle_tracks=vehicle_tracks,
+                tracks_meta_df=tracks_meta_df,
+                recording_meta=recording_meta,
+                pedal_queue=pedal_steering_queue,
+                prediction_queue=prediction_queue,
+                maneuver_labels=maneuver_labels,
+                scaler_mean=scaler_mean_vec,
+                scaler_std=scaler_std_vec,
+                vehicle_class=vehicle_class,
             )
-            if selected.empty:
-                print(f"No meaningful vehicles found in test set for recording {rec:02d}.")
-                continue
-            flags = []
-            if LANE_CHANGE:
-                flags.append('LANE_CHANGE')
-            if ACCEL_BRAKE:
-                flags.append('ACCEL_BRAKE')
-            if FOLLOWING:
-                flags.append('FOLLOWING')
-            flags_str = ', '.join(flags) if flags else 'None'
-            print(f"Test vehicles for recording {rec:02d} with flags [{flags_str}]: {len(selected)}")
-            for vehicle_id in selected['id']:
-                print(f'Animating vehicle {vehicle_id}...')
-                vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
-                renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)
+            simulator.run()
+            return
+
     finally:
-        # Tell the visualizer process to quit and wait for it to finish
-        queue.put('quit')
-        vis_process.join() 
+        pedal_steering_queue.put('quit')
+        vis_process.join()
+        prediction_queue.put('quit')
+        prediction_vis_process.join()
 
 if __name__ == '__main__':
     main()

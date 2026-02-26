@@ -68,7 +68,9 @@ def select_meaningful_vehicles_in_test(tracks_meta_path, test_vehicle_ids, lane_
 
 def simulate_single_vehicle(rec, vehicle_id, data_dir, renderer_class, load_tracks_meta, load_recording_meta, load_tracks):
     """
-    Simulate a particular vehicle from a particular recording.
+    Simulate a particular vehicle from a particular recording. 
+    This function loads the necessary data for the specified vehicle and recording, initializes the renderer, 
+    and runs the animation for that vehicle.
 
     parameters:
     - rec: Recording ID (integer) of the vehicle to simulate.
@@ -88,3 +90,39 @@ def simulate_single_vehicle(rec, vehicle_id, data_dir, renderer_class, load_trac
     vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
     renderer: RoadSceneRenderer = renderer_class(recording_meta, tracks_meta_df)
     renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)
+
+
+def get_vehicle_class(tracks_meta_df, vehicle_id):
+    """
+    Retrieves the vehicle class for a given vehicle ID from the tracks metadata DataFrame. 
+    If the vehicle ID is not found or the class information is missing, it returns None.
+    
+    parameters:
+    - tracks_meta_df: DataFrame containing the metadata for all vehicles, including their IDs and classes.
+    - vehicle_id: The ID of the vehicle for which to retrieve the class.
+    returns:
+    - The vehicle class as a lowercase string if found, otherwise None.
+    """
+    row = tracks_meta_df[tracks_meta_df["id"] == int(vehicle_id)]
+    if row.empty:
+        raise ValueError(f"Vehicle ID {vehicle_id} not found in tracks_meta_df")
+    if "class" in row.columns:
+        return str(row["class"].iloc[0]).strip().lower() # Return the vehicle class as a lowercase string, or None if it's NaN
+    return None
+
+def pick_classwise_scaler(scalar_dict, vehicle_class):
+    """
+    Picks the appropriate scaler (mean or std) for a vehicle based on its class.
+
+    parameters:
+    - scalar_dict: Either a single scaler value (if not class-specific) or a dictionary mapping vehicle classes to scalers.
+    - vehicle_class: The class of the vehicle for which to pick the scaler.
+
+    returns:
+    - The scaler value corresponding to the vehicle's class
+    """
+    vc = vehicle_class.strip().lower()
+    if vc in scalar_dict:
+        return scalar_dict[vc]
+
+    raise ValueError(f"Vehicle class '{vehicle_class}' not found in scaler dict keys: {list(scalar_dict.keys())}")
