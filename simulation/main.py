@@ -26,7 +26,7 @@ DATA_ROOT = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'data', 'highd'
 CHECKPOINT_NAME = 'final.npz'
 
 # User parameters for single vehicle simulation
-SIMULATE_SINGLE_VEHICLE = True  # Set True to simulate a specific vehicle
+SIMULATE_SINGLE_VEHICLE = False  # Set True to simulate a specific vehicle
 SINGLE_REC_ID = 33                # Recording ID (int)
 SINGLE_VEHICLE_ID = 1008            # Vehicle ID (int)
 
