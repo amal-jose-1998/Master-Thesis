@@ -19,21 +19,6 @@ class RoadSceneRenderer:
         self.steering_visualizer = SteeringVisualizer() # For internal steering visualization if not using external visualizer
         self.visualizer_queue: Queue = visualizer_queue  # Queue for sending pedal/steering state updates to external visualizer, if provided
 
-        # caches for fast rendering 
-        self._road_xspan = None  # (xmin, xmax) used when road was drawn 
-
-        # meta cache: id -> (width, height, drivingDirection)
-        self._meta_by_id = {}
-        try:
-            for row in self.tracks_meta_df.itertuples(index=False):
-                self._meta_by_id[int(row.id)] = (float(row.width), float(row.height), int(row.drivingDirection))
-        except Exception:
-            print("Error caching tracks metadata for rendering. Vehicle dimensions and directions will be looked up on the fly, which may cause slowdowns during rendering.")
-
-        # vehicle artists
-        self._rect_by_id = {}       # id -> Rectangle
-        self._visible_last = set()  # ids visible last frame
-
     def render_road(self, ax: plt.Axes, xlim=(0, 1000), ylim=None):
         """
         Renders the road with lane markings based on the recording metadata.
@@ -60,12 +45,15 @@ class RoadSceneRenderer:
 
         # Draw lane markings, using solid lines for the outermost markings and dashed lines for inner markings
         for i, y in enumerate(upper):
-            ls = '-' if (i == 0 or i == len(upper) - 1) else '--'
-            ax.axhline(y, color=self.lane_color, linestyle=ls, linewidth=1, zorder=3)
+            if i == 0 or i == len(upper) - 1:
+                ax.axhline(y, color=self.lane_color, linestyle='-', linewidth=1, zorder=3) 
+            else:
+                ax.axhline(y, color=self.lane_color, linestyle='--', linewidth=1, zorder=3)
         for i, y in enumerate(lower):
-            ls = '-' if (i == 0 or i == len(lower) - 1) else '--'
-            ax.axhline(y, color=self.lane_color, linestyle=ls, linewidth=1, zorder=3)
-
+            if i == len(lower) - 1 or i == 0:
+                ax.axhline(y, color=self.lane_color, linestyle='-', linewidth=1, zorder=3)
+            else:
+                ax.axhline(y, color=self.lane_color, linestyle='--', linewidth=1, zorder=3)
         ax.set_xlim(xlim)
         ax.set_ylim(ylims)
         ax.invert_yaxis()  # Keep inverted to match highD convention
@@ -73,10 +61,8 @@ class RoadSceneRenderer:
         ax.set_xlabel('x (meters)')
         ax.set_ylabel('y (meters)')
         ax.set_title('Road Scene')
-        self._road_drawn = True
-        self._road_xspan = xlim
 
-    def _render_vehicles(self, ax: plt.Axes, tracks_df: pd.DataFrame, test_vehicle_id=None):
+    def render_vehicles(self, ax: plt.Axes, tracks_df: pd.DataFrame, test_vehicle_id=None):
         """
         Renders vehicles as rectangles based on their position and dimensions from the tracks dataframe.
         
@@ -85,7 +71,6 @@ class RoadSceneRenderer:
         - tracks_df: DataFrame containing the tracks data for the current frame, filtered to only include vehicles present in that frame
         - test_vehicle_id: ID of the test vehicle to highlight (optional)
         """
-        seen = set()
         for vid, vehicle_data in tracks_df.groupby('id'):
             vehicle_meta = self.tracks_meta_df[self.tracks_meta_df['id'] == vid].iloc[0] # Get metadata for this vehicle to determine dimensions and direction
             width = vehicle_meta['width']
@@ -101,61 +86,6 @@ class RoadSceneRenderer:
                 color = 'green'
             rect = Rectangle((x0, y0), width, height, edgecolor=color, facecolor="none", lw=2, zorder=3) 
             ax.add_patch(rect) # Draw the vehicle rectangle on the plot
-    
-    def render_vehicles(self, ax: plt.Axes, frame_df, test_vehicle_id=None):
-        """
-        Renders vehicles for a single frame, using caching to optimize performance. 
-        Vehicles are colored based on their direction, with the test vehicle highlighted in red.
-        """
-        seen = set()
-
-        for row in frame_df.itertuples(index=False):
-            vid = int(row.id)
-            x0 = float(row.x)
-            y0 = float(row.y)
-
-            meta = self._meta_by_id.get(vid, None)
-            if meta is None:
-                # fallback (should be rare)
-                try:
-                    m = self.tracks_meta_df[self.tracks_meta_df['id'] == vid].iloc[0]
-                    width = float(m['width']); height = float(m['height']); direction = int(m['drivingDirection'])
-                    self._meta_by_id[vid] = (width, height, direction)
-                    meta = self._meta_by_id[vid]
-                except Exception:
-                    continue
-
-            width, height, direction = meta
-
-            if vid == test_vehicle_id:
-                color = 'red'
-            elif direction == 1:
-                color = 'blue'
-            else:
-                color = 'green'
-
-            rect = self._rect_by_id.get(vid)
-            if rect is None:
-                rect = Rectangle((x0, y0), width, height, edgecolor=color, facecolor="none", lw=2, zorder=4)
-                ax.add_patch(rect)
-                self._rect_by_id[vid] = rect
-            else:
-                rect.set_xy((x0, y0))
-                # width/height are constant in highD, but safe to keep correct:
-                rect.set_width(width)
-                rect.set_height(height)
-                rect.set_edgecolor(color)
-                rect.set_visible(True)
-
-            seen.add(vid)
-
-        # Hide rectangles that were visible last frame but are not present now
-        for vid in (self._visible_last - seen):
-            r = self._rect_by_id.get(vid)
-            if r is not None:
-                r.set_visible(False)
-
-        self._visible_last = seen
 
     def animate_scene(self, tracks_df: pd.DataFrame, test_vehicle_id, window_width=150, window_height=50, x_offset=10):
         """
