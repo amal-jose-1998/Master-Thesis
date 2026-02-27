@@ -72,11 +72,11 @@ def load_recording_meta(recording_meta_path):
     """
     df = pd.read_csv(recording_meta_path)
     # Extract lane markings and other relevant info
-    lane_markings_upper = [float(x) for x in df['upperLaneMarkings'].iloc[0].split(';')]
-    lane_markings_lower = [float(x) for x in df['lowerLaneMarkings'].iloc[0].split(';')]
+    upperLaneMarkings = [float(x) for x in df['upperLaneMarkings'].iloc[0].split(';')] # Convert semicolon-separated string to list of floats
+    lowerLaneMarkings = [float(x) for x in df['lowerLaneMarkings'].iloc[0].split(';')]
     return {
-        'lane_markings_upper': lane_markings_upper,
-        'lane_markings_lower': lane_markings_lower,
+        'upperLaneMarkings': upperLaneMarkings,
+        'lowerLaneMarkings': lowerLaneMarkings,
     }
 
 def load_tracks_meta(tracks_meta_path):
@@ -125,7 +125,7 @@ def main():
             recording_meta_path = os.path.join(DATA_ROOT, f"{SINGLE_REC_ID:02d}_recordingMeta.csv")
             tracks_meta_df = load_tracks_meta(tracks_meta_path)
             recording_meta = load_recording_meta(recording_meta_path)
-            vehicle_tracks = load_tracks(tracks_csv_path, SINGLE_VEHICLE_ID, tracks_meta_df) # Load the tracks for the single vehicle, filtering for the vehicle ID and frame range based on the tracks metadata
+            vehicle_tracks = load_tracks(tracks_csv_path, SINGLE_VEHICLE_ID, tracks_meta_df) # Load the tracks data in the frame range corresponding to the test vehicle
             renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=pedal_steering_queue)
             vehicle_class = get_vehicle_class(tracks_meta_df, SINGLE_VEHICLE_ID)
             scaler_mean_vec = pick_classwise_scaler(trainer.scaler_mean, vehicle_class)
@@ -141,8 +141,8 @@ def main():
                 vehicle_id=SINGLE_VEHICLE_ID,
                 recording_id=SINGLE_REC_ID,
                 vehicle_tracks=vehicle_tracks,
-                tracks_meta_df=tracks_meta_df,
-                recording_meta=recording_meta,
+                tracks_meta_df=tracks_meta_df, # DataFrame containing metadata for all vehicles in the recording
+                recording_meta=recording_meta, # dict containing lane markings and other recording-level metadata
                 pedal_queue=pedal_steering_queue,
                 prediction_queue=prediction_queue,
                 maneuver_labels=maneuver_labels,

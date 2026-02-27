@@ -20,9 +20,6 @@ class RoadSceneRenderer:
         self.steering_visualizer = SteeringVisualizer() # For internal steering visualization if not using external visualizer
         self.visualizer_queue: Queue = visualizer_queue  # Queue for sending pedal/steering state updates to external visualizer, if provided
 
-        # caches for fast rendering 
-        self._road_xspan = None  # (xmin, xmax) used when road was drawn 
-
         # meta cache: id -> (width, height, drivingDirection)
         self._meta_by_id = {}
         try:
@@ -31,33 +28,35 @@ class RoadSceneRenderer:
         except Exception:
             print("Error caching tracks metadata for rendering. Vehicle dimensions and directions will be looked up on the fly, which may cause slowdowns during rendering.")
 
-        # vehicle artists
+        # vehicle rectangle cache for rendering: id -> Rectangle patch
         self._rect_by_id = {}       # id -> Rectangle
         self._visible_last = set()  # ids visible last frame
 
-    def render_road(self, ax: plt.Axes, xlim=(0, 1000), ylim=None):
+    def render_road(self, ax: plt.Axes, xlims):
         """
         Renders the road with lane markings based on the recording metadata.
 
         parameters:
         - ax: Matplotlib axis to draw on
-        - xlim: Tuple specifying the x-axis limits for rendering the road
-        - ylim: Tuple specifying the y-axis limits for rendering the road (if None, it will be set based on lane markings)
+        - xlims: Tuple specifying the x-axis limits for rendering the road        
         """
+        window_height = 50 # Height of the y-axis window to show around the center of the road
         offset = 0.5  # Offset for lane marking thickness and road margins
-        upper = self.recording_meta['lane_markings_upper']
-        lower = self.recording_meta['lane_markings_lower']
+        upper = self.recording_meta['upperLaneMarkings']
+        lower = self.recording_meta['lowerLaneMarkings']
         road_top = upper[0] # y value of the top lane marking (smallest y since y increases downwards)
         road_bottom = lower[-1] # y value of the bottom lane marking (largest y)
+        y_center = (road_top + road_bottom) / 2
+        ylims = (y_center - window_height/2, y_center + window_height/2)
+
         median_top = upper[-1] # y value of the bottom lane marking in the upper set (largest y in upper)
         median_bottom = lower[0] # y value of the top lane marking in the lower set (smallest y in lower)
-        
-        ylims = (road_top - 2*offset, road_bottom + 2*offset) if ylim is None else ylim # Set y limits to show some margin around the road if not provided
+            
 
-        ax.fill_between(xlim, ylims[0], road_top-offset, color=self.median_color, zorder=0) # Fill top margin with median color
-        ax.fill_between(xlim, road_bottom+offset, ylims[1], color=self.median_color, zorder=0) # Fill bottom margin with median color
-        ax.fill_between(xlim, road_top-offset, road_bottom+offset, color=self.road_color, zorder=1) # Fill the main road area with road color
-        ax.fill_between(xlim, median_top+offset, median_bottom-offset, color=self.median_color, zorder=2) # Draw median strip between upper and lower lane markings
+        ax.fill_between(xlims, ylims[0], road_top-offset, color=self.median_color, zorder=0) # Fill top margin with median color
+        ax.fill_between(xlims, road_bottom+offset, ylims[1], color=self.median_color, zorder=0) # Fill bottom margin with median color
+        ax.fill_between(xlims, road_top-offset, road_bottom+offset, color=self.road_color, zorder=1) # Fill the main road area with road color
+        ax.fill_between(xlims, median_top+offset, median_bottom-offset, color=self.median_color, zorder=2) # Draw median strip between upper and lower lane markings
 
         # Draw lane markings, using solid lines for the outermost markings and dashed lines for inner markings
         for i, y in enumerate(upper):
@@ -67,7 +66,7 @@ class RoadSceneRenderer:
             ls = '-' if (i == 0 or i == len(lower) - 1) else '--'
             ax.axhline(y, color=self.lane_color, linestyle=ls, linewidth=1, zorder=3)
 
-        ax.set_xlim(xlim)
+        ax.set_xlim(xlims)
         ax.set_ylim(ylims)
         ax.invert_yaxis()  # Keep inverted to match highD convention
         ax.set_aspect('equal') # Keep aspect ratio so lanes look correct and minimize margins
@@ -75,7 +74,6 @@ class RoadSceneRenderer:
         ax.set_ylabel('y (meters)')
         ax.set_title('Road Scene')
         self._road_drawn = True
-        self._road_xspan = xlim
 
     def _render_vehicles(self, ax: plt.Axes, tracks_df: pd.DataFrame, test_vehicle_id=None):
         """
@@ -136,27 +134,23 @@ class RoadSceneRenderer:
                 color = 'green'
 
             rect = self._rect_by_id.get(vid)
-            if rect is None:
+            if rect is None: # Create new rectangle patch for this vehicle if it doesn't exist in the cache, and add it to the plot
                 rect = Rectangle((x0, y0), width, height, edgecolor=color, facecolor="none", lw=2, zorder=4)
-                ax.add_patch(rect)
-                self._rect_by_id[vid] = rect
-            else:
-                rect.set_xy((x0, y0))
-                # width/height are constant in highD, but safe to keep correct:
-                rect.set_width(width)
-                rect.set_height(height)
-                rect.set_edgecolor(color)
+                ax.add_patch(rect) 
+                self._rect_by_id[vid] = rect # Cache the rectangle patch for this vehicle ID for future reuse
+            else: # just update the position of the existing rectangle patch for this vehicle ID
+                rect.set_xy((x0, y0)) # Update position of the rectangle patch to the current position of the vehicle
                 rect.set_visible(True)
 
             seen.add(vid)
 
         # Hide rectangles that were visible last frame but are not present now
-        for vid in (self._visible_last - seen):
-            r = self._rect_by_id.get(vid)
+        for vid in (self._visible_last - seen): 
+            r = self._rect_by_id.get(vid) # Get the rectangle patch for this vehicle ID from the cache
             if r is not None:
                 r.set_visible(False)
 
-        self._visible_last = seen
+        self._visible_last = seen # Update the set of visible vehicle IDs for the next frame's rendering
 
     def animate_scene(self, tracks_df: pd.DataFrame, test_vehicle_id, window_width=150, window_height=50, x_offset=10):
         """
@@ -175,8 +169,8 @@ class RoadSceneRenderer:
             return
         min_frame, max_frame = test_vehicle_frames[0], test_vehicle_frames[-1] # Get the minimum and maximum frame numbers for the test vehicle to set the animation range
         fig, ax = plt.subplots(figsize=(10, 6)) 
-        upper = self.recording_meta['lane_markings_upper'] 
-        lower = self.recording_meta['lane_markings_lower']
+        upper = self.recording_meta['upperLaneMarkings'] 
+        lower = self.recording_meta['lowerLaneMarkings']
         road_top = upper[0]
         road_bottom = lower[-1]
         y_center = (road_top + road_bottom) / 2
