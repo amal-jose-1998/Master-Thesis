@@ -511,7 +511,7 @@ class HDVTrainer:
         return w # (T,) where lc timesteps have higher weights and non -lc timesteps have weight 1.0
 
     def _compute_logB(self, obs, skipped_bad_logB, i):
-        logB_sa = self.emissions.loglikelihood(obs)  # (T,S,A); Compute emission log-likelihoods logB[t,s,a] = log p(o_t | s,a)
+        logB_sa = self.emissions.loglikelihood(obs, device=self.device, dtype=self.dtype)  # (T,S,A); Compute emission log-likelihoods logB[t,s,a] = log p(o_t | s,a)
         
         if logB_sa.ndim != 3 or logB_sa.shape != (obs.shape[0], self.S, self.A):
             raise ValueError(
@@ -821,7 +821,7 @@ class HDVTrainer:
                 if obs is None or obs.shape[0] == 0:
                     continue
 
-                logB_sa = self.emissions.loglikelihood(obs)  # (T,S,A)
+                logB_sa = self.emissions.loglikelihood(obs, device=self.device, dtype=self.dtype)  # (T,S,A)
                 if logB_sa.ndim != 3 or logB_sa.shape[1:] != (int(self.S), int(self.A)):
                     raise ValueError(
                         f"logB_sa has shape {tuple(logB_sa.shape)}, expected (T,{int(self.S)},{int(self.A)})."

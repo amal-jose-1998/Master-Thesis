@@ -126,7 +126,7 @@ class DiagGaussianExpert:
 
         return per_dim.sum(dim=2)  # (T,K)
 
-    def m_step(self, cont_seqs, gamma_seqs, mask_seqs=None, use_progress=True):
+    def m_step(self, cont_seqs, gamma_seqs, mask_seqs=None, device=None, dtype=None, use_progress=True):
         """
         M-step with masked sufficient statistics.
 
@@ -141,7 +141,8 @@ class DiagGaussianExpert:
         if self.D == 0:
             return
 
-        device, dtype = get_device_dtype()
+        device = self._device if device is None else torch.device(device)
+        dtype = self._dtype if dtype is None else dtype
         self.to_device(device=device, dtype=dtype)
 
         K, D = self.K, self.D
@@ -265,7 +266,7 @@ class BernoulliExpert:
         logp = xb * torch.log(p) + (1.0 - xb) * torch.log(1.0 - p)  # (T,K,B)
         return logp.sum(dim=2)  # (T,K)
 
-    def m_step(self, xbin_raw_seqs, gamma_seqs, finite_mask_seqs=None, use_progress=True):
+    def m_step(self, xbin_raw_seqs, gamma_seqs, finite_mask_seqs=None, device=None, dtype=None, use_progress=True):
         """
         M-step for Bernoulli with optional finite mask (in case xbin contains NaNs).
           W[k,j] = sum_t gamma[t,k] * m[t,j]
@@ -274,7 +275,8 @@ class BernoulliExpert:
         if self.B == 0:
             return
 
-        device, dtype = get_device_dtype()
+        device = self._device if device is None else torch.device(device)
+        dtype = self._dtype if dtype is None else dtype
         self.to_device(device=device, dtype=dtype)
 
         K, B = self.K, self.B
@@ -385,8 +387,9 @@ class MixedEmissionModel:
         self.style_bern.to_device(device, dtype)
         self.action_bern.to_device(device, dtype)
 
-    def _ensure_device(self):
-        device, dtype = get_device_dtype()
+    def _ensure_device(self, device=None, dtype=None):
+        device = self._device if device is None else torch.device(device)
+        dtype = self._dtype if dtype is None else dtype
         # If experts weren't materialized on the configured device yet, push them.
         need = (self.cont_dim > 0) and (self.style_gauss._mean_t is None or self.action_gauss._mean_t is None)
         need = need or ((self.bin_dim > 0) and (self.style_bern._p_t is None or self.action_bern._p_t is None))
@@ -396,7 +399,7 @@ class MixedEmissionModel:
     # -------------------------------------------------------------------------
     # Likelihood
     # -------------------------------------------------------------------------
-    def loglikelihood_experts(self, obs):
+    def loglikelihood_experts(self, obs, device=None, dtype=None):
         """
         Returns:
           logB_s: (T,S)
@@ -404,7 +407,7 @@ class MixedEmissionModel:
 
         Each expert sees the full observation, but is conditioned on its own hidden variable.
         """
-        self._ensure_device()
+        self._ensure_device(device=device, dtype=dtype)
         device, dtype = self._device, self._dtype
 
         x = as_torch(obs, device=device, dtype=dtype)
@@ -438,7 +441,7 @@ class MixedEmissionModel:
         w_bern = float(getattr(TRAINING_CONFIG, "bern_weight", 1.0))
         return (log_s_gauss + w_bern * log_s_bern), (log_a_gauss + w_bern * log_a_bern)
 
-    def loglikelihood(self, obs):
+    def loglikelihood(self, obs, device=None, dtype=None):
         """
         Fully normalized PoE emission.
 
@@ -446,8 +449,8 @@ class MixedEmissionModel:
             logB_sa: (T,S,A) where
                 logB_sa[t,s,a] = log p_s(x_t|s) + log p_a(x_t|a) - log Z_sa(t,s,a)
         """
-        logB_s, logB_a = self.loglikelihood_experts(obs)  # (T,S), (T,A)
-        self._ensure_device()
+        logB_s, logB_a = self.loglikelihood_experts(obs, device=device, dtype=dtype)  # (T,S), (T,A)
+        self._ensure_device(device=device, dtype=dtype)
         device, dtype = self._device, self._dtype
 
         x = as_torch(obs, device=device, dtype=dtype)
@@ -511,7 +514,7 @@ class MixedEmissionModel:
     # -------------------------------------------------------------------------
     # EM M-step
     # -------------------------------------------------------------------------
-    def update_from_posteriors(self, obs_seqs, gamma_sa_seqs, lr=1e-2, steps=10, use_progress=True, verbose=0, chunk_size=None):
+    def update_from_posteriors(self, obs_seqs, gamma_sa_seqs, lr=1e-2, steps=10, use_progress=True, verbose=0, chunk_size=None, device=None, dtype=None):
         """
         Joint gradient-based M-step for fully normalized PoE emissions.
         Maximizes the exact PoE Q-function:
@@ -532,8 +535,9 @@ class MixedEmissionModel:
         - mass_action: (A,) total responsibility mass per action
         - mass_joint:  (S,A) total responsibility mass per (style,action)
         """
-        self._ensure_device()
-        device, dtype = get_device_dtype()
+        self._ensure_device(device=device, dtype=dtype)
+        device, dtype = self._device, self._dtype
+
         S, A = self.num_style, self.num_action
         Dc, B = self.cont_dim, self.bin_dim
 

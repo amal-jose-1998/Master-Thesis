@@ -2,6 +2,12 @@ import torch
 
 from .config import TRAINING_CONFIG
 
+def _assert_same_device_dtype(x, ref, name):
+    if x.device != ref.device:
+        raise ValueError(f"{name}.device={x.device} but logB_s_a.device={ref.device}")
+    if x.dtype != ref.dtype:
+        raise ValueError(f"{name}.dtype={x.dtype} but logB_s_a.dtype={ref.dtype}")
+
 # -----------------------------------------------------------------------------
 # Numerical stability constants
 # -----------------------------------------------------------------------------
@@ -57,6 +63,12 @@ def forward_backward_torch(pi_s0, pi_a0_given_s0, A_s, A_a, logB_s_a, return_xi_
     """
     device = logB_s_a.device
     dtype = logB_s_a.dtype
+
+    # Enforce consistency early on device/dtype to avoid silent errors later.
+    _assert_same_device_dtype(pi_s0, logB_s_a, "pi_s0")
+    _assert_same_device_dtype(pi_a0_given_s0, logB_s_a, "pi_a0_given_s0")
+    _assert_same_device_dtype(A_s, logB_s_a, "A_s")
+    _assert_same_device_dtype(A_a, logB_s_a, "A_a")
 
     T, S, A = logB_s_a.shape
 

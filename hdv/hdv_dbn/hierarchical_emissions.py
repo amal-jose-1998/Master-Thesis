@@ -123,7 +123,7 @@ class DiagGaussianExpert:
 
         return per_dim.sum(dim=3)                                             # (T,S,A)
 
-    def m_step(self, cont_seqs, gamma_seqs, mask_seqs=None, use_progress=True):
+    def m_step(self, cont_seqs, gamma_seqs, mask_seqs=None, device=None, dtype=None, use_progress=True):
         """
         Weighted M-step using joint responsibilities gamma[t,s,a]
 
@@ -138,7 +138,8 @@ class DiagGaussianExpert:
         if self.D == 0:
             return
 
-        device, dtype = _get_device_dtype()
+        device = self._device if device is None else torch.device(device)
+        dtype = self._dtype if dtype is None else dtype
         self.to_device(device=device, dtype=dtype)
 
         S, A, D = self.num_style, self.num_action, self.D
@@ -268,7 +269,7 @@ class BernoulliExpert:
 
         return logp.sum(dim=3)  # (T,S,A)                                               # (T,S,A)
 
-    def m_step(self, xbin_raw_seqs, gamma_seqs, finite_mask_seqs=None, use_progress=True):
+    def m_step(self, xbin_raw_seqs, gamma_seqs, finite_mask_seqs=None, device=None, dtype=None, use_progress=True):
         """
         M-step for Bernoulli with optional finite mask (in case xbin contains NaNs).
           W[s,a,j] = sum_t gamma[t,s,a] * m[t,j]
@@ -277,7 +278,8 @@ class BernoulliExpert:
         if self.B == 0:
             return
 
-        device, dtype = _get_device_dtype()
+        device = self._device if device is None else torch.device(device)
+        dtype = self._dtype if dtype is None else dtype
         self.to_device(device=device, dtype=dtype)
 
         S, A, B = self.num_style, self.num_action, self.B
@@ -375,23 +377,25 @@ class MixedEmissionModel:
         self.gauss.to_device(device, dtype)
         self.bern.to_device(device, dtype)
 
-    def _ensure_device(self):
-        device, dtype = _get_device_dtype()
-        # If experts weren't materialized on the configured device yet, push them.
+    def _ensure_device(self, device=None, dtype=None):
+        device = self._device if device is None else torch.device(device)
+        dtype = self._dtype if dtype is None else dtype
+
         need = (self.cont_dim > 0) and (self.gauss._mean_t is None)
         need = need or ((self.bin_dim > 0) and (self.bern._p_t is None))
+
         if need or self._device != device or self._dtype != dtype:
             self.to_device(device, dtype)
 
     # -------------------------------------------------------------------------
     # Likelihood
     # -------------------------------------------------------------------------
-    def loglikelihood(self, obs):
+    def loglikelihood(self, obs, device=None, dtype=None):
         """
         Returns:
           logB_sa: (T,S,A)
         """
-        self._ensure_device()
+        self._ensure_device(device=device, dtype=dtype)
         device, dtype = self._device, self._dtype
 
         x = _as_torch(obs, device=device, dtype=dtype)
@@ -427,9 +431,9 @@ class MixedEmissionModel:
     # -------------------------------------------------------------------------
     # EM M-step
     # -------------------------------------------------------------------------
-    def update_from_posteriors(self, obs_seqs, gamma_sa_seqs, use_progress=True):
-        device, dtype = _get_device_dtype()
-        self.to_device(device, dtype)
+    def update_from_posteriors(self, obs_seqs, gamma_sa_seqs, use_progress=True, device=None, dtype=None):
+        self._ensure_device(device=device, dtype=dtype)
+        device, dtype = self._device, self._dtype
 
         cont_obs_seqs, cont_mask_seqs = [], []
         xb_raw_seqs, xb_finite_seqs = [], []
@@ -469,10 +473,10 @@ class MixedEmissionModel:
                 xb_finite_seqs.append(torch.isfinite(xb_raw).to(dtype=dtype))
 
         # Expert updates
-        self.gauss.m_step(cont_obs_seqs, gamma_sa_seqs, mask_seqs=cont_mask_seqs, use_progress=False)
+        self.gauss.m_step(cont_obs_seqs, gamma_sa_seqs, mask_seqs=cont_mask_seqs, device=device, dtype=dtype, use_progress=False)
 
         if (not self.disable_discrete_obs) and self.bin_dim > 0:
-            self.bern.m_step(xb_raw_seqs, gamma_sa_seqs, finite_mask_seqs=xb_finite_seqs, use_progress=False)
+            self.bern.m_step(xb_raw_seqs, gamma_sa_seqs, finite_mask_seqs=xb_finite_seqs, device=device, dtype=dtype, use_progress=False)
 
         self.invalidate_cache()
 

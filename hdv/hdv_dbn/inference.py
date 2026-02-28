@@ -63,7 +63,7 @@ def infer_posterior(obs, pi_s0, pi_a0_given_s0, A_s, A_a, emissions):
         )
 
     # emission log-likelihoods: (T,S,A)
-    logB_sa = emissions.loglikelihood(obs)
+    logB_sa = emissions.loglikelihood(obs, device=device, dtype=dtype)
 
     if not torch.is_tensor(logB_sa):
         logB_sa = torch.as_tensor(logB_sa)
