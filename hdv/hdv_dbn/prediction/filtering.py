@@ -83,7 +83,7 @@ class StructuredDBNFilter():
         """
         # p_s0[:, None] * p_a0[None, :] broadcasts to (S, A)
         log_belief = self._log_pi_s0[:, None] + self._log_pi_a0_given_s0
-        return BeliefState(log_belief, t=0) # belief at time 0.
+        return BeliefState(log_belief, t=-1) # Initial belief corresponds to time t=-1, before seeing any observations at t=0.
     
     def predict(self, belief_t: BeliefState):
         """
