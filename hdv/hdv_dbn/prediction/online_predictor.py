@@ -10,8 +10,12 @@ Online predictor combining filtering + one-step forecast. Encapsulates Bayes fil
 from dataclasses import dataclass
 import torch
 
-from .filtering import StructuredDBNFilter, BeliefState
-from .model_interface import HDVDbnModel
+try:
+    from .filtering import StructuredDBNFilter, BeliefState
+    from .model_interface import HDVDbnModel
+except ImportError:
+    from filtering import StructuredDBNFilter, BeliefState
+    from model_interface import HDVDbnModel
 
 
 @dataclass(frozen=True)
@@ -142,7 +146,7 @@ class OnlinePredictor:
     
     def predict_horizon(self, H, return_full=True):
         """
-        Predict latent marginals $H$ steps ahead without new observations.
+        Predict latent marginals H steps ahead without new observations.
         Rolls the filter forward H times using only transitions (no emission updates).
         
         Parameters

@@ -3,8 +3,15 @@ This module wraps HDVTrainer so the rest of the pipeline doesn’t depend on tra
 So it’s like an “adapter layer” between training code and prediction code.
 """
 import torch
+from pathlib import Path
+import sys
 
-from hdv.hdv_dbn.trainer import HDVTrainer
+try:
+    from hdv.hdv_dbn.trainer import HDVTrainer
+except ImportError:
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
+    from hdv.hdv_dbn.trainer import HDVTrainer
 
 
 class HDVDbnModel():
@@ -19,12 +26,19 @@ class HDVDbnModel():
           - .device, .dtype
     """
     
-    def __init__(self, trainer:HDVTrainer):
+    def __init__(self, trainer:HDVTrainer, device=None, dtype=None):
         self._trainer = trainer # Stores the loaded trainer object (has transitions, priors, emissions, etc.).
         self._dbn = trainer.hdv_dbn # Keeps a handle to the DBN object to read num_style, num_action.
         self._emissions = trainer.emissions # Keeps a handle to the emission model.
-        self._device = getattr(trainer, "device", torch.device("cpu"))
-        self._dtype = getattr(trainer, "dtype", torch.float32)
+        trainer_device = getattr(trainer, "device", torch.device("cpu"))
+        trainer_dtype = getattr(trainer, "dtype", torch.float32)
+
+        # Allow override; otherwise keep existing behavior
+        self._device = torch.device(device) if device is not None else trainer_device
+        self._dtype = dtype if dtype is not None else trainer_dtype
+
+        if hasattr(self._emissions, "to_device"):
+            self._emissions.to_device(self._device, self._dtype)
     
     @property
     def num_styles(self):
@@ -68,12 +82,12 @@ class HDVDbnModel():
         torch.Tensor
             Shape (T, S, A) log likelihoods.
         """
-        obs_tensor = torch.as_tensor(obs, device=self._device, dtype=self._dtype) 
+        obs_tensor = torch.as_tensor(obs, device=self._device, dtype=self._dtype)
 
         # Call emission model's loglikelihood method
         if not hasattr(self._emissions, "loglikelihood"):
             raise AttributeError("Emission model missing loglikelihood() method.")
 
-        loglik = self._emissions.loglikelihood(obs_tensor) # Calls the emission model's loglikelihood method to compute p(o_t | z_t) for all z_t=(s_t, a_t); shape: (T, S, A).
+        loglik = self._emissions.loglikelihood(obs_tensor, device=self._device, dtype=self._dtype) # Calls the emission model's loglikelihood method to compute p(o_t | z_t) for all z_t=(s_t, a_t); shape: (T, S, A).
 
         return loglik
