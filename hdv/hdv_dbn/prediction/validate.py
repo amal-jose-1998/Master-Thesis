@@ -25,7 +25,7 @@ from .model_interface import HDVDbnModel
 class TrajectoryData:
     """Single trajectory for evaluation."""
     obs: np.ndarray                        # (T, F) observations
-    latents_gt: np.ndarray                 # (T,) or (T, 2) ground-truth latent indices
+    latents_gt: np.ndarray                 # (T, 2) ground-truth latent indices
     trajectory_id: str = None              # For logging
     
     def __post_init__(self):
