@@ -86,7 +86,7 @@ class OnlinePredictor:
 
         obs_t = torch.as_tensor(obs_t, device=self.device, dtype=self.dtype)
 
-        belief_pred = self.filter.predict(self._belief) # prior belief for current time step before seeing obs_t
+        belief_pred = self._belief if self._step_count == 0 else self.filter.predict(self._belief) # first observation uses initial prior; later ones use predicted prior
         emission_ll = self.model.emission_loglik(obs_t) # log-likelihood of obs_t under the model's emission distribution
         belief_post = self.filter.update(belief_pred, emission_ll) # posterior belief after incorporating obs_t
 
@@ -270,7 +270,8 @@ class BatchedOnlinePredictor:
         if not bool(active_mask.any()): # If no streams are active, skip the update and just return the current belief log-probabilities
             return self._belief_logprob
 
-        belief_pred = self.filter.predict(BeliefState(self._belief_logprob, t=0)).log_prob # shape (B, S, A) predicted belief for each stream before seeing obs_t
+        predicted_logprob = self.filter.predict(BeliefState(self._belief_logprob, t=0)).log_prob # shape (B, S, A)
+        belief_pred = torch.where((self._step_count == 0)[:, None, None], self._belief_logprob, predicted_logprob)
         emission_ll = self.model.emission_loglik(obs_t) # shape (B, S, A) log-likelihood of obs_t for each stream under the model's emission distribution
         belief_post = self.filter.update(BeliefState(belief_pred, t=0), emission_ll).log_prob # shape (B, S, A) posterior belief for each stream after incorporating obs_t
 
