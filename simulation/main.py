@@ -11,7 +11,6 @@ if WORKSPACE_ROOT not in sys.path:
 
 from hdv.hdv_dbn.config import DBN_STATES
 from hdv.hdv_dbn.trainer import HDVTrainer
-from hdv.hdv_dbn.datasets.highd_loader import load_highd_folder
 from hdv.hdv_dbn.prediction.semantic_label_utils import load_semantic_labels_from_yaml
 from hdv.hdv_dbn.prediction.model_interface import HDVDbnModel
 from hdv.hdv_dbn.prediction.online_predictor import OnlinePredictor
@@ -29,6 +28,11 @@ CHECKPOINT_NAME = 'final.npz'
 SIMULATE_SINGLE_VEHICLE = False  # Set True to simulate a specific vehicle
 SINGLE_REC_ID = 33                # Recording ID (int)
 SINGLE_VEHICLE_ID = 1008            # Vehicle ID (int)
+
+# If True, simulates multiple selected vehicles simultaneously (batched predictor).
+# If False, selected vehicles are simulated sequentially via SingleVehicleSimulation.
+SIMULATE_MULTI_VEHICLES_SIMULTANEOUS = False
+MAX_SIM_VEHICLES = 2  # Cap number of selected vehicles per recording (set None to disable cap)
 
 
 # User options for meaningful vehicle selection from test set
@@ -163,10 +167,10 @@ def main():
     ckpt_path = os.path.join(EXP_DIR, CHECKPOINT_NAME) # Path to the model checkpoint file
     trainer = HDVTrainer.load(ckpt_path) # Load the HDVTrainer instance from the checkpoint, which includes the trained model and scalers for feature normalization
     model = HDVDbnModel(trainer) # Create an instance of the HDVDbnModel using the loaded trainer, which will be used for making online predictions during the simulation
-    predictor = OnlinePredictor(model, warmup_steps=2) # Create an instance of the OnlinePredictor, which wraps the HDVDbnModel and provides an interface for making predictions in an online manner during the simulation
 
     try:
         from single_vehicle import SingleVehicleSimulation
+        from multi_vehicle import MultiVehicleSimulation
 
         if SIMULATE_SINGLE_VEHICLE: # If SIMULATE_SINGLE_VEHICLE is True, simulate only that vehicle instead of looping through all test vehicles in all recordings
             tracks_meta_path, tracks_csv_path, recording_meta_path = build_recording_paths(SINGLE_REC_ID)
@@ -183,7 +187,7 @@ def main():
                   f"scaler_std_type={'dict' if isinstance(trainer.scaler_std, dict) else 'array'}")
 
             simulator = SingleVehicleSimulation(
-                predictor=predictor,
+                predictor=OnlinePredictor(model, warmup_steps=2),
                 renderer=renderer,
                 vehicle_id=SINGLE_VEHICLE_ID,
                 recording_id=SINGLE_REC_ID,
@@ -214,7 +218,64 @@ def main():
                 print(f"[main] No matching test vehicles selected for recording {rec:02d}.")
                 continue
 
+            if MAX_SIM_VEHICLES is not None and len(vehicle_ids) > int(MAX_SIM_VEHICLES):
+                original_count = len(vehicle_ids)
+                vehicle_ids = vehicle_ids[: int(MAX_SIM_VEHICLES)]
+                print(
+                    f"[main] Recording {rec:02d}: limiting vehicles "
+                    f"from {original_count} to {len(vehicle_ids)} (MAX_SIM_VEHICLES={MAX_SIM_VEHICLES})"
+                )
+
             print(f"[main] Recording {rec:02d}: simulating {len(vehicle_ids)} vehicle(s)")
+
+            if SIMULATE_MULTI_VEHICLES_SIMULTANEOUS:
+                scaler_mean_by_vehicle = {}
+                scaler_std_by_vehicle = {}
+                valid_vehicle_ids = []
+
+                for vehicle_id in vehicle_ids:
+                    try:
+                        vehicle_class = get_vehicle_class(tracks_meta_df, vehicle_id)
+                        scaler_mean_by_vehicle[vehicle_id] = pick_classwise_scaler(trainer.scaler_mean, vehicle_class)
+                        scaler_std_by_vehicle[vehicle_id] = pick_classwise_scaler(trainer.scaler_std, vehicle_class)
+                        valid_vehicle_ids.append(vehicle_id)
+                    except Exception as e:
+                        print(f"[main] Skipping vehicle {vehicle_id} in recording {rec:02d}: {e}")
+
+                if not valid_vehicle_ids:
+                    print(f"[main] Recording {rec:02d}: no valid vehicles after scaler/class checks.")
+                    continue
+
+                tracks_df = pd.read_csv(tracks_csv_path)
+                meta_sel = tracks_meta_df[tracks_meta_df["id"].isin(valid_vehicle_ids)]
+                if not meta_sel.empty and "initialFrame" in meta_sel.columns and "finalFrame" in meta_sel.columns:
+                    min_frame = int(meta_sel["initialFrame"].min())
+                    max_frame = int(meta_sel["finalFrame"].max())
+                    tracks_df = tracks_df[(tracks_df["frame"] >= min_frame) & (tracks_df["frame"] <= max_frame)]
+
+                print(
+                    f"[main] Recording {rec:02d}: simultaneous multi-vehicle mode with "
+                    f"{len(valid_vehicle_ids)} vehicle(s)"
+                )
+                renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=pedal_steering_queue)
+                simulator = MultiVehicleSimulation(
+                    model=model,
+                    renderer=renderer,
+                    recording_id=rec,
+                    vehicle_ids=valid_vehicle_ids,
+                    vehicle_tracks=tracks_df,
+                    tracks_meta_df=tracks_meta_df,
+                    recording_meta=recording_meta,
+                    pedal_queue=pedal_steering_queue,
+                    prediction_queue=prediction_queue,
+                    maneuver_labels=maneuver_labels,
+                    scaler_mean_by_vehicle=scaler_mean_by_vehicle,
+                    scaler_std_by_vehicle=scaler_std_by_vehicle,
+                    vehicle_class_by_vehicle={},
+                    warmup_steps=2,
+                )
+                simulator.run()
+                continue
 
             for vehicle_id in vehicle_ids:
                 try:
@@ -233,7 +294,7 @@ def main():
                 print(f"[main] Simulating vehicle {vehicle_id} in recording {rec:02d} (class='{vehicle_class}')")
                 renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=pedal_steering_queue)
                 simulator = SingleVehicleSimulation(
-                    predictor=predictor,
+                    predictor=OnlinePredictor(model, warmup_steps=2),
                     renderer=renderer,
                     vehicle_id=vehicle_id,
                     recording_id=rec,
