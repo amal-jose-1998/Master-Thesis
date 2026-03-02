@@ -1,147 +1,196 @@
-"""
-Bayes Filtering for Discrete-Latent DBNs. Implements the recursive Bayes filter (predict + update) for discrete joint latents.
-1. Predict step: use transitions to move belief forward in time.
-2. Update step: multiply by how likely the observation is under each (s,a) and normalize.
-"""
-
+"""Bayes filtering for discrete DBN latent state z=(style, action)."""
 from dataclasses import dataclass
 import torch
+
 
 @dataclass(frozen=True)
 class BeliefState:
     """
-    Filtering posterior belief at time t.
-    
-    Attributes
-    log_prob : torch.Tensor
-        Log of unnormalized belief. For joint (S, A) latent: log_prob.shape = (S, A).
-    t : int
-        Time index the belief corresponds to.
+    Filtering belief in log-space over latent state (S, A) or (B, S, A).
+
+    Attributes:
+        log_prob: Logarithm of the belief probabilities; shape (S, A) or (B, S, A).
+        t: Time step index corresponding to the belief state.    
     """
-    log_prob: torch.Tensor # log-space belief over the joint latent (s,a) at time t; shape (S, A).
-    t: int # time index corresponding to this belief state (after processing observation at time t).
-    
+    log_prob: torch.Tensor
+    t: int
+
     @property
     def prob(self):
-        """Normalized belief in probability space."""
-        # Converts log-space belief into normalized probability-space belief.
-        max_log = torch.max(self.log_prob) # for numerical stability: subtract max log-prob before exponentiating to avoid overflow.
-        exp_shifted = torch.exp(self.log_prob - max_log) # shift log-probs so max is at 0, then exponentiate to get unnormalized probabilities.
-        return exp_shifted / torch.sum(exp_shifted) # normalize to sum to 1
+        """Normalized belief in probability space (shape preserved)."""
+        x = self.log_prob
+        max_log = x.amax(dim=(-2, -1), keepdim=True) # for numerical stability when exponentiating
+        exp_shifted = torch.exp(x - max_log) # shift log-probabilities by max to prevent overflow, shape (S, A) or (B, S, A)
+        denom = exp_shifted.sum(dim=(-2, -1), keepdim=True).clamp_min(1e-30) # sum over S and A to get normalization constant, shape (1, 1) or (B, 1, 1)
+        return exp_shifted / denom # normalized probabilities, shape (S, A) or (B, S, A)
 
 
-class StructuredDBNFilter():
-    """
-    Bayes filter for factorized discrete DBN (style, action).
-    Latent: z_t = (s_t, a_t) where s_t ∈ {0, ..., S-1}, a_t ∈ {0, ..., A-1}.
-    
-    Transitions:
-      p(s_{t+1} | s_t) = A_s[s_t, s_{t+1}]
-      p(a_{t+1} | a_t, s_{t+1}) = A_a[s_{t+1}, a_t, a_{t+1}]
-    
-    Joint: p(z_{t+1} | z_t) = p(s_{t+1} | s_t) * p(a_{t+1} | a_t, s_{t+1})
-    
-    Parameters
-    pi_s0 : torch.Tensor, shape (S,)
-        Initial style prior.
-    pi_a0_given_s0 : torch.Tensor, shape (S, A)
-        Initial action prior conditioned on style.
-    A_s : torch.Tensor, shape (S, S)
-        Style transition matrix.
-    A_a : torch.Tensor, shape (S, A, A)
-        Action transition tensor: A_a[s_next, a_prev, a_next].
-    device : torch.device, optional
-        GPU/CPU placement.
-    dtype : torch.dtype, optional
-        Precision (default: float32).
-    """
-    
+class StructuredDBNFilter:
+    """Bayes filter for discrete DBN with latent state z=(style, action) and known parameters."""
     def __init__(self, *, pi_s0, pi_a0_given_s0, A_s, A_a, device=None, dtype=None):
+        """
+        Initialize the filter with DBN parameters.
+
+        parameters:
+            pi_s0: Initial state distribution p(s0); shape (S,).
+            pi_a0_given_s0: Initial action distribution p(a0|s0); shape (S, A).
+            A_s: State transition probabilities p(s_t|s_{t-1}); shape (S, S).
+            A_a: Action transition probabilities p(a_t|s_t, a_{t-1}); shape (S, A, A).
+            device: Optional torch device for storing parameters.
+            dtype: Optional torch dtype for storing parameters.
+        """
         self.device = device or torch.device("cpu")
         self.dtype = dtype or torch.float32
-        
-        # Move to device/dtype
+
         self.pi_s0 = torch.as_tensor(pi_s0, device=self.device, dtype=self.dtype)
         self.pi_a0_given_s0 = torch.as_tensor(pi_a0_given_s0, device=self.device, dtype=self.dtype)
         self.A_s = torch.as_tensor(A_s, device=self.device, dtype=self.dtype)
         self.A_a = torch.as_tensor(A_a, device=self.device, dtype=self.dtype)
-        
+
         self.S = int(self.pi_s0.shape[0])
         self.A = int(self.pi_a0_given_s0.shape[1])
-        
-        # Precompute logs for numerical stability
-        self._log_pi_s0 = torch.clamp(torch.log(self.pi_s0), min=-1e6) # Clamps to at least -1e6 to avoid -inf if any entry is 0.
+
+        self._log_pi_s0 = torch.clamp(torch.log(self.pi_s0), min=-1e6)
         self._log_pi_a0_given_s0 = torch.clamp(torch.log(self.pi_a0_given_s0), min=-1e6)
         self._log_A_s = torch.clamp(torch.log(self.A_s), min=-1e6)
         self._log_A_a = torch.clamp(torch.log(self.A_a), min=-1e6)
-    
+
     def initial_belief(self):
-        """
-        build the initial joint belief:  p(z_0) = p(s_0) * p(a_0 | s_0).
-        
-        Returns log belief of shape (S, A).
-        """
-        # p_s0[:, None] * p_a0[None, :] broadcasts to (S, A)
+        """Initial joint belief p(s0, a0) in log-space; shape (S, A)."""
         log_belief = self._log_pi_s0[:, None] + self._log_pi_a0_given_s0
-        return BeliefState(log_belief, t=-1) # Initial belief corresponds to time t=-1, before seeing any observations at t=0.
-    
+        return BeliefState(log_belief, t=0)
+
     def predict(self, belief_t: BeliefState):
         """
-        Do transition “predict” step to compute prior for next step.
-        Predict:
-            p(s', a' | o_{1:t}) = sum_{s,a} p(s'|s) p(a'|a, s') p(s,a | o_{1:t})
+        Prediction step to compute p(s_{t+1}, a_{t+1} | o_{0:t}) in log-space given belief at time t.
+        The prediction is computed as:
+            p(s_{t+1}, a_{t+1} | o_{0:t}) = sum_{s_t, a_t} p(s_{t+1} | s_t) p(a_{t+1} | s_{t+1}, a_t) p(s_t, a_t | o_{0:t})
         
-        Shapes
-        log_belief_t : (S, A)
-        log_A_s      : (S, S) where log_A_s[s, s']
-        log_A_a      : (S, A, A) where log_A_a[s', a, a']
-
-        Returns
-        BeliefState
-            Prior belief at time t+1, log-space, shape (S, A).
-            (This is a predicted prior, not yet updated with emissions.)
+        parameters:
+            belief_t: BeliefState at time t, containing log probabilities over (S, A) and time index t.
+        
+        returns:
+            BeliefState at time t+1, containing log probabilities over (S, A) and time index t+1.
         """
-        log_belief = belief_t.log_prob  # log p(s,a | o_{1:t}), shape (S, A).
-        # log_belief[s,a] = log p(s_t=s, a_t=a | O_{1:t})
-        
-        # Step 1: sum out previous style s to get intermediate m[s', a_prev] = sum_s log p(s'|s) + log p(s,a_prev | o_{1:t})
-        m = torch.logsumexp(
-            self._log_A_s.unsqueeze(2) + log_belief.unsqueeze(1),  # (S, S', A)
-            dim=0                                                   # sum over s
-        )  # (S', A_prev)
+        log_belief = belief_t.log_prob # shape (S, A) or (B, S, A)
 
-        # Step 2: sum out previous action a_prev to get log p(s', a' | o_{1:t}) = sum_{a_prev} m[s', a_prev] + log p(a'|a_prev, s')
+        # unify shapes
+        if log_belief.ndim == 2: 
+            log_belief = log_belief.unsqueeze(0)  # (1,S,A)
+            squeeze_out = True
+        elif log_belief.ndim == 3: # (B,S,A)
+            squeeze_out = False
+        else:
+            raise ValueError(f"belief_t.log_prob must have ndim 2 or 3, got {log_belief.ndim}")
+
+        # Stage A: sum over previous style s_t to get intermediate log probabilities over (S_next, A_prev)
+        m = torch.logsumexp(
+            self._log_A_s[None, :, :, None] + log_belief[:, :, None, :],  # (B,S_prev,S_next,A_prev)
+            dim=1,                                                        # sum over S_prev
+        )  # (B,S_next,A_prev)
+
+        # Stage B: apply p(a_next | s_next, a_prev) and sum over previous action a_t
         log_pred = torch.logsumexp(
-            m.unsqueeze(2) + self._log_A_a,  # (S', A_prev, A_next)
-            dim=1                             # sum over a_prev
-        )  # (S', A_next)
-        # log_pred is log prior for (s_{t+1}, a_{t+1}) given observations up to time t.
-        return BeliefState(log_pred, t=belief_t.t + 1) # Increments time index because this is belief for the next step.
-    
+            m[:, :, :, None] + self._log_A_a[None, :, :, :],  # (B,S_next,A_prev,A_next)
+            dim=2,
+        )  # (B,S_next,A_next)
+
+        out = log_pred.squeeze(0) if squeeze_out else log_pred
+        return BeliefState(out, t=belief_t.t + 1)
+
     def update(self, belief_pred: BeliefState, emission_loglik: torch.Tensor):
         """
-        Update: p(z_t | O_{1:t}) ∝ p(O_t | z_t) * p(z_t | O_{1:t-1}).
-        
-        Parameters
-        belief_pred : BeliefState
-            Prior from predict step, shape (S, A).
-        emission_loglik : torch.Tensor
-            Log emission, shape (S, A) or (T, S, A) if a sequence.
-            If (T, S, A), uses the last (t=T-1) slice.
-        
-        Returns
-        BeliefState
-            Updated belief with normalized log_prob.
+        Update step to compute posterior belief p(s_t, a_t | o_{0:t}) in log-space given predicted belief and emission log-likelihood.
+        The update is computed as:
+            p(s_t, a_t | o_{0:t}) = p(o_t | s_t, a_t) p(s_t, a_t | o_{0:t-1}) / p(o_t | o_{0:t-1})
+        where p(o_t | o_{0:t-1}) is the normalization constant computed by summing over all (s_t, a_t).
+
+        parameters:
+            belief_pred: Predicted BeliefState at time t, containing log probabilities over (S, A) and time index t.
+            emission_loglik: Log-likelihood of the current observation given (s_t, a_t); shape (S, A), (B, S, A), or (B, T, S, A) where T is the number of time steps in the batch.
+
+        returns:
+            BeliefState at time t, containing updated log probabilities over (S, A) and time index t.
         """
-        log_belief_pred = belief_pred.log_prob  # log prior over (S,A).
+        # Predicted (prior) belief for time t in log-space: log p(z_t | o_{1:t-1})
+        log_belief_pred = belief_pred.log_prob # shape (S, A) or (B, S, A)
+
+        # Emission log-likelihood(s) for the current observation: log p(o_t | z_t)
+        log_emit = emission_loglik # shape (S, A), (B, S, A), or (B, T, S, A)
+
+        # -----------------------------
+        # 1) Normalize emission shape
+        # -----------------------------
+        # If emissions are provided for a whole sequence (B,T,S,A), use only the latest step
+        if log_emit.ndim == 4:              
+            log_emit = log_emit[:, -1]     # (B,S,A)
         
-        # Extract emission for this timestep if needed
-        if emission_loglik.ndim == 3:
-            log_emit = emission_loglik[-1] # If given a sequence of emissions, take the last one corresponding to current time t.
-        else:
-            log_emit = emission_loglik # (S, A) log emission for current time t.
+        # If belief is batched (B,S,A) but emissions are unbatched (S,A), this is usually a bug:
+        # independent streams must have their own per-stream likelihoods.
+        elif log_emit.ndim == 2 and log_belief_pred.ndim == 3:
+            raise ValueError(
+                "belief_pred is batched but emission_loglik is unbatched; "
+                "pass per-stream emissions with shape (B, S, A)."
+            )
         
-        log_unnorm = log_emit + log_belief_pred # Log version of multiplying prior by likelihood.
-        # Computes normalization constant: log p(O_t | O_{1:t-1}) = log sum_{s,a} p(O_t | s,a) * p(s,a | O_{1:t-1}).
-        log_norm = log_unnorm - torch.logsumexp(log_unnorm.reshape(-1), dim=0) # Normalize to get log probabilities that sum to 1.
-        return BeliefState(log_norm, t=belief_pred.t) # Updated belief at the same time index as the predict step (t), but now incorporates the new observation.
+        # If emissions are batched (B,S,A) but belief is unbatched (S,A),
+        # only allow B==1 (otherwise ambiguous which emission corresponds to the single belief). which emission corresponds to the single belief
+        elif log_emit.ndim == 3 and log_belief_pred.ndim == 2: 
+            if log_emit.shape[0] != 1:
+                raise ValueError(
+                    "emission_loglik has batch dimension > 1 while belief_pred is unbatched; "
+                    "pass a single (S, A) emission or batched belief_pred."
+                )
+            log_emit = log_emit.squeeze(0)        # shape (S, A)
+
+        # Reject any other unexpected emission shapes early.
+        elif log_emit.ndim not in (2, 3):                      
+            raise ValueError(f"emission_loglik must have ndim 2/3/4, got {log_emit.ndim}")
+
+        # -----------------------------------------
+        # 2) Align belief/emission shapes (B vs 1)
+        # -----------------------------------------
+        # If belief is unbatched (S,A) but emissions are (1,S,A), upgrade belief to (1,S,A) for uniform math.
+        if log_belief_pred.ndim == 2 and log_emit.ndim == 3: 
+            if log_emit.shape[0] != 1: # if not exactly 1, this is likely a bug: either the belief should be batched or the emissions should not have a batch dimension
+                raise ValueError(
+                    "belief_pred is unbatched but emission_loglik has batch dimension > 1; "
+                    "pass unbatched emission (S, A) or batched belief_pred."
+                )
+            log_belief_pred = log_belief_pred.unsqueeze(0) # shape (1, S, A)
+
+        # If belief is (1,S,A) but emissions are unbatched (S,A), upgrade emissions to (1,S,A).
+        if log_belief_pred.ndim == 3 and log_emit.ndim == 2: # batched belief with unbatched emissions is only valid for batch size 1
+            if log_belief_pred.shape[0] != 1:
+                raise ValueError(
+                    "belief_pred has batch dimension > 1 while emission_loglik is unbatched; "
+                    "pass a single (S, A) emission or batched belief_pred."
+                )
+            log_emit = log_emit.unsqueeze(0) # shape (1, S, A)
+
+        # After all conversions, shapes must match exactly to avoid accidental broadcasting.
+        if tuple(log_emit.shape) != tuple(log_belief_pred.shape): 
+            raise ValueError(
+                f"Emission shape {tuple(log_emit.shape)} incompatible with belief_pred {tuple(log_belief_pred.shape)}"
+            )
+
+        # -----------------------------
+        # 3) Bayes update in log-space
+        # -----------------------------
+        # Unnormalized posterior:
+        #   log p(z_t | o_{1:t}) ∝ log p(o_t | z_t) + log p(z_t | o_{1:t-1})
+        log_unnorm = log_emit + log_belief_pred
+
+        # Normalization constant (logZ) per stream:
+        #   logZ = log sum_{s,a} exp(log_unnorm[s,a])
+        logZ = torch.logsumexp(log_unnorm, dim=(-2, -1), keepdim=True)
+
+        # Normalized posterior in log-space:
+        log_post = log_unnorm - logZ
+
+        # If the caller provided an unbatched belief (S,A) but we temporarily promoted to (1,S,A),
+        # squeeze back to match the original unbatched API.
+        if belief_pred.log_prob.ndim == 2 and log_post.ndim == 3:
+            log_post = log_post.squeeze(0)
+
+        return BeliefState(log_post, t=belief_pred.t)
