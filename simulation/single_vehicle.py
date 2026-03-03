@@ -157,7 +157,12 @@ class SingleVehicleSimulation:
 					if self.predictor.is_ready:
 						pred = self.predictor.predict_next()
 						probs = torch.softmax(pred.pred_logprob.flatten(), dim=0).detach().cpu().numpy()
-						msg = {"probs": probs, "maneuver_labels": self.maneuver_labels}
+						msg = {
+							"probs": probs,
+							"maneuver_labels": self.maneuver_labels,
+							"vehicle_id": int(self.vehicle_id),
+							"frame": int(frame_num),
+						}
 						try:
 							self.prediction_queue.put_nowait(msg)
 						except Exception:

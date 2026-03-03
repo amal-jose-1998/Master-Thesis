@@ -31,7 +31,7 @@ SINGLE_VEHICLE_ID = 1008            # Vehicle ID (int)
 
 # If True, simulates multiple selected vehicles simultaneously (batched predictor).
 # If False, selected vehicles are simulated sequentially via SingleVehicleSimulation.
-SIMULATE_MULTI_VEHICLES_SIMULTANEOUS = False
+SIMULATE_MULTI_VEHICLES_SIMULTANEOUS = True
 MAX_SIM_VEHICLES = 2  # Cap number of selected vehicles per recording (set None to disable cap)
 
 

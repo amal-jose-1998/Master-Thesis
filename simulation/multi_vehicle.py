@@ -137,11 +137,16 @@ class MultiVehicleSimulation:
 
         fps_count = 0
         fps_window_start = time.perf_counter()
+        last_frame_num = None
 
         zero_obs = np.zeros((self.batch_size, len(WINDOW_FEATURE_COLS)), dtype=np.float64)
 
         def update(frame_num):
-            nonlocal fps_count, fps_window_start
+            nonlocal fps_count, fps_window_start, last_frame_num
+
+            if last_frame_num is not None and frame_num < last_frame_num:
+                self._reset_simulation()
+            last_frame_num = frame_num
 
             frame_df = frame_to_df.get(frame_num)
             if frame_df is None:
@@ -149,7 +154,26 @@ class MultiVehicleSimulation:
 
             active_vids = [vid for vid in self.vehicle_ids if frame_num in ego_rows_by_vid.get(vid, {})]
             if not active_vids:
+                try:
+                    self.prediction_queue.put_nowait(
+                        {
+                            "active_vehicle_ids": [],
+                            "vehicle_ids": list(self.vehicle_ids),
+                        }
+                    )
+                except Exception:
+                    pass
                 return
+
+            try:
+                self.prediction_queue.put_nowait(
+                    {
+                        "active_vehicle_ids": [int(v) for v in active_vids],
+                        "vehicle_ids": list(self.vehicle_ids),
+                    }
+                )
+            except Exception:
+                pass
 
             for idx, vid in enumerate(self.vehicle_ids):
                 ax = axes[idx]
@@ -213,6 +237,7 @@ class MultiVehicleSimulation:
                         "probs": probs,
                         "maneuver_labels": self.maneuver_labels,
                         "vehicle_id": int(vid),
+                        "frame": int(frame_num),
                     }
                     try:
                         self.prediction_queue.put_nowait(msg)
