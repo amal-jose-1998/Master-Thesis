@@ -283,14 +283,14 @@ class BatchedOnlinePredictor:
 
         return self._belief_logprob
 
-    def predict_next(self, active_mask=None, strict_ready=True):
+    def predict_next(self, active_mask=None, strict_ready=False):
         """
         Predict one-step-ahead latent log-distribution from current posterior for all active streams.
 
         parameters:
         - active_mask: Optional boolean mask of shape (B,) indicating which streams are active and should be included in the prediction output. If None, all streams are considered active.
         - strict_ready: If True, raises an error if any active stream is still in warmup. 
-            If False, returns masked predictions: streams that are not both active and ready are filled with -inf in pred_logprob. Default is True.
+            If False, returns masked predictions: streams that are not both active and ready are filled with -inf in pred_logprob. Default is False.
         """
         if self._belief_logprob is None: # if no updates have been made yet and belief_logprob is still None, we cannot make predictions, so raise an error
             raise RuntimeError("No observations yet. Call update() first.")
