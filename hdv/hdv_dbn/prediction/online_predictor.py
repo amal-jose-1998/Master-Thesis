@@ -1,6 +1,5 @@
 """Online predictors for single-stream and batched DBN inference."""
 from dataclasses import dataclass
-from typing import Optional
 import torch
 
 try:
