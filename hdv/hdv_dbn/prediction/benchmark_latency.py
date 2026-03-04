@@ -193,7 +193,9 @@ def main():
     else:
         print("[benchmark] CUDA not available; skipping GPU.")
 
-    csv_path = Path(__file__).resolve().parent / "benchmark_latency_results.csv"
+    output_dir = exp_dir / "latency benchmark"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = output_dir / "benchmark_latency_results.csv"
     write_results_csv(csv_path, csv_rows)
 
 
