@@ -24,10 +24,10 @@ from tabulate import tabulate
 
 UNKNOWN_Z = -1
 
-EXP_DIR = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical"
+EXP_DIR = r"/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_S1_A4_hierarchical"
 DATA_ROOT = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"  
 CHECKPOINT_NAME = "final.npz"
-SEMANTIC_MAP = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/semantic_map.yaml"
+SEMANTIC_MAP = r"/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_S1_A4_hierarchical/semantic_map.yaml"
 
 NUM_SEQS_SUMMARY = 10        # number of sequences to summarize in the final table output
 DETAIL_FIRST_N = 10          # number of sequences to show detailed per-sequence results for 
