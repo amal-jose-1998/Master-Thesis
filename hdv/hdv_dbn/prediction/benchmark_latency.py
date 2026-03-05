@@ -18,18 +18,16 @@ try:
         bench_loop_multi_e2e,
         bench_batched_e2e,
     )
-    from .benchmark_latency_reporting import print_block, write_results_csv
+    from .benchmark_latency_reporting import print_block, write_results_csv, make_csv_row
     from ..utils.latency_utils import (
         print_benchmark_env,
         force_trainer_device,
         audit_device_dtype,
-        _build_obs_vectors,
-        _build_frame_vectors,
-        _get_window_scaler,
-        _summary_stats,
+        build_obs_vectors,
+        build_frame_vectors,
     )
 except ImportError:
-    project_root = Path(__file__).resolve().parents[4]
+    project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
 
     from hdv.hdv_dbn.prediction.model_interface import HDVDbnModel
@@ -44,15 +42,13 @@ except ImportError:
         bench_loop_multi_e2e,
         bench_batched_e2e,
     )
-    from hdv.hdv_dbn.prediction.benchmark_latency_reporting import print_block, write_results_csv
+    from hdv.hdv_dbn.prediction.benchmark_latency_reporting import print_block, write_results_csv, make_csv_row
     from hdv.hdv_dbn.utils.latency_utils import (
         print_benchmark_env,
         force_trainer_device,
         audit_device_dtype,
-        _build_obs_vectors,
-        _build_frame_vectors,
-        _get_window_scaler,
-        _summary_stats,
+        build_obs_vectors,
+        build_frame_vectors,
     )
 
 
@@ -63,128 +59,80 @@ def main():
     script_dir = Path(__file__).resolve().parent
     workspace_root = script_dir.parent.parent.parent
 
-    data_root = workspace_root / "hdv" / "data" / "highd"
     exp_dir = workspace_root / "hdv" / "models" / "main-model-sticky_S2_A4_hierarchical"
     checkpoint_path = exp_dir / "final.npz"
 
     warmup_steps = 5
     n_veh = 5
-    subsequent_iters = 1000
-    subsequent_windows = 100
+    subsequent_iters = 100
     csv_rows = []
 
-    obs_vecs, test_obj = _build_obs_vectors(exp_dir=exp_dir, data_root=data_root, checkpoint_path=checkpoint_path, n_veh=n_veh)
-    obs_vec = obs_vecs[0]
+    trainer = HDVTrainer.load(checkpoint_path)
 
-    scaler_mean, scaler_std = _get_window_scaler(test_obj)
-    frame_vecs = _build_frame_vectors(n_veh, kind="zeros")
+    obs_vecs = build_obs_vectors(n_veh) # randomly initialized observation vectors; shape (n_veh, window_feat_dim)
+    obs_vec = obs_vecs[0] # single observation vector for the single-vehicle benchmark; shape (window_feat_dim,)
 
-    def add_csv_row(label: str, scenario: str, res: dict, n_streams: int):
-        stats_total = _summary_stats(res.get("subsequent_total_ms", np.asarray([], dtype=np.float64)))
-        stats_win = _summary_stats(res.get("subsequent_windowize_ms", np.asarray([], dtype=np.float64)))
-        stats_prep = _summary_stats(res.get("subsequent_prep_ms", np.asarray([], dtype=np.float64)))
-        stats_inf = _summary_stats(res.get("subsequent_infer_ms", np.asarray([], dtype=np.float64)))
-        stats_pf = _summary_stats(res.get("per_frame_windowize_ms", np.asarray([], dtype=np.float64)))
+    # mean and std for scaling the windowized features before feeding into the model; using dummy values since these are synthetic vectors for benchmarking, not real data
+    scaler_mean = np.zeros_like(obs_vec, dtype=np.float64)
+    scaler_std = np.ones_like(obs_vec, dtype=np.float64)
 
-        csv_rows.append(
-            {
-                "device": label.lower(),
-                "scenario": scenario,
-                "n_veh": int(n_streams),
-                "warmup_updates": int(res.get("warmup_updates", -1)),
-                "warmup_frames": int(res.get("warmup_frames", -1)),
-                "window_W": int(res.get("window_W", -1)),
-                "window_stride": int(res.get("window_stride", -1)),
-                "first_prediction_total_ms": float(res.get("first_prediction_total_ms", np.nan)),
-                "first_predict_call_ms": float(res.get("first_predict_call_ms", np.nan)),
-                "first_prediction_per_vehicle_ms": float(res.get("first_prediction_total_ms", np.nan)) / float(n_streams),
-                "subsequent_mean_ms": stats_total["mean"],
-                "subsequent_p50_ms": stats_total["p50"],
-                "subsequent_p90_ms": stats_total["p90"],
-                "subsequent_p99_ms": stats_total["p99"],
-                "subsequent_windowize_mean_ms": stats_win["mean"],
-                "subsequent_windowize_p50_ms": stats_win["p50"],
-                "subsequent_windowize_p90_ms": stats_win["p90"],
-                "subsequent_windowize_p99_ms": stats_win["p99"],
-                "subsequent_prep_mean_ms": stats_prep["mean"],
-                "subsequent_prep_p50_ms": stats_prep["p50"],
-                "subsequent_prep_p90_ms": stats_prep["p90"],
-                "subsequent_prep_p99_ms": stats_prep["p99"],
-                "subsequent_infer_mean_ms": stats_inf["mean"],
-                "subsequent_infer_p50_ms": stats_inf["p50"],
-                "subsequent_infer_p90_ms": stats_inf["p90"],
-                "subsequent_infer_p99_ms": stats_inf["p99"],
-                "per_frame_windowize_mean_ms": stats_pf["mean"],
-                "per_frame_windowize_p50_ms": stats_pf["p50"],
-                "per_frame_windowize_p90_ms": stats_pf["p90"],
-                "per_frame_windowize_p99_ms": stats_pf["p99"],
-            }
-        )
+    # For the end-to-end benchmarks, we need synthetic *frame* feature vectors (shape (n_veh, frame_feat_dim)) 
+    # that can be windowized and scaled by the LiveWindowizer, before being fed into the model. 
+    frame_vecs = build_frame_vectors(n_veh) # randomly initialized frame feature vectors; shape (n_veh, frame_feat_dim)
 
-    def run_one_device(dev: torch.device, label: str):
-        trainer = HDVTrainer.load(checkpoint_path)
-        force_trainer_device(trainer, dev, torch.float32)
-        model = HDVDbnModel(trainer, device=dev, dtype=torch.float32)
-        audit_device_dtype(trainer, label)
+    def run_one_device(dev: torch.device, label):
+        force_trainer_device(trainer, dev, torch.float32) # ensure trainer and model are on the correct device and dtype
+        model = HDVDbnModel(trainer, device=dev, dtype=torch.float32) # initialize model interface with the trainer's parameters, on the correct device and dtype
+        audit_device_dtype(trainer, label) # sanity check to ensure trainer tensors are on the expected device and dtype
 
+        #-------------------------------------------------------
+        # model-only benchmarks (using pre-built obs_vecs, no windowization or scaling)
+        #-------------------------------------------------------
+        # case 1: single-vehicle benchmark (update+predict)
         p_single = OnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32)
         res_single = bench_single_vehicle(p_single, obs_vec, device=dev, subsequent_iters=subsequent_iters)
 
-        ps = [OnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32) for _ in range(n_veh)]
+        # case 2: loop_multi benchmark (N independent OnlinePredictor objects stepped sequentially)
+        ps = [OnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32) for _ in range(n_veh)] # n independent predictors for the loop_multi benchmark
         res_loop = bench_loop_multi(ps, obs_vecs, device=dev, subsequent_iters=subsequent_iters)
 
-        p_batched = BatchedOnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32)
+        # case 3: batched benchmark (single BatchedOnlinePredictor object stepping all vehicles in parallel)
+        p_batched = BatchedOnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32) # single predictor for all vehicles in the batched benchmark
         res_batched = bench_batched(p_batched, obs_vecs, device=dev, subsequent_iters=subsequent_iters)
 
         print_block(f"[{label}] single (update+predict)", res_single, is_e2e=False)
         print_block(f"[{label}] loop_multi (N={n_veh}, update+predict)", res_loop, is_e2e=False)
         print_block(f"[{label}] batched (B={n_veh}, update+predict)", res_batched, is_e2e=False)
 
-        add_csv_row(label, "single", res_single, 1)
-        add_csv_row(label, "loop_multi", res_loop, n_veh)
-        add_csv_row(label, "batched", res_batched, n_veh)
+        csv_rows.append(make_csv_row(label, "single", res_single, 1))
+        csv_rows.append(make_csv_row(label, "loop_multi", res_loop, n_veh))
+        csv_rows.append(make_csv_row(label, "batched", res_batched, n_veh))
 
-        if LiveWindowizer is None:
-            print(f"[{label}] LiveWindowizer not importable; skipping end-to-end benchmarks.")
-            return
+        #-------------------------------------------------------
+        # end-to-end benchmarks (using frame_vecs that require windowization and scaling before being fed into the model)
+        #-------------------------------------------------------
+        # Case 1: single-vehicle end-to-end benchmark (frame->windowize->scale->predict)
+        p_single_e2e = OnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32) # predictor for the single-vehicle end-to-end benchmark
+        res_single_e2e = bench_single_vehicle_e2e(p_single_e2e, frame_vecs[0], device=dev, scaler_mean=scaler_mean,
+            scaler_std=scaler_std, subsequent_windows=subsequent_iters) # using the first frame_vec for the single-vehicle end-to-end benchmark
 
-        p_single_e2e = OnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32)
-        res_single_e2e = bench_single_vehicle_e2e(
-            p_single_e2e,
-            frame_vecs[0],
-            device=dev,
-            scaler_mean=scaler_mean,
-            scaler_std=scaler_std,
-            subsequent_windows=subsequent_windows,
-        )
-
+        # Case 2: loop_multi end-to-end benchmark (N independent OnlinePredictor objects stepped sequentially, each processing its own stream of frames through the windowizer and model)
         ps_e2e = [OnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32) for _ in range(n_veh)]
-        res_loop_e2e = bench_loop_multi_e2e(
-            ps_e2e,
-            frame_vecs,
-            device=dev,
-            scaler_mean=scaler_mean,
-            scaler_std=scaler_std,
-            subsequent_windows=subsequent_windows,
-        )
+        res_loop_e2e = bench_loop_multi_e2e(ps_e2e, frame_vecs, device=dev, scaler_mean=scaler_mean, scaler_std=scaler_std,
+            subsequent_windows=subsequent_iters)
 
+        # Case 3: batched end-to-end benchmark (single BatchedOnlinePredictor object stepping all vehicles in parallel, processing all streams of frames through the windowizer and model in parallel)
         p_batched_e2e = BatchedOnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32)
-        res_batched_e2e = bench_batched_e2e(
-            p_batched_e2e,
-            frame_vecs,
-            device=dev,
-            scaler_mean=scaler_mean,
-            scaler_std=scaler_std,
-            subsequent_windows=subsequent_windows,
-        )
+        res_batched_e2e = bench_batched_e2e(p_batched_e2e, frame_vecs, device=dev, scaler_mean=scaler_mean, scaler_std=scaler_std,
+            subsequent_windows=subsequent_iters)
 
         print_block(f"[{label}] single_e2e (frame->window->predict)", res_single_e2e, is_e2e=True)
         print_block(f"[{label}] loop_multi_e2e (N={n_veh}, frame->window->predict)", res_loop_e2e, is_e2e=True)
         print_block(f"[{label}] batched_e2e (B={n_veh}, frame->window->predict)", res_batched_e2e, is_e2e=True)
 
-        add_csv_row(label, "single_e2e", res_single_e2e, 1)
-        add_csv_row(label, "loop_multi_e2e", res_loop_e2e, n_veh)
-        add_csv_row(label, "batched_e2e", res_batched_e2e, n_veh)
+        csv_rows.append(make_csv_row(label, "single_e2e", res_single_e2e, 1))
+        csv_rows.append(make_csv_row(label, "loop_multi_e2e", res_loop_e2e, n_veh))
+        csv_rows.append(make_csv_row(label, "batched_e2e", res_batched_e2e, n_veh))
 
     run_one_device(torch.device("cpu"), "CPU")
 

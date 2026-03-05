@@ -5,14 +5,12 @@ import sys
 
 try:
     from ..trainer import HDVTrainer
-    from ..config import FRAME_FEATURE_COLS, WINDOW_FEATURE_COLS
-    from ..prediction.data_loader import load_test_data_for_prediction
+    from ..config import FRAME_FEATURE_COLS, WINDOW_FEATURE_COLS, TRAINING_CONFIG
 except ImportError:
     project_root = Path(__file__).resolve().parents[4]
     sys.path.insert(0, str(project_root))
     from hdv.hdv_dbn.trainer import HDVTrainer
-    from hdv.hdv_dbn.config import FRAME_FEATURE_COLS, WINDOW_FEATURE_COLS
-    from hdv.hdv_dbn.prediction.data_loader import load_test_data_for_prediction
+    from hdv.hdv_dbn.config import FRAME_FEATURE_COLS, WINDOW_FEATURE_COLS, TRAINING_CONFIG
 
 
 def audit_device_dtype(trainer: HDVTrainer, label):
@@ -38,7 +36,7 @@ def audit_device_dtype(trainer: HDVTrainer, label):
         print(f"[audit:{label}] bern._p_t:", None if t is None else t.device)
 
 
-def _summary_stats(arr: np.ndarray):
+def summary_stats(arr: np.ndarray):
     arr = np.asarray(arr, dtype=np.float64)
     if arr.size == 0:
         return {"mean": np.nan, "p50": np.nan, "p90": np.nan, "p99": np.nan}
@@ -50,7 +48,7 @@ def _summary_stats(arr: np.ndarray):
     }
 
 
-def _sync(dev: torch.device):
+def sync(dev: torch.device):
     """Synchronize CUDA operations for accurate timing."""
     if dev.type == "cuda":
         torch.cuda.synchronize()
@@ -143,50 +141,40 @@ def force_trainer_device(trainer: HDVTrainer, dev: torch.device, dtype: torch.dt
         trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)
 
 
-def _build_obs_vectors(exp_dir, data_root, checkpoint_path, n_veh):
-    """Load n_veh observation vectors; fallback to zero vectors if test data unavailable."""
-    try:
-        _, test = load_test_data_for_prediction(exp_dir=exp_dir, data_root=data_root, checkpoint_name="final.npz")
-        obs_vecs = []
-        for i in range(min(n_veh, len(test.scaled_obs))):
-            obs_seq = test.scaled_obs[i]
-            obs_vecs.append(np.asarray(obs_seq[0], dtype=np.float32))
-
-        if len(obs_vecs) == 0:
-            raise RuntimeError("No sequences in test split.")
-
-        while len(obs_vecs) < n_veh:
-            obs_vecs.append(obs_vecs[-1].copy())
-
-        print(f"[benchmark] Using {n_veh} real test *window* obs vectors, F={obs_vecs[0].shape[0]}")
-        return obs_vecs, test
-    except Exception as e:
-        print(f"[benchmark] Data loading failed ({type(e).__name__}: {e}).")
-        trainer_tmp = HDVTrainer.load(checkpoint_path)
-        obs_dim = _infer_obs_dim_from_trainer(trainer_tmp)
-        obs_vecs = [np.zeros((obs_dim,), dtype=np.float32) for _ in range(n_veh)]
-        print(f"[benchmark] Using {n_veh} synthetic zero *window* obs vectors, F={obs_dim}")
-        return obs_vecs, None
-
-
-def _get_window_scaler(test_obj):
+def build_obs_vectors(n_veh):
     """
-    Try to extract window-feature scaler mean/std from the loaded test object.
+    Build synthetic observation vectors (dtype float32) for the model-only benchmarks, 
+    compatible with the model's expected input features (WINDOW_FEATURE_COLS). 
+    """
+    obs_dim = len(WINDOW_FEATURE_COLS)
+    seed = int(getattr(TRAINING_CONFIG, "seed", 123))
+    rng = np.random.default_rng(seed)
+    obs_vecs = [rng.standard_normal(size=(obs_dim,)).astype(np.float32) for _ in range(int(n_veh))]
+    print(f"[benchmark] Using {n_veh} synthetic RNG *window* obs vectors, F={obs_dim}, seed={seed}")
+    return obs_vecs
+
+def build_frame_vectors(n_veh):
+    """
+    Build synthetic frame feature vectors (dtype float64) for the end-to-end benchmarks, 
+    compatible with the LiveWindowizer's expected input features (FRAME_FEATURE_COLS). 
+    """
+    D = len(FRAME_FEATURE_COLS)
+    seed = int(getattr(TRAINING_CONFIG, "seed", 123)+1) # use a different seed than obs_vecs to ensure different synthetic values
+    rng = np.random.default_rng(seed)
+    return [rng.standard_normal(size=(D,)).astype(np.float64) for _ in range(int(n_veh))]
+
+def get_window_scaler(trainer_obj):
+    """
+    Extract window-feature scaler mean/std from a loaded trainer.
     Falls back to (zeros, ones) if unavailable.
     """
     F = len(WINDOW_FEATURE_COLS)
     mean = None
     std = None
 
-    if test_obj is not None:
-        for k in ("scaler_mean", "scaler_means", "mean", "means"):
-            if hasattr(test_obj, k):
-                mean = getattr(test_obj, k)
-                break
-        for k in ("scaler_std", "scaler_stds", "std", "stds"):
-            if hasattr(test_obj, k):
-                std = getattr(test_obj, k)
-                break
+    if trainer_obj is not None:
+        mean = getattr(trainer_obj, "scaler_mean", None)
+        std = getattr(trainer_obj, "scaler_std", None)
 
     # Handle dict (classwise) by choosing the first entry
     if isinstance(mean, dict):
@@ -207,17 +195,3 @@ def _get_window_scaler(test_obj):
     return mean, std
 
 
-def _build_frame_vectors(n_veh: int, kind: str = "zeros"):
-    """
-    Build synthetic *frame-feature* vectors (dtype float64) compatible with LiveWindowizer,
-    ordered as FRAME_FEATURE_COLS.
-    """
-    D = len(FRAME_FEATURE_COLS)
-    if kind == "zeros":
-        base = np.zeros((D,), dtype=np.float64)
-    elif kind == "randn":
-        base = np.random.randn(D).astype(np.float64)
-    else:
-        raise ValueError(f"Unknown kind={kind}")
-
-    return [base.copy() for _ in range(int(n_veh))]
