@@ -128,7 +128,7 @@ class TrainingConfig:
     #   - 'none': no special weighting
     #   - 'A'   : likelihood tempering (logB[t] *= w_t) before forward-backward. This can distort inference more strongly.
     #   - 'B'   : weighted sufficient statistics (gamma and xi) after forward-backward. This is usually safer and more interpretable. 
-    lc_weight_mode: Literal["none", "A", "B"] = "none"       
+    lc_weight_mode: Literal["none", "A", "B"] = "B"       
     # How to weight xi_t (transition counts) in mode 'B'
     #   - 'next': use w_{t+1}
     #   - 'avg' : use 0.5*(w_t + w_{t+1})
@@ -160,7 +160,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "ablation_test_no_style_5_actions"
+    wandb_run_name: Optional[str] = "ablation_test_no_style_5_actions_lc_b"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
