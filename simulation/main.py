@@ -1,84 +1,118 @@
-import os
+"""
+main - entry point for running single-vehicle or multi-vehicle simulations with the trained HDV-DBN model on the HighD dataset. 
+Configurable options allow for selecting specific vehicles, applying meaningful selection criteria, and choosing between simultaneous 
+multi-vehicle simulation or sequential single-vehicle simulations.
+"""
 import sys
-import multiprocessing as mp
-import pandas as pd
 from pathlib import Path
+import pandas as pd
 
 # Ensure workspace root is in sys.path for hdv imports
-WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-if WORKSPACE_ROOT not in sys.path:
-    sys.path.insert(0, WORKSPACE_ROOT)
+WORKSPACE_ROOT = Path(__file__).resolve().parents[1]
+if str(WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_ROOT))
 
+from vehicle_utils import (
+    get_test_vehicle_ids,
+    select_meaningful_vehicles_in_test,
+    get_vehicle_class,
+    pick_classwise_scaler,
+)
 from hdv.hdv_dbn.config import DBN_STATES
 from hdv.hdv_dbn.trainer import HDVTrainer
 from hdv.hdv_dbn.prediction.semantic_label_utils import load_semantic_labels_from_yaml
 from hdv.hdv_dbn.prediction.model_interface import HDVDbnModel
 from hdv.hdv_dbn.prediction.online_predictor import OnlinePredictor
 from road_renderer import RoadSceneRenderer
-from vehicle_utils import get_test_vehicle_ids, select_meaningful_vehicles_in_test, get_vehicle_class, pick_classwise_scaler
-from combined_visualizer import visualizer_process
-from prediction_visualizer import prediction_visualizer_process
+from single_vehicle import SingleVehicleSimulation
+from multi_vehicle import MultiVehicleSimulation
 
-
-EXP_DIR = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'models', 'main-model-sticky_S2_A4_hierarchical')
-DATA_ROOT = os.path.join(os.path.dirname(__file__), '..', 'hdv', 'data', 'highd')
-CHECKPOINT_NAME = 'final.npz'
+# Paths
+EXP_DIR = WORKSPACE_ROOT / "hdv" / "models" / "main-model-sticky_S2_A4_hierarchical"
+DATA_ROOT = WORKSPACE_ROOT / "hdv" / "data" / "highd"
+CHECKPOINT_NAME = "final.npz"
 
 # User parameters for single vehicle simulation
-SIMULATE_SINGLE_VEHICLE = False  # Set True to simulate a specific vehicle
-SINGLE_REC_ID = 33                # Recording ID (int)
-SINGLE_VEHICLE_ID = 1008            # Vehicle ID (int)
+SIMULATE_SINGLE_VEHICLE = False
+SINGLE_REC_ID = 33
+SINGLE_VEHICLE_ID = 1008
 
-# If True, simulates multiple selected vehicles simultaneously (batched predictor).
-# If False, selected vehicles are simulated sequentially via SingleVehicleSimulation.
-SIMULATE_MULTI_VEHICLES_SIMULTANEOUS = True
-MAX_SIM_VEHICLES = 2  # Cap number of selected vehicles per recording (set None to disable cap)
+# Multi-vehicle options
+SIMULATE_MULTI_VEHICLES_SIMULTANEOUS = True # if False, will simulate vehicles sequentially (one at a time) even within the same recording
+MAX_SIM_VEHICLES = 2  # set None to disable cap
 
-
-# User options for meaningful vehicle selection from test set
-LANE_CHANGE = False      # Set True to include lane-changing vehicles
-ACCEL_BRAKE = False      # Set True to include acceleration/braking vehicles
-FOLLOWING = False       # Set True to include following vehicles
-ACCEL_THRESHOLD = 5.0   # Threshold for acceleration/braking
-MIN_FRAMES = 150        # Minimum frames for a vehicle
+# Meaningful selection options
+LANE_CHANGE = False
+ACCEL_BRAKE = False
+FOLLOWING = False
+ACCEL_THRESHOLD = 5.0
+MIN_FRAMES = 150
 
 
 def build_recording_paths(rec_id):
     """
     Builds paths to tracks meta, tracks CSV, and recording meta files for a recording.
-
-    parameters:
-    - rec_id: Recording ID (int)
-
-    returns:
-    - Tuple of (tracks_meta_path, tracks_csv_path, recording_meta_path)
     """
-    tracks_meta_path = os.path.join(DATA_ROOT, f"{rec_id:02d}_tracksMeta.csv")
-    tracks_csv_path = os.path.join(DATA_ROOT, f"{rec_id:02d}_tracks.csv")
-    recording_meta_path = os.path.join(DATA_ROOT, f"{rec_id:02d}_recordingMeta.csv")
+    tracks_meta_path = DATA_ROOT / f"{rec_id:02d}_tracksMeta.csv"
+    tracks_csv_path = DATA_ROOT / f"{rec_id:02d}_tracks.csv"
+    recording_meta_path = DATA_ROOT / f"{rec_id:02d}_recordingMeta.csv"
     return tracks_meta_path, tracks_csv_path, recording_meta_path
+
+
+def load_tracks_meta(tracks_meta_path):
+    """Loads tracks metadata CSV into a DataFrame."""
+    return pd.read_csv(tracks_meta_path)
+
+
+def load_recording_meta(recording_meta_path):
+    """
+    Loads recording metadata and extracts lane markings.
+    """
+    df = pd.read_csv(recording_meta_path)
+    up_raw = str(df["upperLaneMarkings"].iloc[0]) if "upperLaneMarkings" in df.columns else ""
+    lo_raw = str(df["lowerLaneMarkings"].iloc[0]) if "lowerLaneMarkings" in df.columns else ""
+
+    def _parse_marks(s: str):
+        parts = [p for p in s.split(";") if p.strip() != ""]
+        out = []
+        for p in parts:
+            try:
+                out.append(float(p))
+            except Exception:
+                continue
+        return out
+
+    return {
+        "upperLaneMarkings": _parse_marks(up_raw),
+        "lowerLaneMarkings": _parse_marks(lo_raw),
+    }
+
+
+def load_tracks(tracks_csv_path, *, frame_min=None, frame_max=None):
+    """
+    Loads tracks CSV and optionally filters by frame range (inclusive).
+    """
+    df = pd.read_csv(tracks_csv_path)
+    if frame_min is not None:
+        df = df[df["frame"] >= int(frame_min)]
+    if frame_max is not None:
+        df = df[df["frame"] <= int(frame_max)]
+    return df
 
 
 def select_vehicle_ids_for_recording(rec_id, tracks_meta_path, test_vehicle_ids):
     """
     Selects vehicle IDs to simulate for a recording based on configured flags.
-
-    parameters:
-    - rec_id: Recording ID (int)
-    - tracks_meta_path: Path to recording's tracksMeta CSV
-    - test_vehicle_ids: Dict mapping recording IDs to sets of test vehicle IDs
-
-    returns:
-    - List of selected vehicle IDs (ints)
     """
     if rec_id not in test_vehicle_ids:
         return []
 
+    # default: all test vehicles
     if not (LANE_CHANGE or ACCEL_BRAKE or FOLLOWING):
         return sorted(int(v) for v in test_vehicle_ids[rec_id])
 
     selected = select_meaningful_vehicles_in_test(
-        tracks_meta_path,
+        str(tracks_meta_path),
         test_vehicle_ids,
         lane_change=LANE_CHANGE,
         accel_brake=ACCEL_BRAKE,
@@ -92,229 +126,186 @@ def select_vehicle_ids_for_recording(rec_id, tracks_meta_path, test_vehicle_ids)
     return sorted(selected["id"].astype(int).tolist())
 
 
-def load_tracks(tracks_csv_path, vehicle_id=None, tracks_meta_df=None):
-    """
-    Loads tracks CSV and optionally filters for a specific vehicle and frame range.
-    
-    parameters:
-    - tracks_csv_path: Path to the tracks CSV file. 
-    - vehicle_id: (Optional) ID of the vehicle to filter for. If None, loads all vehicles.
-    - tracks_meta_df: (Optional) DataFrame containing metadata for all vehicles. Required if vehicle_id is provided to determine the frame range for that vehicle.
-
-    returns:
-    - DataFrame containing the tracks data, filtered by vehicle_id and frame range if specified.
-    """
-    df = pd.read_csv(tracks_csv_path)
-    if vehicle_id is not None and tracks_meta_df is not None:
-        meta = tracks_meta_df[tracks_meta_df['id'] == vehicle_id].iloc[0]
-        initial_frame = meta['initialFrame']
-        final_frame = meta['finalFrame']
-        # Keep all vehicles, but only frames in the test vehicle's range
-        df = df[(df['frame'] >= initial_frame) & (df['frame'] <= final_frame)]
-    return df
-
-def load_recording_meta(recording_meta_path):
-    """
-    Loads recording metadata from the specified CSV file and extracts lane markings and other relevant info.
-
-    parameters:
-    - recording_meta_path: Path to the recording metadata CSV file.
-
-    returns:
-    - Dictionary containing lane markings for the recording.
-    """
-    df = pd.read_csv(recording_meta_path)
-    # Extract lane markings and other relevant info
-    upperLaneMarkings = [float(x) for x in df['upperLaneMarkings'].iloc[0].split(';')] # Convert semicolon-separated string to list of floats
-    lowerLaneMarkings = [float(x) for x in df['lowerLaneMarkings'].iloc[0].split(';')]
-    return {
-        'upperLaneMarkings': upperLaneMarkings,
-        'lowerLaneMarkings': lowerLaneMarkings,
-    }
-
-def load_tracks_meta(tracks_meta_path):
-    """
-    Reads the tracks metadata CSV file and returns it as a DataFrame.
-
-    parameters:
-    - tracks_meta_path: Path to the tracks metadata CSV file.
-
-    returns:
-    - DataFrame containing the tracks metadata.
-    """
-    return pd.read_csv(tracks_meta_path)
+def _classwise_scaler_for_vehicle(trainer: HDVTrainer, tracks_meta_df, vehicle_id):
+    vehicle_class = get_vehicle_class(tracks_meta_df, vehicle_id)
+    mean_vec = pick_classwise_scaler(trainer.scaler_mean, vehicle_class)
+    std_vec = pick_classwise_scaler(trainer.scaler_std, vehicle_class)
+    return vehicle_class, mean_vec, std_vec
 
 
 def main():
-    # Load maneuver/action labels from semantic_map.yaml
+    # Load maneuver/action labels
     S = len(DBN_STATES.driving_style)
     A = len(DBN_STATES.action)
-    SEMANTIC_MAP_PATH = os.path.join(EXP_DIR, 'semantic_map.yaml')
-    SPLIT_JSON_PATH = os.path.join(EXP_DIR, 'split.json')
-    maneuver_labels = load_semantic_labels_from_yaml(SEMANTIC_MAP_PATH, S, A) # semantic labels for each (style, action) pair, used for annotation in the prediction visualizer
-    test_vehicle_ids = get_test_vehicle_ids(SPLIT_JSON_PATH) # {recording_id: set of vehicle_ids} 
+    semantic_map_path = EXP_DIR / "semantic_map.yaml"
+    split_json_path = EXP_DIR / "split.json"
+    maneuver_labels = load_semantic_labels_from_yaml(str(semantic_map_path), S, A)
 
-    # Start the combined visualizer for pedal and steering in a separate process
-    pedal_steering_queue = mp.Queue() # Create a multiprocessing queue for communication between the main process and the visualizer process for pedal/steering updates
-    vis_process = mp.Process(target=visualizer_process, args=(pedal_steering_queue,)) # Create the visualizer process, passing the queue as an argument
-    vis_process.start() # Start the visualizer process
+    # Test split vehicle ids
+    test_vehicle_ids = get_test_vehicle_ids(str(split_json_path))
 
-    # Start the prediction visualizer in a separate process
-    prediction_queue = mp.Queue()
-    prediction_vis_process = mp.Process(target=prediction_visualizer_process, args=(prediction_queue, maneuver_labels))
-    prediction_vis_process.start()
+    # Load trainer + model
+    ckpt_path = EXP_DIR / CHECKPOINT_NAME
+    trainer = HDVTrainer.load(str(ckpt_path))
+    model = HDVDbnModel(trainer)
 
-    ckpt_path = os.path.join(EXP_DIR, CHECKPOINT_NAME) # Path to the model checkpoint file
-    trainer = HDVTrainer.load(ckpt_path) # Load the HDVTrainer instance from the checkpoint, which includes the trained model and scalers for feature normalization
-    model = HDVDbnModel(trainer) # Create an instance of the HDVDbnModel using the loaded trainer, which will be used for making online predictions during the simulation
+    # -------------------------
+    # Single specified vehicle
+    # -------------------------
+    if SIMULATE_SINGLE_VEHICLE:
+        tracks_meta_path, tracks_csv_path, recording_meta_path = build_recording_paths(SINGLE_REC_ID)
+        if not (tracks_meta_path.exists() and tracks_csv_path.exists() and recording_meta_path.exists()):
+            print(f"[main] Missing files for recording {SINGLE_REC_ID:02d}.")
+            return
 
-    try:
-        from single_vehicle import SingleVehicleSimulation
-        from multi_vehicle import MultiVehicleSimulation
+        tracks_meta_df = load_tracks_meta(tracks_meta_path)
+        recording_meta = load_recording_meta(recording_meta_path)
 
-        if SIMULATE_SINGLE_VEHICLE: # If SIMULATE_SINGLE_VEHICLE is True, simulate only that vehicle instead of looping through all test vehicles in all recordings
-            tracks_meta_path, tracks_csv_path, recording_meta_path = build_recording_paths(SINGLE_REC_ID)
-            tracks_meta_df = load_tracks_meta(tracks_meta_path)
-            recording_meta = load_recording_meta(recording_meta_path)
-            vehicle_tracks = load_tracks(tracks_csv_path, SINGLE_VEHICLE_ID, tracks_meta_df) # Load the tracks data in the frame range corresponding to the test vehicle
-            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=pedal_steering_queue)
-            vehicle_class = get_vehicle_class(tracks_meta_df, SINGLE_VEHICLE_ID)
-            scaler_mean_vec = pick_classwise_scaler(trainer.scaler_mean, vehicle_class)
-            scaler_std_vec  = pick_classwise_scaler(trainer.scaler_std,  vehicle_class)
+        # frame range for this vehicle (so neighbors exist but only within ego lifespan)
+        meta_row = tracks_meta_df[tracks_meta_df["id"] == SINGLE_VEHICLE_ID].iloc[0]
+        frame_min = int(meta_row["initialFrame"])
+        frame_max = int(meta_row["finalFrame"])
+        tracks_df = load_tracks(tracks_csv_path, frame_min=frame_min, frame_max=frame_max)
 
-            print(f"[main] vehicle_id={SINGLE_VEHICLE_ID} class='{vehicle_class}' "
-                  f"scaler_mean_type={'dict' if isinstance(trainer.scaler_mean, dict) else 'array'} "
-                  f"scaler_std_type={'dict' if isinstance(trainer.scaler_std, dict) else 'array'}")
+        renderer = RoadSceneRenderer(recording_meta, tracks_meta_df)
 
-            simulator = SingleVehicleSimulation(
-                predictor=OnlinePredictor(model, warmup_steps=2),
+        vehicle_class, scaler_mean_vec, scaler_std_vec = _classwise_scaler_for_vehicle(trainer, tracks_meta_df, SINGLE_VEHICLE_ID)
+        print(
+            f"[main] single vehicle_id={SINGLE_VEHICLE_ID} rec={SINGLE_REC_ID:02d} "
+            f"class='{vehicle_class}'"
+        )
+
+        simulator = SingleVehicleSimulation(
+            predictor=OnlinePredictor(model, warmup_steps=5),
+            renderer=renderer,
+            vehicle_id=SINGLE_VEHICLE_ID,
+            recording_id=SINGLE_REC_ID,
+            vehicle_tracks=tracks_df,
+            tracks_meta_df=tracks_meta_df,
+            recording_meta=recording_meta,
+            maneuver_labels=maneuver_labels,
+            scaler_mean=scaler_mean_vec,
+            scaler_std=scaler_std_vec,
+            vehicle_class=vehicle_class,
+        )
+        simulator.run()
+        return
+
+    # -------------------------
+    # Loop recordings in test split
+    # -------------------------
+    for rec in sorted(test_vehicle_ids.keys()):
+        tracks_meta_path, tracks_csv_path, recording_meta_path = build_recording_paths(rec)
+        if not (tracks_meta_path.exists() and tracks_csv_path.exists() and recording_meta_path.exists()):
+            print(f"[main] Skipping recording {rec:02d}: missing one or more data files.")
+            continue
+
+        tracks_meta_df = load_tracks_meta(tracks_meta_path)
+        recording_meta = load_recording_meta(recording_meta_path)
+
+        vehicle_ids = select_vehicle_ids_for_recording(rec, tracks_meta_path, test_vehicle_ids)
+        if not vehicle_ids:
+            print(f"[main] No matching test vehicles selected for recording {rec:02d}.")
+            continue
+
+        if MAX_SIM_VEHICLES is not None and len(vehicle_ids) > int(MAX_SIM_VEHICLES):
+            original_count = len(vehicle_ids)
+            vehicle_ids = vehicle_ids[: int(MAX_SIM_VEHICLES)]
+            print(
+                f"[main] Recording {rec:02d}: limiting vehicles "
+                f"from {original_count} to {len(vehicle_ids)} (MAX_SIM_VEHICLES={MAX_SIM_VEHICLES})"
+            )
+
+        print(f"[main] Recording {rec:02d}: simulating {len(vehicle_ids)} vehicle(s)")
+
+        # -------------------------
+        # Simultaneous batched simulation
+        # -------------------------
+        if SIMULATE_MULTI_VEHICLES_SIMULTANEOUS:
+            scaler_mean_by_vehicle = {}
+            scaler_std_by_vehicle = {}
+            valid_vehicle_ids = []
+
+            for vehicle_id in vehicle_ids:
+                try:
+                    _, mean_vec, std_vec = _classwise_scaler_for_vehicle(trainer, tracks_meta_df, vehicle_id)
+                    scaler_mean_by_vehicle[int(vehicle_id)] = mean_vec
+                    scaler_std_by_vehicle[int(vehicle_id)] = std_vec
+                    valid_vehicle_ids.append(int(vehicle_id))
+                except Exception as e:
+                    print(f"[main] Skipping vehicle {vehicle_id} in recording {rec:02d}: {e}")
+
+            if not valid_vehicle_ids:
+                print(f"[main] Recording {rec:02d}: no valid vehicles after scaler/class checks.")
+                continue
+
+            # Restrict tracks to union lifespan of selected vehicles for efficiency
+            meta_sel = tracks_meta_df[tracks_meta_df["id"].isin(valid_vehicle_ids)]
+            frame_min = int(meta_sel["initialFrame"].min())
+            frame_max = int(meta_sel["finalFrame"].max())
+            tracks_df = load_tracks(tracks_csv_path, frame_min=frame_min, frame_max=frame_max)
+
+            print(
+                f"[main] Recording {rec:02d}: simultaneous multi-vehicle mode with "
+                f"{len(valid_vehicle_ids)} vehicle(s) (frames {frame_min}..{frame_max})"
+            )
+
+            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df)
+            simulator = MultiVehicleSimulation(
+                model=model,
                 renderer=renderer,
-                vehicle_id=SINGLE_VEHICLE_ID,
-                recording_id=SINGLE_REC_ID,
-                vehicle_tracks=vehicle_tracks,
-                tracks_meta_df=tracks_meta_df, # DataFrame containing metadata for all vehicles in the recording
-                recording_meta=recording_meta, # dict containing lane markings and other recording-level metadata
-                pedal_queue=pedal_steering_queue,
-                prediction_queue=prediction_queue,
+                recording_id=rec,
+                vehicle_ids=valid_vehicle_ids,
+                vehicle_tracks=tracks_df,
+                tracks_meta_df=tracks_meta_df,
+                recording_meta=recording_meta,
+                maneuver_labels=maneuver_labels,
+                scaler_mean_by_vehicle=scaler_mean_by_vehicle,
+                scaler_std_by_vehicle=scaler_std_by_vehicle,
+                warmup_steps=5,
+            )
+            simulator.run()
+            continue
+
+        # -------------------------
+        # Sequential single-vehicle simulations
+        # -------------------------
+        for vehicle_id in vehicle_ids:
+            try:
+                vehicle_class, scaler_mean_vec, scaler_std_vec = _classwise_scaler_for_vehicle(
+                    trainer, tracks_meta_df, vehicle_id
+                )
+            except Exception as e:
+                print(f"[main] Skipping vehicle {vehicle_id} in recording {rec:02d}: {e}")
+                continue
+
+            meta_row = tracks_meta_df[tracks_meta_df["id"] == vehicle_id].iloc[0]
+            frame_min = int(meta_row["initialFrame"])
+            frame_max = int(meta_row["finalFrame"])
+            tracks_df = load_tracks(tracks_csv_path, frame_min=frame_min, frame_max=frame_max)
+
+            if tracks_df.empty:
+                print(f"[main] Skipping vehicle {vehicle_id} in recording {rec:02d}: no tracks found.")
+                continue
+
+            print(f"[main] Simulating vehicle {vehicle_id} in recording {rec:02d} (class='{vehicle_class}')")
+
+            renderer = RoadSceneRenderer(recording_meta, tracks_meta_df)
+            simulator = SingleVehicleSimulation(
+                predictor=OnlinePredictor(model, warmup_steps=5),
+                renderer=renderer,
+                vehicle_id=vehicle_id,
+                recording_id=rec,
+                vehicle_tracks=tracks_df,
+                tracks_meta_df=tracks_meta_df,
+                recording_meta=recording_meta,
                 maneuver_labels=maneuver_labels,
                 scaler_mean=scaler_mean_vec,
                 scaler_std=scaler_std_vec,
                 vehicle_class=vehicle_class,
             )
             simulator.run()
-            return
 
-        # Multi-vehicle mode: iterate through recordings and simulate selected test vehicles sequentially.
-        for rec in sorted(test_vehicle_ids.keys()):
-            tracks_meta_path, tracks_csv_path, recording_meta_path = build_recording_paths(rec)
-            if not (Path(tracks_meta_path).exists() and Path(tracks_csv_path).exists() and Path(recording_meta_path).exists()):
-                print(f"[main] Skipping recording {rec:02d}: missing one or more data files.")
-                continue
 
-            tracks_meta_df = load_tracks_meta(tracks_meta_path)
-            recording_meta = load_recording_meta(recording_meta_path)
-            vehicle_ids = select_vehicle_ids_for_recording(rec, tracks_meta_path, test_vehicle_ids)
-            if not vehicle_ids:
-                print(f"[main] No matching test vehicles selected for recording {rec:02d}.")
-                continue
-
-            if MAX_SIM_VEHICLES is not None and len(vehicle_ids) > int(MAX_SIM_VEHICLES):
-                original_count = len(vehicle_ids)
-                vehicle_ids = vehicle_ids[: int(MAX_SIM_VEHICLES)]
-                print(
-                    f"[main] Recording {rec:02d}: limiting vehicles "
-                    f"from {original_count} to {len(vehicle_ids)} (MAX_SIM_VEHICLES={MAX_SIM_VEHICLES})"
-                )
-
-            print(f"[main] Recording {rec:02d}: simulating {len(vehicle_ids)} vehicle(s)")
-
-            if SIMULATE_MULTI_VEHICLES_SIMULTANEOUS:
-                scaler_mean_by_vehicle = {}
-                scaler_std_by_vehicle = {}
-                valid_vehicle_ids = []
-
-                for vehicle_id in vehicle_ids:
-                    try:
-                        vehicle_class = get_vehicle_class(tracks_meta_df, vehicle_id)
-                        scaler_mean_by_vehicle[vehicle_id] = pick_classwise_scaler(trainer.scaler_mean, vehicle_class)
-                        scaler_std_by_vehicle[vehicle_id] = pick_classwise_scaler(trainer.scaler_std, vehicle_class)
-                        valid_vehicle_ids.append(vehicle_id)
-                    except Exception as e:
-                        print(f"[main] Skipping vehicle {vehicle_id} in recording {rec:02d}: {e}")
-
-                if not valid_vehicle_ids:
-                    print(f"[main] Recording {rec:02d}: no valid vehicles after scaler/class checks.")
-                    continue
-
-                tracks_df = pd.read_csv(tracks_csv_path)
-                meta_sel = tracks_meta_df[tracks_meta_df["id"].isin(valid_vehicle_ids)]
-                if not meta_sel.empty and "initialFrame" in meta_sel.columns and "finalFrame" in meta_sel.columns:
-                    min_frame = int(meta_sel["initialFrame"].min())
-                    max_frame = int(meta_sel["finalFrame"].max())
-                    tracks_df = tracks_df[(tracks_df["frame"] >= min_frame) & (tracks_df["frame"] <= max_frame)]
-
-                print(
-                    f"[main] Recording {rec:02d}: simultaneous multi-vehicle mode with "
-                    f"{len(valid_vehicle_ids)} vehicle(s)"
-                )
-                renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=pedal_steering_queue)
-                simulator = MultiVehicleSimulation(
-                    model=model,
-                    renderer=renderer,
-                    recording_id=rec,
-                    vehicle_ids=valid_vehicle_ids,
-                    vehicle_tracks=tracks_df,
-                    tracks_meta_df=tracks_meta_df,
-                    recording_meta=recording_meta,
-                    pedal_queue=pedal_steering_queue,
-                    prediction_queue=prediction_queue,
-                    maneuver_labels=maneuver_labels,
-                    scaler_mean_by_vehicle=scaler_mean_by_vehicle,
-                    scaler_std_by_vehicle=scaler_std_by_vehicle,
-                    vehicle_class_by_vehicle={},
-                    warmup_steps=2,
-                )
-                simulator.run()
-                continue
-
-            for vehicle_id in vehicle_ids:
-                try:
-                    vehicle_class = get_vehicle_class(tracks_meta_df, vehicle_id)
-                    scaler_mean_vec = pick_classwise_scaler(trainer.scaler_mean, vehicle_class)
-                    scaler_std_vec = pick_classwise_scaler(trainer.scaler_std, vehicle_class)
-                except Exception as e:
-                    print(f"[main] Skipping vehicle {vehicle_id} in recording {rec:02d}: {e}")
-                    continue
-
-                vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
-                if vehicle_tracks.empty:
-                    print(f"[main] Skipping vehicle {vehicle_id} in recording {rec:02d}: no tracks found.")
-                    continue
-
-                print(f"[main] Simulating vehicle {vehicle_id} in recording {rec:02d} (class='{vehicle_class}')")
-                renderer = RoadSceneRenderer(recording_meta, tracks_meta_df, visualizer_queue=pedal_steering_queue)
-                simulator = SingleVehicleSimulation(
-                    predictor=OnlinePredictor(model, warmup_steps=2),
-                    renderer=renderer,
-                    vehicle_id=vehicle_id,
-                    recording_id=rec,
-                    vehicle_tracks=vehicle_tracks,
-                    tracks_meta_df=tracks_meta_df,
-                    recording_meta=recording_meta,
-                    pedal_queue=pedal_steering_queue,
-                    prediction_queue=prediction_queue,
-                    maneuver_labels=maneuver_labels,
-                    scaler_mean=scaler_mean_vec,
-                    scaler_std=scaler_std_vec,
-                    vehicle_class=vehicle_class,
-                )
-                simulator.run()
-
-    finally:
-        pedal_steering_queue.put('quit')
-        vis_process.join()
-        prediction_queue.put('quit')
-        prediction_vis_process.join()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

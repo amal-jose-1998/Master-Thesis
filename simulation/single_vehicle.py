@@ -1,203 +1,326 @@
-import numpy as np
-import pandas as pd
-import torch
-import multiprocessing as mp
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import time
+
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 
 from frame_feature_engineer import OnlineFrameFeatureEngineer
 from live_windowizer import LiveWindowizer
+from matplotlib_backend import ensure_interactive_backend, is_non_interactive_backend
+from pedal_visualizer import PedalVisualizer
+from steering_visualizer import SteeringVisualizer
+
 from hdv.hdv_dbn.prediction.online_predictor import OnlinePredictor
 from road_renderer import RoadSceneRenderer
-from hdv.hdv_dbn.config import FRAME_FEATURE_COLS, WINDOW_FEATURE_COLS, CONTINUOUS_FEATURES
+from hdv.hdv_dbn.config import WINDOW_FEATURE_COLS, CONTINUOUS_FEATURES
 
 
 class SingleVehicleSimulation:
-	"""
-	Simulates a single vehicle's trajectory and actions, rendering the scene and sending prediction updates to the visualizer.
-	"""
-	def __init__(self, *, predictor: OnlinePredictor, renderer: RoadSceneRenderer, 
-			  vehicle_id, recording_id, vehicle_tracks, tracks_meta_df, recording_meta, pedal_queue: mp.Queue, prediction_queue: mp.Queue, 
-			  maneuver_labels, scaler_mean, scaler_std, vehicle_class):
-		
-		self.predictor = predictor
-		self.renderer = renderer
-		
-		self.vehicle_id = vehicle_id # test vehicle ID to simulate
-		self.recording_id = recording_id
-		self.vehicle_class = vehicle_class
+    """
+    Simulates a single vehicle's trajectory and actions.
 
-		# Raw tracks used for rendering + pedal/steering (MUST stay raw)
-		self.vehicle_tracks = vehicle_tracks # this contains the vehicles present in the same frames as the test vehicle
+    SYNCED HUD MODE:
+      - Figure A: road scene
+      - Figure B: HUD = pedal | steering | prediction
+    Both figures update inside the same FuncAnimation(update) callback,
+    so the displayed frame, pedal/steering state, and prediction remain synchronized.
+    """
 
-		# Metadata used for feature engineering (MUST stay unscaled)
-		self.tracks_meta_df = tracks_meta_df 
-		self.recording_meta = recording_meta 
+    def __init__(
+        self,
+        *,
+        predictor: OnlinePredictor,
+        renderer: RoadSceneRenderer,
+        vehicle_id,
+        recording_id,
+        vehicle_tracks,
+        tracks_meta_df,
+        recording_meta,
+        maneuver_labels,
+        scaler_mean,
+        scaler_std,
+        vehicle_class=None,
+    ):
+        self.predictor = predictor
+        self.renderer = renderer
 
-		self.pedal_queue = pedal_queue
-		self.prediction_queue = prediction_queue
-		
-		self.maneuver_labels = list(maneuver_labels)
+        self.vehicle_id = int(vehicle_id)
+        self.recording_id = int(recording_id)
+        self.vehicle_class = vehicle_class
 
-		# Online frame feature engineering + windowizer
-		self.frame_engineer = OnlineFrameFeatureEngineer()
-		self.live_windowizer = LiveWindowizer()
+        # Raw tracks used for rendering and extracting ego state
+        self.vehicle_tracks = vehicle_tracks
 
-		# Scaling config (match training)
-		self.scale_idx = [i for i, name in enumerate(WINDOW_FEATURE_COLS) if name in CONTINUOUS_FEATURES]
-		self.scaler_mean = np.asarray(scaler_mean)
-		self.scaler_std = np.asarray(scaler_std)
+        # Metadata used for online feature engineering
+        self.tracks_meta_df = tracks_meta_df
+        self.recording_meta = recording_meta
 
-	def _reset_simulation(self):
-		self.predictor.reset()
-		self.live_windowizer.reset()
-		self.frame_engineer.reset()
-		try:
-			self.prediction_queue.put_nowait({"reset": True, "maneuver_labels": self.maneuver_labels})
-		except Exception:
-			pass
-	
-	def run(self):
-		"""
-		Runs the simulation for the single vehicle, animating the scene and sending prediction updates.
-		"""
-		self._reset_simulation() # Reset the predictor, windowizer, and feature engineer to clear any state before starting the animation loop
+        self.maneuver_labels = list(maneuver_labels)
 
-		raw_ego = self.vehicle_tracks[self.vehicle_tracks["id"] == self.vehicle_id].sort_values("frame") # Get the raw track data for the test vehicle, sorted by frame number to ensure correct temporal order for feature engineering and rendering
-		frames = raw_ego["frame"].to_numpy(dtype=int) 
-		if frames.size == 0:
-			print(f"No frames for test vehicle {self.vehicle_id}")
-			return
+        # Online feature engineering + live windowization
+        self.frame_engineer = OnlineFrameFeatureEngineer()
+        self.live_windowizer = LiveWindowizer()
 
-		min_frame, max_frame = int(frames[0]), int(frames[-1]) # minimum and maximum frame numbers for the test vehicle to set the animation range
+        # Scaling config (must match training)
+        self.scale_idx = [
+            i for i, name in enumerate(WINDOW_FEATURE_COLS)
+            if name in CONTINUOUS_FEATURES
+        ]
+        self.scaler_mean = np.asarray(scaler_mean)
+        self.scaler_std = np.asarray(scaler_std)
 
-		# Precompute frame lookups once to avoid repeated DataFrame scans inside update()
-		frame_to_df = {int(frame): df for frame, df in self.vehicle_tracks.groupby("frame", sort=False)} # dict mapping frame number to DataFrame of all vehicles in that frame
-		ego_rows = {
-			int(row.frame): row
-			for row in raw_ego[["frame", "x", "y", "xAcceleration", "xVelocity"]].itertuples(index=False)
-		} # for quick access to the test vehicle's row in each frame, used for rendering and pedal/steering state extraction
-		ego_y_by_frame = {frame: row.y for frame, row in ego_rows.items()} # for quick access to the test vehicle's y position by frame
+        # HUD helpers
+        self._pedal_vis = PedalVisualizer()
+        self._steer_vis = SteeringVisualizer()
+        self._latest_probs = None
+        self._latest_pred_frame = None
 
-		# Setup for animation
-		fig, ax = plt.subplots(figsize=(10, 6))
+        self._ani = None
 
-		# Draw static road ONCE over a wide span so we only move the camera (xlim) per frame
-		xmin = float(self.vehicle_tracks["x"].min()) - 50.0
-		xmax = float(self.vehicle_tracks["x"].max()) + 50.0
-		self.renderer.render_road(ax, xlims=(xmin, xmax))
-		ylims = ax.get_ylim()
-		ax.set_ylim(ylims)
+    def _reset_simulation(self):
+        self.predictor.reset()
+        self.live_windowizer.reset()
+        self.frame_engineer.reset()
+        self._latest_probs = None
+        self._latest_pred_frame = None
 
-		last_frame_num = None
-		
-		fps_count = 0
-		fps_window_start = time.perf_counter()
-		
-		try:
-			direction = int(self.renderer._meta_by_id.get(self.vehicle_id)[2]) # Get driving direction for the test vehicle from metadata cache (default to 1 if not found)
-		except Exception:
-			direction = self.renderer.tracks_meta_df[self.renderer.tracks_meta_df['id'] == self.vehicle_id]['drivingDirection'].values[0]
-			print(f"Direction metadata not found for vehicle {self.vehicle_id}, cannot determine camera orientation. Check metadata cache.")
+    def _vehicle_direction(self):
+        try:
+            return int(self.renderer._meta_by_id.get(self.vehicle_id)[2])
+        except Exception:
+            try:
+                return int(
+                    self.renderer.tracks_meta_df[
+                        self.renderer.tracks_meta_df["id"] == self.vehicle_id
+                    ]["drivingDirection"].values[0]
+                )
+            except Exception:
+                return 2
 
-		window_width = 150 # width of the camera view in meters
-		x_offset = 10 # offset from the test vehicle's position to place camera 
+    def _draw_prediction_axis(self, ax):
+        ax.clear()
+        ax.set_ylim(0.0, 1.0)
+        ax.set_ylabel("P")
+        ax.tick_params(axis="x", labelrotation=35)
+        for tick in ax.get_xticklabels():
+            tick.set_horizontalalignment("right")
 
-		def update(frame_num):
-			nonlocal last_frame_num, fps_count, fps_window_start, direction
-			if last_frame_num is not None and frame_num < last_frame_num: # reset if we loop back to the start
-				self._reset_simulation()
-			last_frame_num = frame_num # Update the last seen frame number for loop detection
-			
-			ego_row = ego_rows.get(frame_num) # Get current frame row for the test vehicle
-			if ego_row is None:
-				return
-			
-			# Rendering (raw tracks)
-			x0 = float(ego_row.x)
-			y0 = float(ego_row.y)
-			
-			# Set window so test vehicle is always at x=10, direction-dependent
-			if direction == 2: 
-				xlim = (x0 - x_offset, x0 - x_offset + window_width)
-			else:
-				xlim = (x0 + x_offset - window_width, x0 + x_offset)
+        if self._latest_probs is None:
+            ax.set_title(f"Vehicle {self.vehicle_id} - Prediction (warming up)")
+            ax.text(
+                0.5, 0.5,
+                "No prediction yet",
+                ha="center", va="center",
+                transform=ax.transAxes,
+            )
+            ax.set_xticks([])
+            return
 
-			frame_df = frame_to_df.get(frame_num) # all vehicles in the current frame
-			if frame_df is None:
-				return
-			self.renderer.render_vehicles(ax, frame_df, self.vehicle_id) # Render all vehicles in the current frame, highlighting the test vehicle
+        bars = ax.bar(self.maneuver_labels, self._latest_probs)
+        best = int(np.argmax(self._latest_probs)) if len(self._latest_probs) else 0
+        if len(bars) > 0:
+            bars[best].set_color("red")
 
-			# ONLINE feature engineering + windowization + prediction
-			try:
-				frame_vec = self.frame_engineer.add_frame(
-					raw_frame_df=frame_df,
-					ego_vehicle_id=self.vehicle_id,
-					tracks_meta_df=self.tracks_meta_df,
-					recording_meta=self.recording_meta,
-					recording_id=self.recording_id,
-				)  # Engineer features from full current frame and extract ego vector
+        if self._latest_pred_frame is None:
+            ax.set_title(f"Vehicle {self.vehicle_id} - Prediction")
+        else:
+            ax.set_title(
+                f"Vehicle {self.vehicle_id} - Prediction (updated @ frame {self._latest_pred_frame})"
+            )
 
-				windows = self.live_windowizer.add_frame(frame_vec) # Add the engineered feature vector to the live windowizer and get any new windows that are ready for prediction
-				if windows:
-					win = windows[-1]  # Get the most recent window 
-					win_scaled = win.copy()
-					if self.scale_idx:
-						win_scaled[self.scale_idx] = (
-							(win_scaled[self.scale_idx] - self.scaler_mean[self.scale_idx])
-							/ (self.scaler_std[self.scale_idx] + 1e-12)
-						)
+    @staticmethod
+    def _camera_xlim(x_pos, direction, x_offset, window_width):
+        if direction == 2:
+            return (x_pos - x_offset, x_pos - x_offset + window_width)
+        return (x_pos + x_offset - window_width, x_pos + x_offset)
 
-					win_tensor = torch.tensor(
-						win_scaled, dtype=self.predictor.dtype, device=self.predictor.device
-					)
-					self.predictor.update(win_tensor)
+    def run(self):
+        """
+        Runs the single-vehicle simulation with synchronized road + HUD updates.
+        """
+        self._reset_simulation()
 
-					if self.predictor.is_ready:
-						pred = self.predictor.predict_next()
-						probs = torch.softmax(pred.pred_logprob.flatten(), dim=0).detach().cpu().numpy()
-						msg = {
-							"probs": probs,
-							"maneuver_labels": self.maneuver_labels,
-							"vehicle_id": int(self.vehicle_id),
-							"frame": int(frame_num),
-						}
-						try:
-							self.prediction_queue.put_nowait(msg)
-						except Exception:
-							pass
-			except Exception as e:
-					print(f"[single_vehicle] Prediction update failed: {e}")
+        backend_name = ensure_interactive_backend(
+            plt.get_backend,
+            plt.switch_backend,
+            log_prefix="[single_vehicle]",
+        )
 
-			# Pedal/steering state for visualizer
-			raw_ax = float(ego_row.xAcceleration) if hasattr(ego_row, "xAcceleration") else 0.0
-			raw_vx = float(ego_row.xVelocity) if hasattr(ego_row, "xVelocity") else 0.0
-			if direction == 1:
-				ax_val = -raw_ax
-				vx_val = -raw_vx
-			else:
-				ax_val = raw_ax
-				vx_val = raw_vx
-			prev_frame = frame_num - 1
-			prev_y = ego_y_by_frame.get(prev_frame, y0)
-	
-			# Send pedal/steering state to visualizer
-			try:
-				self.pedal_queue.put_nowait((ax_val, vx_val, direction, prev_y, y0))
-			except Exception:
-				pass
+        if is_non_interactive_backend(backend_name):
+            print(
+                f"[single_vehicle] Non-interactive matplotlib backend detected ({backend_name}). "
+                f"Skipping visualization for recording {self.recording_id:02d}, vehicle {self.vehicle_id}."
+            )
+            return
 
-			ax.set_xlim(xlim)
-			ax.set_title(f'Frame {frame_num} - Test Vehicle {self.vehicle_id}')
+        raw_ego = (
+            self.vehicle_tracks[self.vehicle_tracks["id"] == self.vehicle_id]
+            .sort_values("frame")
+        )
+        frames = raw_ego["frame"].to_numpy(dtype=int)
+        if frames.size == 0:
+            print(f"[single_vehicle] No frames for test vehicle {self.vehicle_id}")
+            return
 
-			fps_count += 1
-			now = time.perf_counter()
-			elapsed = now - fps_window_start
-			if elapsed >= 1.0:
-				print(f"[render] {fps_count / elapsed:.2f} FPS")
-				fps_count = 0
-				fps_window_start = now
+        min_frame, max_frame = int(frames[0]), int(frames[-1])
 
-		ani = animation.FuncAnimation(fig, update, frames=range(min_frame, max_frame+1), interval=40, repeat=True)
-		plt.show()
+        # Precompute lookups once
+        frame_to_df = {
+            int(frame): df
+            for frame, df in self.vehicle_tracks.groupby("frame", sort=False)
+        }
+        ego_rows = {
+            int(row.frame): row
+            for row in raw_ego[["frame", "x", "y", "xAcceleration", "xVelocity"]].itertuples(index=False)
+        }
+
+        # -------------------------
+        # Figure A: road
+        # -------------------------
+        fig_road, ax_road = plt.subplots(figsize=(10, 6))
+
+        xmin = float(self.vehicle_tracks["x"].min()) - 50.0
+        xmax = float(self.vehicle_tracks["x"].max()) + 50.0
+        full_xlims = (xmin, xmax)
+
+        self.renderer.render_road(ax_road, xlims=full_xlims)
+        ylims = ax_road.get_ylim()
+        ax_road.set_ylim(ylims)
+
+        # -------------------------
+        # Figure B: HUD
+        # -------------------------
+        fig_hud, hud_axes = plt.subplots(1, 3, figsize=(12, 3.4), squeeze=False)
+        ax_pedal = hud_axes[0, 0]
+        ax_steer = hud_axes[0, 1]
+        ax_pred = hud_axes[0, 2]
+        fig_hud.suptitle(f"Vehicle {self.vehicle_id}: Pedal | Steering | Prediction", fontsize=12)
+        fig_hud.tight_layout(rect=[0.0, 0.0, 1.0, 0.92])
+
+        last_frame_num = None
+        fps_count = 0
+        fps_window_start = time.perf_counter()
+
+        direction = self._vehicle_direction()
+        window_width = 150.0
+        x_offset = 10.0
+
+        def update(frame_num):
+            nonlocal last_frame_num, fps_count, fps_window_start, direction
+
+            if last_frame_num is not None and frame_num < last_frame_num:
+                self._reset_simulation()
+            last_frame_num = frame_num
+
+            ego_row = ego_rows.get(frame_num)
+            if ego_row is None:
+                return
+
+            frame_df = frame_to_df.get(frame_num)
+            if frame_df is None:
+                return
+
+            # -------------------------
+            # A) Road rendering
+            # -------------------------
+            x0 = float(ego_row.x)
+            y0 = float(ego_row.y)
+            xlim = self._camera_xlim(x0, direction, x_offset, window_width)
+
+            # Update only vehicles near the camera window
+            pad = 30.0
+            view = frame_df[(frame_df["x"] >= xlim[0] - pad) & (frame_df["x"] <= xlim[1] + pad)]
+
+            self.renderer.render_vehicles(ax_road, view, self.vehicle_id)
+            ax_road.set_xlim(xlim)
+            ax_road.set_title(f"Frame {frame_num} - Test Vehicle {self.vehicle_id}")
+
+            # -------------------------
+            # B) Online feature engineering + prediction
+            # -------------------------
+            try:
+                frame_ctx = self.frame_engineer.prepare_frame(
+                    raw_frame_df=frame_df,
+                    tracks_meta_df=self.tracks_meta_df,
+                    recording_meta=self.recording_meta,
+                )
+
+                frame_vec = self.frame_engineer.compute_ego(
+                    frame_ctx,
+                    self.vehicle_id,
+                    recording_id=self.recording_id,
+                )
+
+                windows = self.live_windowizer.add_frame(frame_vec)
+                if windows:
+                    win = windows[-1].copy()
+
+                    if self.scale_idx:
+                        win[self.scale_idx] = (
+                            (win[self.scale_idx] - self.scaler_mean[self.scale_idx]) /
+                            (self.scaler_std[self.scale_idx] + 1e-12)
+                        )
+
+                    win_tensor = torch.tensor(
+                        win,
+                        dtype=self.predictor.dtype,
+                        device=self.predictor.device,
+                    )
+
+                    self.predictor.update(win_tensor)
+
+                    if self.predictor.is_ready:
+                        pred = self.predictor.predict_next()
+                        probs = torch.softmax(pred.pred_logprob.flatten(), dim=0).detach().cpu().numpy()
+                        self._latest_probs = probs
+                        self._latest_pred_frame = int(frame_num)
+
+            except Exception as e:
+                print(f"[single_vehicle] Prediction update failed: {e}")
+
+            # -------------------------
+            # C) HUD updates
+            # -------------------------
+            raw_ax = float(ego_row.xAcceleration) if hasattr(ego_row, "xAcceleration") else 0.0
+            raw_vx = float(ego_row.xVelocity) if hasattr(ego_row, "xVelocity") else 0.0
+
+            if direction == 1:
+                ax_val = -raw_ax
+                vx_val = -raw_vx
+            else:
+                ax_val = raw_ax
+                vx_val = raw_vx
+
+            prev_frame = frame_num - 1
+            prev_row = ego_rows.get(prev_frame, ego_row)
+            prev_y = float(prev_row.y)
+            curr_y = float(y0)
+
+            self._pedal_vis.draw(ax_pedal, ax_val, vx_val)
+            ax_pedal.set_title(f"Vehicle {self.vehicle_id} - Pedal")
+
+            self._steer_vis.draw(ax_steer, direction, prev_y, curr_y)
+            ax_steer.set_title(f"Vehicle {self.vehicle_id} - Steering")
+
+            self._draw_prediction_axis(ax_pred)
+
+            # Refresh the HUD on the same animation tick
+            fig_hud.canvas.draw_idle()
+
+            fps_count += 1
+            now = time.perf_counter()
+            elapsed = now - fps_window_start
+            if elapsed >= 1.0:
+                print(f"[single_render] {fps_count / elapsed:.2f} FPS")
+                fps_count = 0
+                fps_window_start = now
+
+        self._ani = animation.FuncAnimation(
+            fig_road,
+            update,
+            frames=range(min_frame, max_frame + 1),
+            interval=40,
+            repeat=True,
+        )
+        plt.show()

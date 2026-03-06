@@ -2,7 +2,6 @@ import json
 import pandas as pd
 import os
 
-from road_renderer import RoadSceneRenderer
 
 def get_test_vehicle_ids(split_json_path):
     """
@@ -64,32 +63,6 @@ def select_meaningful_vehicles_in_test(tracks_meta_path, test_vehicle_ids, lane_
         selected = pd.concat([selected, followers])
     selected = selected.drop_duplicates(subset=['id'])
     return selected
-
-
-def simulate_single_vehicle(rec, vehicle_id, data_dir, renderer_class, load_tracks_meta, load_recording_meta, load_tracks):
-    """
-    Simulate a particular vehicle from a particular recording. 
-    This function loads the necessary data for the specified vehicle and recording, initializes the renderer, 
-    and runs the animation for that vehicle.
-
-    parameters:
-    - rec: Recording ID (integer) of the vehicle to simulate.
-    - vehicle_id: Vehicle ID (integer) of the vehicle to simulate.
-    - data_dir: Directory where the data files are located.
-    - renderer_class: The class of the renderer to use for visualization (e.g., RoadSceneRenderer).
-    - load_tracks_meta: Function to load the tracks metadata DataFrame from a given path.
-    - load_recording_meta: Function to load the recording metadata from a given path.
-    - load_tracks: Function to load the tracks DataFrame for a specific vehicle, given the tracks CSV path, vehicle ID, and tracks metadata DataFrame.
-    """
-    tracks_meta_path = os.path.join(data_dir, f"{rec:02d}_tracksMeta.csv")
-    tracks_csv_path = os.path.join(data_dir, f"{rec:02d}_tracks.csv")
-    recording_meta_path = os.path.join(data_dir, f"{rec:02d}_recordingMeta.csv")
-    tracks_meta_df = load_tracks_meta(tracks_meta_path)
-    recording_meta = load_recording_meta(recording_meta_path)
-    print(f'Animating test vehicle {vehicle_id} in recording {rec:02d}...')
-    vehicle_tracks = load_tracks(tracks_csv_path, vehicle_id, tracks_meta_df)
-    renderer: RoadSceneRenderer = renderer_class(recording_meta, tracks_meta_df)
-    renderer.animate_scene(vehicle_tracks, test_vehicle_id=vehicle_id)
 
 
 def get_vehicle_class(tracks_meta_df, vehicle_id):

@@ -10,8 +10,7 @@ from hdv.hdv_dbn.datasets.highd.sequences import (
     _compute_risk,
     _compute_existence_fracs,
     _compute_neighbor_rel,
-    _validate_required_columns,
-    prune_columns,
+    _validate_required_columns
 )
 
 
