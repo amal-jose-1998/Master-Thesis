@@ -341,7 +341,7 @@ SEM_FEATS_VALIDITY: List[str] = [
 @dataclass(frozen=True)
 class SemanticAnalysisConfig:
     # Paths (edit these)
-    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_S1_A4_hierarchical/final.npz"
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_lc_b_S1_A5_hierarchical/final.npz"
     data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 
     # Speed/debug controls
