@@ -8,6 +8,7 @@ from .metrics import (
     MetricsAccumulator,
 )
 from .validate import ValidationStep, TrajectoryData, ValidationConfig
+from .explainability import explain_prediction_at_t, feature_group_contributions
 from .visualize_metrics import (
     visualize_all_metrics,
     plot_time_to_hit_histogram,
@@ -38,6 +39,10 @@ __all__ = [
     "ValidationStep",
     "TrajectoryData",
     "ValidationConfig",
+
+    # Explainability
+    "explain_prediction_at_t",
+    "feature_group_contributions",
     
     # Visualization
     "visualize_all_metrics",
