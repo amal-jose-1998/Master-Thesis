@@ -1,0 +1,90 @@
+{
+  "anticipatory_ll": {
+    "artifacts": {
+      "ap_nll_vs_horizon_png": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical/ap_nll_vs_horizon.png"
+    },
+    "summary": {
+      "H": 10,
+      "ap_nll_by_h": [
+        22.23152282114698,
+        22.565174752270593,
+        22.860398295660964,
+        23.162983179802488,
+        23.50822931113263,
+        23.935081025986438,
+        24.46934715086596,
+        25.148274556212257,
+        25.953786506256815,
+        26.823377055816636
+      ],
+      "ap_nll_mean_over_h": 24.065817465515174,
+      "n_pause_total": 193357,
+      "t_warmup": 5
+    }
+  },
+  "meta": {
+    "A": 5,
+    "S": 1,
+    "W": 50,
+    "bern_weight": 1.0,
+    "bernoulli_ll_enabled": true,
+    "checkpoint_name": "final.npz",
+    "checkpoint_path": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical/final.npz",
+    "cpd_init": "uniform",
+    "emission_model": "hierarchical",
+    "experiment_dir": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical",
+    "lc_weight_mode": "none",
+    "learn_pi0": false,
+    "n_test_vehicles": 10092,
+    "stride": 10
+  },
+  "metrics": {
+    "BIC": 16727298.21638395,
+    "artifacts": {
+      "entropy_action_png": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical/entropy_action.png",
+      "entropy_heatmaps_npz": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical/entropy_heatmaps.npz",
+      "entropy_joint_png": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical/entropy_joint.png",
+      "entropy_style_png": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical/entropy_style.png"
+    },
+    "ent_action_vehicle_median": 3.1337995998931307e-10,
+    "ent_action_vehicle_n": 10092,
+    "ent_action_vehicle_p10": 1.051193481023998e-14,
+    "ent_action_vehicle_p90": 1.1500587894512297e-05,
+    "ent_joint_vehicle_median": 3.1337995998931307e-10,
+    "ent_joint_vehicle_n": 10092,
+    "ent_joint_vehicle_p10": 1.051193481023998e-14,
+    "ent_joint_vehicle_p90": 1.1500587894512297e-05,
+    "ent_style_vehicle_median": 0.0,
+    "ent_style_vehicle_n": 10092,
+    "ent_style_vehicle_p10": 0.0,
+    "ent_style_vehicle_p90": 0.0,
+    "k_params": 440,
+    "keff_action": 4.060408170185031,
+    "keff_joint": 4.060408170185031,
+    "keff_style": 1.0,
+    "ll_per_timestep": -24.305981608795605,
+    "occ_action_max": 0.3671031892299652,
+    "occ_joint_max": 0.3671031892299652,
+    "occ_style_max": 1.0,
+    "total_T": 343983,
+    "traj_ll_pw_p5": -44.17345711844308,
+    "traj_ll_pw_p50": -22.942584228515624,
+    "traj_ll_pw_p95": -7.560068131579978
+  },
+  "online_ll": {
+    "artifacts": {
+      "T_vs_avg_nll_png": "/home/RUS_CIP/st184634/implementation/hdv/models/ablation_test_no_style_5_actions_S1_A5_hierarchical/T_vs_avg_nll.png"
+    },
+    "summary": {
+      "avg_nll_per_timestep_weighted": 24.305987370770858,
+      "n_sequences": 10092,
+      "per_sequence_avg_nll": {
+        "mean": 24.308326796423874,
+        "median": 22.94258943785514,
+        "p10": 10.564809088241104,
+        "p90": 40.05743701354317
+      },
+      "total_T": 343983
+    }
+  }
+}

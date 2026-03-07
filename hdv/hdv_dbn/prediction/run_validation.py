@@ -41,7 +41,7 @@ def main():
     
     # Construct paths
     data_root = workspace_root / "hdv" / "data" / "highd"
-    exp_dir = workspace_root / "hdv" / "models" / "ablation_test_S1_A4_hierarchical"
+    exp_dir = workspace_root / "hdv" / "models" / "ablation_test_no_style_5_actions_S1_A5_hierarchical"
     checkpoint_path = exp_dir / "final.npz"
     out_dir = exp_dir / "prediction"
     
