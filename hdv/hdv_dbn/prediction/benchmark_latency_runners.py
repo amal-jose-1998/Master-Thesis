@@ -78,21 +78,15 @@ def bench_single_vehicle(predictor: OnlinePredictor, obs_vec_np, device, subsequ
 
     if dev.type == "cuda" and prewarm_cuda: # pre-warm CUDA context to avoid including context init time in measurements
         _ = torch.zeros(1, device=dev)
-        sync(dev) # ensure the pre-warm operation is complete before starting the benchmark
 
-    pre_ready_update_ms = [] # track time taken by update() calls before the predictor becomes ready, as these may be longer due to warmup overhead
     sync(dev)
     t0_total = time.perf_counter() # start total timer from the beginning of the first update call, to capture warmup time as well
 
-    while not predictor.is_ready: # keep calling update() until the predictor reports it's ready, tracking the time taken by each call
-        sync(dev)
-        t0 = time.perf_counter()
+    warmup_updates = 0
+    while not predictor.is_ready: # keep calling update() until the predictor reports it's ready
         predictor.update(obs_t) # perform an update step with the observation tensor
-        sync(dev)
-        t1 = time.perf_counter()
-        pre_ready_update_ms.append((t1 - t0) * 1000.0)
+        warmup_updates += 1
 
-    sync(dev) # ensure all GPU operations are complete before starting the prediction timer
     _ = predictor.predict_next() # perform the first prediction
     sync(dev)
     t1_pred = time.perf_counter() # end timer for the first predict call
@@ -111,14 +105,14 @@ def bench_single_vehicle(predictor: OnlinePredictor, obs_vec_np, device, subsequ
         subsequent_total_ms[i] = (t1 - t0) * 1000.0
 
     return {
-        "warmup_updates": int(len(pre_ready_update_ms)),
+        "warmup_updates": int(warmup_updates),
         "first_prediction_total_ms": float(first_prediction_total_ms),
         "subsequent_total_ms": subsequent_total_ms,
     }
 
 
 @torch.no_grad()
-def bench_loop_multi(predictors, obs_vecs_np, device, subsequent_iters=2000, prewarm_cuda=True, max_total_updates=100):
+def bench_loop_multi(predictors: list[OnlinePredictor], obs_vecs_np, device, subsequent_iters=200, prewarm_cuda=True, max_total_updates=100):
     """
     N independent OnlinePredictor objects stepped sequentially in Python.
     Measures wall time per timestep for the whole fleet (N streams).
@@ -136,7 +130,6 @@ def bench_loop_multi(predictors, obs_vecs_np, device, subsequent_iters=2000, pre
 
     if dev.type == "cuda" and prewarm_cuda:
         _ = torch.zeros(1, device=dev)
-        sync(dev)
 
     per_ready = [False] * n_veh # track which predictors have become ready, as they may require different numbers of update() calls due to warmup variability
     warmup_steps_used = [0] * n_veh # track how many update() calls were used for each predictor to become ready, for warmup analysis
@@ -157,7 +150,7 @@ def bench_loop_multi(predictors, obs_vecs_np, device, subsequent_iters=2000, pre
                 _ = p.predict_next() 
                 per_ready[i] = True # mark this predictor as ready so we can stop calling update() on it 
     sync(dev)
-    t1_total = time.perf_counter() # end total timer after all predictors have become ready and we've called predict_next() on them, to capture warmup time as well
+    t1_total = time.perf_counter() # end timer after all warmup updates and first predictions have fully completed
 
     first_prediction_total_ms = (t1_total - t0_total) * 1000.0 # total time for getting the first prediction from all predictors, including warmup
 
@@ -182,7 +175,7 @@ def bench_loop_multi(predictors, obs_vecs_np, device, subsequent_iters=2000, pre
 
 
 @torch.no_grad()
-def bench_batched(predictor: BatchedOnlinePredictor, obs_vecs_np, device, subsequent_iters=2000, prewarm_cuda=True):
+def bench_batched(predictor: BatchedOnlinePredictor, obs_vecs_np, device, subsequent_iters=200, prewarm_cuda=True):
     """
     One BatchedOnlinePredictor processing a (B,F) observation batch.
     """
@@ -197,7 +190,6 @@ def bench_batched(predictor: BatchedOnlinePredictor, obs_vecs_np, device, subseq
 
     if dev.type == "cuda" and prewarm_cuda: # pre-warm CUDA context to avoid including context init time in measurements
         _ = torch.zeros(1, device=dev)
-        sync(dev)
 
     sync(dev)
     t0_total = time.perf_counter() # start total timer from the beginning of the first update call, to capture warmup time as well
@@ -209,7 +201,6 @@ def bench_batched(predictor: BatchedOnlinePredictor, obs_vecs_np, device, subseq
         predictor.update(obs_batch) # perform an update step with the batch of observation tensors
         warmup_updates += 1
 
-    sync(dev)
     _ = predictor.predict_next(strict_ready=True) # perform the first prediction, ensuring that the predictor is ready before starting the timer
     sync(dev)
     t1_pred = time.perf_counter() # end timer for the first predict call
@@ -257,7 +248,6 @@ def bench_single_vehicle_e2e(predictor: OnlinePredictor, frame_vec_np, device, s
 
     if dev.type == "cuda" and prewarm_cuda: # pre-warm CUDA context to avoid including context init time in measurements
         _ = torch.zeros(1, device=dev)
-        sync(dev)
 
     frames_used = 0
     n_updates = 0
@@ -270,19 +260,14 @@ def bench_single_vehicle_e2e(predictor: OnlinePredictor, frame_vec_np, device, s
         if frames_used >= max_frames: # safety check to prevent infinite loops if the predictor never becomes ready
             raise RuntimeError("Exceeded max_frames during warmup (predictor never became ready).")
 
-        t0w = time.perf_counter() # start timer for the windowization step of this frame
         windows = windowizer.add_frame(frame_vec)
-        t1w = time.perf_counter() # end timer for the windowization step of this frame
-
         if not windows: # if the windowizer did not emit any windows after processing this frame, continue to the next frame without calling update() on the predictor, as we only want to call update() when we have a new window to feed into the model
             continue
 
         obs_t = _window_to_obs_tensor(windows[-1], scale_idx, scaler_mean, scaler_std, dev) # take the most recent emitted window, scale it, and convert it to a torch tensor on the correct device and dtype, to feed into the predictor
-        sync(dev)
         predictor.update(obs_t) # call update() on the predictor with the new observation tensor; this may eventually lead to the predictor becoming ready after enough updates, which will allow us to start the prediction timer
         n_updates += 1
 
-    sync(dev)
     _ = predictor.predict_next() # perform the first prediction after the predictor reports it's ready, to capture the latency of the first prediction including all the warmup overhead of feeding frames and windows into the predictor
     sync(dev)
     t1_pred = time.perf_counter() # end timer for the first prediction, which includes the time taken to feed frames into the windowizer, process them, call update() on the predictor until it becomes ready, and then call predict_next() for the first time
@@ -290,45 +275,26 @@ def bench_single_vehicle_e2e(predictor: OnlinePredictor, frame_vec_np, device, s
     warmup_frames = frames_used
     first_prediction_total_ms = (t1_pred - t0_total) * 1000.0 # time for the first prediction, including warmup
 
-    # subsequent latency: measure the time taken for a number of subsequent windows to be emitted by the windowizer and processed through update()+predict() calls, to capture steady-state performance after warmup. 
-    per_pred_total_ms = np.empty((subsequent_windows,), dtype=np.float64) 
-    per_pred_windowize_ms = np.empty((subsequent_windows,), dtype=np.float64)
-    per_pred_prep_ms = np.empty((subsequent_windows,), dtype=np.float64)
-    per_pred_infer_ms = np.empty((subsequent_windows,), dtype=np.float64)
+    # subsequent latency: measure only end-to-end total per emitted window.
+    per_pred_total_ms = np.empty((subsequent_windows,), dtype=np.float64)
 
     produced = 0
     while produced < subsequent_windows: # keep feeding frames into the windowizer and calling update()+predict() on the predictor with the emitted windows until we've collected enough subsequent predictions for steady-state analysis, tracking the time taken by each step
         frames_used += 1
         if frames_used >= max_frames:
             raise RuntimeError("Exceeded max_frames while collecting subsequent windows.")
-
-        t0w = time.perf_counter() # start timer for the windowization step of this frame, which may eventually lead to a new window being emitted and a new prediction being made, allowing us to capture the time taken by the windowizer in steady-state operation after warmup
+        
+        sync(dev)
+        t0_total_step = time.perf_counter() # start timer for this step
         windows = windowizer.add_frame(frame_vec)
-        t1w = time.perf_counter() # end timer for the windowization step of this frame
-        win_ms = (t1w - t0w) * 1000.0 # time taken to process this frame through the windowizer, which may or may not emit a new window; we want to capture this time for every frame to analyze the windowizer's performance in steady-state after warmup, even for frames that don't emit a new window
-
         if not windows: # if the windowizer did not emit any windows after processing this frame,
             continue
 
-        t0_total_step = t0w # time for the whole step from the start of windowization to the completion of prediction, which includes the time taken by the windowizer and the predictor for this new window
-
-        t0_prep = time.perf_counter() # start timer for the preparation step of this new window, which includes scaling and transferring the window features to the correct device and dtype before feeding into the predictor; we want to capture this time separately to analyze the overhead of preparing the window features for the model in steady-state after warmup
         obs_t = _window_to_obs_tensor(windows[-1], scale_idx, scaler_mean, scaler_std, dev)
-        sync(dev)
-        t1_prep = time.perf_counter() # end timer for the preparation step of this new window
-
-        sync(dev)
-        t0_inf = time.perf_counter() # start timer for the inference step of this new window, which includes calling update() and predict_next() on the predictor with the new observation tensor; we want to capture this time separately to analyze the inference latency of the predictor in steady-state after warmup
         predictor.update(obs_t)
         _ = predictor.predict_next()
         sync(dev)
-        t1_inf = time.perf_counter() # end timer for the inference step of this new window
-
-        t1_total_step = t1_inf # end time for the whole step from the start of windowization to the completion of prediction for this new window, which includes both the windowizer and predictor time
-
-        per_pred_windowize_ms[produced] = win_ms # time taken by the windowizer for this frame
-        per_pred_prep_ms[produced] = (t1_prep - t0_prep) * 1000.0 # time taken to prepare the window features for the model for this new window
-        per_pred_infer_ms[produced] = (t1_inf - t0_inf) * 1000.0 # time taken for the inference step of this new window
+        t1_total_step = time.perf_counter() # end time for the whole step
         per_pred_total_ms[produced] = (t1_total_step - t0_total_step) * 1000.0 # time taken for the whole step of this new window
         produced += 1
 
@@ -339,9 +305,6 @@ def bench_single_vehicle_e2e(predictor: OnlinePredictor, frame_vec_np, device, s
         "window_stride": int(getattr(windowizer, "stride", -1)),# window stride used by the LiveWindowizer, if available
         "first_prediction_total_ms": float(first_prediction_total_ms), # time taken for the first prediction after warmup
         "subsequent_total_ms": per_pred_total_ms, # total time taken for each subsequent window from the start of windowization to the completion of prediction
-        "subsequent_windowize_ms": per_pred_windowize_ms, # time taken by the windowizer for each subsequent window
-        "subsequent_prep_ms": per_pred_prep_ms, # time taken to prepare the window features for the model for each subsequent window
-        "subsequent_infer_ms": per_pred_infer_ms, # time taken for the inference step of the predictor for each subsequent window
     }
 
 
@@ -363,7 +326,6 @@ def bench_loop_multi_e2e(predictors: List[OnlinePredictor], frame_vecs_np, devic
 
     if dev.type == "cuda" and prewarm_cuda:
         _ = torch.zeros(1, device=dev)
-        sync(dev)
 
     per_ready = [False] * n_veh # track which predictors are ready
     warmup_updates_used = [0] * n_veh # track how many update() calls were used for each predictor to become ready, for warmup analysis
@@ -376,19 +338,16 @@ def bench_loop_multi_e2e(predictors: List[OnlinePredictor], frame_vecs_np, devic
         if warmup_frames >= max_frames:
             raise RuntimeError("Exceeded max_frames during warmup in loop_multi_e2e.")
 
-        t0w = time.perf_counter() # start timer for the windowization step of this frame for all streams
         emitted = [None] * n_veh # to store the most recent emitted window for each stream/vehicle after processing this frame
         for i in range(n_veh): # loop through each stream/vehicle and feed the corresponding frame vector into its LiveWindowizer, which may emit a new window if enough frames have been processed
             windows = windowizers[i].add_frame(frame_vecs[i]) # feed the frame vector for this stream/vehicle into its LiveWindowizer
             if windows:
                 emitted[i] = windows[-1] # take the most recent emitted window for this stream/vehicle, which we will prepare and feed into the predictor for this stream/vehicle if it's not None
-        t1w = time.perf_counter() # end timer for the windowization step of this frame for all streams
 
         for i in range(n_veh): # loop through each stream/vehicle and call update() on the predictor with the new observation tensor if a new window was emitted and this predictor is not ready yet, as we only want to call update() during warmup until the predictor becomes ready; once a predictor becomes ready, we will stop calling update() on it and just let it be for the rest of the warmup phase, as we only want to measure the time taken by update() calls before the predictor becomes ready for warmup analysis
             if per_ready[i] or emitted[i] is None: # once a stream is ready, you stop updating it during the remaining warmup of other streams. If no new window was emitted for this stream, you also skip the update() call, as we only want to call update() when we have a new window to feed into the model during warmup
                 continue
             obs_t = _window_to_obs_tensor(emitted[i], scale_idx, scaler_mean, scaler_std, dev)
-            sync(dev)
             predictors[i].update(obs_t)
             warmup_updates_used[i] += 1
             if predictors[i].is_ready: # once this predictor reports it's ready, call predict_next() on it to mark it as ready so we can stop calling update() on it during the remaining warmup phase
@@ -400,8 +359,6 @@ def bench_loop_multi_e2e(predictors: List[OnlinePredictor], frame_vecs_np, devic
     first_prediction_total_ms = (t1_total - t0_total) * 1000.0 # total time for getting the first prediction from all predictors, including warmup
 
     per_event_total_ms = np.empty((subsequent_windows,), dtype=np.float64)
-    per_event_infer_ms = np.empty((subsequent_windows,), dtype=np.float64)
-    per_event_windowize_ms = np.empty((subsequent_windows,), dtype=np.float64)
 
     produced = 0
     frames_used = warmup_frames # start counting frames used from the end of warmup, as we want to measure how many additional frames are needed to produce the subsequent windows after warmup, and to prevent infinite loops if we never emit enough windows for the subsequent analysis
@@ -410,32 +367,24 @@ def bench_loop_multi_e2e(predictors: List[OnlinePredictor], frame_vecs_np, devic
         if frames_used >= max_frames:
             raise RuntimeError("Exceeded max_frames while collecting subsequent windows in loop_multi_e2e.")
 
+        sync(dev)
         t0_event = time.perf_counter() # start timer for this event, which includes the time taken by the windowizers to process this new frame and emit new windows, as well as the time taken by the predictors to perform inference for this new event
         emitted = [None] * n_veh # to store the most recent emitted window for each stream/vehicle after processing this frame
 
-        t0w = time.perf_counter() # time for the windowization step of this frame
         for i in range(n_veh): # loop throght each stream/vehicle and feed the corresponding frame vector into its LiveWindowizer
             windows = windowizers[i].add_frame(frame_vecs[i])
             if windows:
                 emitted[i] = windows[-1]
-        t1w = time.perf_counter() # end timer for the windowization step of this frame
-        win_ms = (t1w - t0w) * 1000.0 # time taken to process this frame through the windowizers for all streams
 
         if any(e is None for e in emitted): # if any stream/vehicle did not emit a new window after processing this frame, skip the update+predict step for this frame
             continue
 
-        sync(dev)
-        t0_inf = time.perf_counter() # start timer for the inference step of this event, which includes calling update() and predict_next() on the predictors for all streams/vehicles that emitted a new window 
         for i in range(n_veh): # loop through each stream/vehicle and call update() and predict_next() on the predictor with the new observation tensor 
             obs_t = _window_to_obs_tensor(emitted[i], scale_idx, scaler_mean, scaler_std, dev)
             predictors[i].update(obs_t)
             _ = predictors[i].predict_next()
         sync(dev)
-        t1_inf = time.perf_counter() # end timer for the inference step of this event, which includes the time taken by all predictors for all streams/vehicles that emitted a new window
-
-        t1_event = t1_inf # end time for this event, which includes both the windowization and inference steps for this new window
-        per_event_windowize_ms[produced] = win_ms # time taken by the windowizers for this frame
-        per_event_infer_ms[produced] = (t1_inf - t0_inf) * 1000.0 # time taken by the predictors for this event
+        t1_event = time.perf_counter() # end time for this event, which includes both the windowization and inference steps for this new window
         per_event_total_ms[produced] = (t1_event - t0_event) * 1000.0 # total time for this event, including both the windowization and inference steps
         produced += 1
 
@@ -447,8 +396,6 @@ def bench_loop_multi_e2e(predictors: List[OnlinePredictor], frame_vecs_np, devic
         "window_stride": int(getattr(windowizers[0], "stride", -1)),
         "first_prediction_total_ms": float(first_prediction_total_ms),
         "subsequent_total_ms": per_event_total_ms,
-        "subsequent_windowize_ms": per_event_windowize_ms,
-        "subsequent_infer_ms": per_event_infer_ms,
     }
 
 
@@ -469,7 +416,6 @@ def bench_batched_e2e(predictor: BatchedOnlinePredictor, frame_vecs_np, device, 
 
     if dev.type == "cuda" and prewarm_cuda:
         _ = torch.zeros(1, device=dev)
-        sync(dev)
 
     warmup_frames = 0
     n_updates = 0
@@ -485,22 +431,18 @@ def bench_batched_e2e(predictor: BatchedOnlinePredictor, frame_vecs_np, device, 
         if warmup_frames >= max_frames:
             raise RuntimeError("Exceeded max_frames during warmup in batched_e2e.")
 
-        t0w = time.perf_counter() # start timer for the windowization step of this frame for all streams
         emitted = []
         for i in range(B): # loop through each stream/vehicle and feed the corresponding frame vector into its LiveWindowizer
             windows = windowizers[i].add_frame(frame_vecs[i])
             emitted.append(windows[-1] if windows else None) # take the most recent emitted window for this stream/vehicle, or None if no window was emitted
-        t1w = time.perf_counter() # end timer for the windowization step of this frame for all streams
 
         if any(e is None for e in emitted): # if any stream/vehicle did not emit a new window after processing this frame, skip the update() call for this frame, as we only want to call update() when we have a new window to feed into the model during warmup
             continue
 
         obs_batch = _windows_to_obs_batch(emitted, scale_idx, scaler_mean, scaler_std, dev) # take the emitted windows, scale them, and convert them to a batch observation tensor on the correct device and dtype, to feed into the predictor
-        sync(dev)
         predictor.update(obs_batch)
         n_updates += 1
 
-    sync(dev)
     _ = predictor.predict_next(strict_ready=True)
     sync(dev)
     t1_pred = time.perf_counter() # end timer for the first prediction after warmup
@@ -508,9 +450,6 @@ def bench_batched_e2e(predictor: BatchedOnlinePredictor, frame_vecs_np, device, 
     first_prediction_total_ms = (t1_pred - t0_total) * 1000.0 # total time for the first prediction, including warmup
 
     per_event_total_ms = np.empty((subsequent_windows,), dtype=np.float64)
-    per_event_windowize_ms = np.empty((subsequent_windows,), dtype=np.float64)
-    per_event_prep_ms = np.empty((subsequent_windows,), dtype=np.float64)
-    per_event_infer_ms = np.empty((subsequent_windows,), dtype=np.float64)
 
     produced = 0
     frames_used = warmup_frames
@@ -519,35 +458,21 @@ def bench_batched_e2e(predictor: BatchedOnlinePredictor, frame_vecs_np, device, 
         if frames_used >= max_frames:
             raise RuntimeError("Exceeded max_frames while collecting subsequent windows in batched_e2e.")
 
+        sync(dev)
         t0_event = time.perf_counter() # start timer for this event, which includes the time taken by the windowizers to process this new frame and emit new windows, as well as the time taken by the predictor to perform inference for this new event
 
         emitted = []
         for i in range(B): # loop throgh each stream and feed the corresponding frame vector into its LiveWindowizer, which may emit a new window if enough frames have been processed
             windows = windowizers[i].add_frame(frame_vecs[i])
             emitted.append(windows[-1] if windows else None)
-        t1w = time.perf_counter() # end timer for the windowization step of this frame for all streams
-        win_ms = (t1w - t0_event) * 1000.0 # time taken to process this frame through the windowizers for all streams, starting from the event timer to capture the windowization time as part of the event latency
-
         if any(e is None for e in emitted): # skip the update+predict step for this frame if any stream/vehicle did not emit a new window after processing this frame
             continue
 
-        t0_prep = time.perf_counter() # start timer for the preparation step of this new window, which includes scaling and transferring the window features to the correct device and dtype before feeding into the predictor; we want to capture this time separately to analyze the overhead of preparing the window features for the model in steady-state after warmup
         obs_batch = _windows_to_obs_batch(emitted, scale_idx, scaler_mean, scaler_std, dev)
-        sync(dev)
-        t1_prep = time.perf_counter() # end timer for the preparation step of this new window
-
-        sync(dev)
-        t0_inf = time.perf_counter() # start timer for the inference step of this new window, which includes the time taken by the predictor to perform inference for this new event
         predictor.update(obs_batch)
         _ = predictor.predict_next(strict_ready=True)
         sync(dev)
-        t1_inf = time.perf_counter() # end timer for the inference step of this new window
-
-        t1_event = t1_inf # end time for this event, which includes both the windowization and inference steps for this new window
-
-        per_event_windowize_ms[produced] = win_ms # time taken by the windowizers for this frame, which is part of the event latency
-        per_event_prep_ms[produced] = (t1_prep - t0_prep) * 1000.0 # time taken to prepare the window features for the model for this new window
-        per_event_infer_ms[produced] = (t1_inf - t0_inf) * 1000.0 # time taken by the predictor for this event
+        t1_event = time.perf_counter() # end time for this event, which includes both the windowization and inference steps for this new window
         per_event_total_ms[produced] = (t1_event - t0_event) * 1000.0 # total time for this event, including both the windowization and inference steps
         produced += 1
 
@@ -559,7 +484,4 @@ def bench_batched_e2e(predictor: BatchedOnlinePredictor, frame_vecs_np, device, 
         "window_stride": int(getattr(windowizers[0], "stride", -1)),
         "first_prediction_total_ms": float(first_prediction_total_ms),
         "subsequent_total_ms": per_event_total_ms,
-        "subsequent_windowize_ms": per_event_windowize_ms,
-        "subsequent_prep_ms": per_event_prep_ms,
-        "subsequent_infer_ms": per_event_infer_ms,
     }

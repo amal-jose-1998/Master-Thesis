@@ -10,7 +10,6 @@ try:
     from ..trainer import HDVTrainer
     from .online_predictor import OnlinePredictor, BatchedOnlinePredictor
     from .benchmark_latency_runners import (
-        LiveWindowizer,
         bench_single_vehicle,
         bench_loop_multi,
         bench_batched,
@@ -34,7 +33,6 @@ except ImportError:
     from hdv.hdv_dbn.trainer import HDVTrainer
     from hdv.hdv_dbn.prediction.online_predictor import OnlinePredictor, BatchedOnlinePredictor
     from hdv.hdv_dbn.prediction.benchmark_latency_runners import (
-        LiveWindowizer,
         bench_single_vehicle,
         bench_loop_multi,
         bench_batched,
@@ -100,9 +98,9 @@ def main():
         p_batched = BatchedOnlinePredictor(model, warmup_steps=warmup_steps, device=dev, dtype=torch.float32) # single predictor for all vehicles in the batched benchmark
         res_batched = bench_batched(p_batched, obs_vecs, device=dev, subsequent_iters=subsequent_iters)
 
-        print_block(f"[{label}] single (update+predict)", res_single, is_e2e=False)
-        print_block(f"[{label}] loop_multi (N={n_veh}, update+predict)", res_loop, is_e2e=False)
-        print_block(f"[{label}] batched (B={n_veh}, update+predict)", res_batched, is_e2e=False)
+        print_block(f"[{label}] single (update+predict)", res_single)
+        print_block(f"[{label}] loop_multi (N={n_veh}, update+predict)", res_loop)
+        print_block(f"[{label}] batched (B={n_veh}, update+predict)", res_batched)
 
         csv_rows.append(make_csv_row(label, "single", res_single, 1))
         csv_rows.append(make_csv_row(label, "loop_multi", res_loop, n_veh))
@@ -126,9 +124,9 @@ def main():
         res_batched_e2e = bench_batched_e2e(p_batched_e2e, frame_vecs, device=dev, scaler_mean=scaler_mean, scaler_std=scaler_std,
             subsequent_windows=subsequent_iters)
 
-        print_block(f"[{label}] single_e2e (frame->window->predict)", res_single_e2e, is_e2e=True)
-        print_block(f"[{label}] loop_multi_e2e (N={n_veh}, frame->window->predict)", res_loop_e2e, is_e2e=True)
-        print_block(f"[{label}] batched_e2e (B={n_veh}, frame->window->predict)", res_batched_e2e, is_e2e=True)
+        print_block(f"[{label}] single_e2e (frame->window->predict)", res_single_e2e)
+        print_block(f"[{label}] loop_multi_e2e (N={n_veh}, frame->window->predict)", res_loop_e2e)
+        print_block(f"[{label}] batched_e2e (B={n_veh}, frame->window->predict)", res_batched_e2e)
 
         csv_rows.append(make_csv_row(label, "single_e2e", res_single_e2e, 1))
         csv_rows.append(make_csv_row(label, "loop_multi_e2e", res_loop_e2e, n_veh))

@@ -28,50 +28,42 @@
 
 [CPU] single (update+predict)
   warmup_updates: 5
-  first_prediction_total_ms: 1.2687158305197954
-  subsequent total: mean=0.1681 ms | p50=0.1660 | p90=0.1754 | p99=0.1903
+  first_prediction_total_ms: 1.1554320808500051
+  subsequent total: mean=0.1642 ms | p50=0.1615 | p90=0.1723 | p99=0.1873
 
 [CPU] loop_multi (N=5, update+predict)
   warmup_updates: 5
-  first_prediction_total_ms: 3.5462791565805674
-  subsequent total: mean=0.8213 ms | p50=0.8194 | p90=0.8326 | p99=0.8498
+  first_prediction_total_ms: 3.4228551667183638
+  subsequent total: mean=0.7957 ms | p50=0.7927 | p90=0.8115 | p99=0.8201
 
 [CPU] batched (B=5, update+predict)
   warmup_updates: 5
-  first_prediction_total_ms: 1.1771430727094412
-  subsequent total: mean=0.2156 ms | p50=0.2122 | p90=0.2286 | p99=0.2412
+  first_prediction_total_ms: 1.1112289503216743
+  subsequent total: mean=0.2096 ms | p50=0.2069 | p90=0.2206 | p99=0.2331
 
 [CPU] single_e2e (frame->window->predict)
   warmup_updates: 5
   warmup_frames: 90
   window_W: 50
   window_stride: 10
-  first_prediction_total_ms: 3.1654799822717905
-  subsequent total: mean=0.5941 ms | p50=0.5910 | p90=0.6083 | p99=0.6289
-  subsequent windowize: mean=0.3621 ms | p50=0.3597 | p90=0.3736 | p99=0.3940
-  subsequent prep: mean=0.0211 ms | p50=0.0209 | p90=0.0215 | p99=0.0244
-  subsequent infer (update+predict): mean=0.2102 ms | p50=0.2086 | p90=0.2137 | p99=0.2333
+  first_prediction_total_ms: 3.0851480551064014
+  subsequent total: mean=0.5728 ms | p50=0.5694 | p90=0.5897 | p99=0.6112
 
 [CPU] loop_multi_e2e (N=5, frame->window->predict)
   warmup_updates: 5
   warmup_frames: 90
   window_W: 50
   window_stride: 10
-  first_prediction_total_ms: 13.179915025830269
-  subsequent total: mean=2.7148 ms | p50=2.7124 | p90=2.7363 | p99=2.7524
-  subsequent windowize: mean=1.6789 ms | p50=1.6768 | p90=1.6928 | p99=1.7137
-  subsequent infer (update+predict): mean=1.0331 ms | p50=1.0305 | p90=1.0490 | p99=1.0589
+  first_prediction_total_ms: 12.671624077484012
+  subsequent total: mean=2.6668 ms | p50=2.6672 | p90=2.6957 | p99=2.7498
 
 [CPU] batched_e2e (B=5, frame->window->predict)
   warmup_updates: 5
   warmup_frames: 90
   window_W: 50
   window_stride: 10
-  first_prediction_total_ms: 10.08640113286674
-  subsequent total: mean=1.9552 ms | p50=1.9526 | p90=1.9725 | p99=2.0153
-  subsequent windowize: mean=1.6414 ms | p50=1.6400 | p90=1.6583 | p99=1.6792
-  subsequent prep: mean=0.0361 ms | p50=0.0355 | p90=0.0369 | p99=0.0457
-  subsequent infer (update+predict): mean=0.2764 ms | p50=0.2744 | p90=0.2836 | p99=0.2954
+  first_prediction_total_ms: 10.048810858279467
+  subsequent total: mean=1.9084 ms | p50=1.9052 | p90=1.9314 | p99=1.9600
 
 [audit:GPU] trainer.device/dtype: cuda torch.float32
 [audit:GPU] pi_s0: cuda:0 torch.float32
@@ -84,49 +76,41 @@
 
 [GPU] single (update+predict)
   warmup_updates: 5
-  first_prediction_total_ms: 180.67382089793682
-  subsequent total: mean=4.1885 ms | p50=6.9480 | p90=7.0361 | p99=7.0640
+  first_prediction_total_ms: 164.98237499035895
+  subsequent total: mean=6.0960 ms | p50=6.9926 | p90=7.0396 | p99=7.0792
 
 [GPU] loop_multi (N=5, update+predict)
   warmup_updates: 5
-  first_prediction_total_ms: 119.14859991520643
-  subsequent total: mean=23.5521 ms | p50=25.8514 | p90=25.9816 | p99=26.0951
+  first_prediction_total_ms: 44.606881914660335
+  subsequent total: mean=15.8495 ms | p50=25.7494 | p90=25.9105 | p99=26.0365
 
 [GPU] batched (B=5, update+predict)
   warmup_updates: 5
-  first_prediction_total_ms: 22.57118304260075
-  subsequent total: mean=11.1048 ms | p50=11.5475 | p90=11.6090 | p99=11.6652
+  first_prediction_total_ms: 15.574096934869885
+  subsequent total: mean=0.5483 ms | p50=0.5429 | p90=0.5649 | p99=0.5917
 
 [GPU] single_e2e (frame->window->predict)
   warmup_updates: 5
   warmup_frames: 90
   window_W: 50
   window_stride: 10
-  first_prediction_total_ms: 39.20901915989816
-  subsequent total: mean=7.6819 ms | p50=9.2495 | p90=9.3175 | p99=9.3769
-  subsequent windowize: mean=0.3813 ms | p50=0.3782 | p90=0.3937 | p99=0.4406
-  subsequent prep: mean=1.5682 ms | p50=1.8963 | p90=1.9340 | p99=1.9425
-  subsequent infer (update+predict): mean=5.7275 ms | p50=6.9638 | p90=7.0301 | p99=7.0621
+  first_prediction_total_ms: 4.4067129492759705
+  subsequent total: mean=8.4220 ms | p50=9.2315 | p90=9.2946 | p99=9.3334
 
 [GPU] loop_multi_e2e (N=5, frame->window->predict)
   warmup_updates: 5
   warmup_frames: 90
   window_W: 50
   window_stride: 10
-  first_prediction_total_ms: 176.31029803305864
-  subsequent total: mean=35.0044 ms | p50=37.2471 | p90=37.4078 | p99=39.3297
-  subsequent windowize: mean=1.8156 ms | p50=1.6565 | p90=1.9701 | p99=3.4760
-  subsequent infer (update+predict): mean=33.1746 ms | p50=35.5404 | p90=35.7128 | p99=36.0880
+  first_prediction_total_ms: 176.45558482035995
+  subsequent total: mean=33.3626 ms | p50=37.1608 | p90=37.3324 | p99=38.8159
 
 [GPU] batched_e2e (B=5, frame->window->predict)
   warmup_updates: 5
   warmup_frames: 90
   window_W: 50
   window_stride: 10
-  first_prediction_total_ms: 225.69733089767396
-  subsequent total: mean=13.6033 ms | p50=13.8091 | p90=13.8887 | p99=15.8840
-  subsequent windowize: mean=1.7460 ms | p50=1.6368 | p90=1.7529 | p99=3.5631
-  subsequent prep: mean=0.6148 ms | p50=0.6277 | p90=0.6602 | p99=0.8090
-  subsequent infer (update+predict): mean=11.2365 ms | p50=11.5366 | p90=11.5928 | p99=11.6457
+  first_prediction_total_ms: 258.0087911337614
+  subsequent total: mean=13.1136 ms | p50=13.7747 | p90=13.8562 | p99=14.5953
 
 [benchmark] Wrote CSV summary: /home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/latency benchmark/benchmark_latency_results.csv
