@@ -1,0 +1,125 @@
+label_rules:
+  unknown_z: -1
+  A: 5
+
+  thresholds:
+    # Lane change
+    lc_flag_thresh: 0.5
+    lateral_velocity_threshold: 0.10
+    lateral_acceleration_threshold: 0.10
+    lateral_velocity_slope_threshold: 0.003
+    ay_zero_frac_max: 0.10 # lane-change windows here are laterally active, so ay_zero_frac should stay low rather than high
+
+    # Sustained braking
+    brake_ax_neg_frac: 0.90
+    brake_ax_last: -0.15
+    brake_front_exists_min: 0.90
+    brake_thw_max: 2.0
+    brake_ttc_max: 70.0
+
+    # Sustained acceleration
+    accel_ax_pos_frac: 0.90
+    accel_ax_last: 0.15
+    accel_front_exists_min: 0.90
+
+    # Stable following
+    stable_follow_front_exists_min: 0.65
+    stable_follow_vx_slope_abs_max: 0.008
+    stable_follow_ax_last_abs_max: 0.10
+    stable_follow_lc_max: 0.01
+
+    # Low-speed regulation
+    low_speed_vx_last_max: 21.0
+    low_speed_front_exists_max: 0.85
+    low_speed_side_exists_min: 0.20
+    low_speed_ax_neg_frac_min: 0.45
+    low_speed_jerk_x_min: 0.18
+
+    # Interaction tightness
+    tight_interaction_thw: 2.0
+    tight_interaction_ttc: 60.0
+
+  priority:
+    - a1_lane_change
+    - a2_sustained_braking
+    - a4_constrained_acceleration
+    - a0_low_speed_regulation
+    - a3_stable_following
+    - unknown
+
+  tight_interaction_definition:
+    any_of:
+      - "front_thw_last <= tight_interaction_thw (if feature exists)"
+      - "front_ttc_min <= tight_interaction_ttc (if feature exists)"
+
+styles:
+  s0:
+    name: dummy
+    description: Single-style baseline without a meaningful style split; all semantic interpretation is carried by the action states.
+
+actions_by_style:
+  s0:
+    a0:
+      name: low_speed_regulation
+      description: Low-speed constrained regulation with irregular longitudinal adjustment, denser surrounding traffic, and broader variability than the pure braking or stable-following states.
+      condition:
+        all_of:
+          - "vx_last <= low_speed_vx_last_max"
+          - "ax_neg_frac >= low_speed_ax_neg_frac_min"
+          - "jerk_x_p95 >= low_speed_jerk_x_min"
+          - any_of:
+              - "left_side_exists_frac >= low_speed_side_exists_min"
+              - "right_side_exists_frac >= low_speed_side_exists_min"
+              - "front_exists_frac <= low_speed_front_exists_max"
+
+    a1:
+      name: lane_change
+      description: Lane-change / lateral maneuver state with the strongest lateral motion, lane-position variability, and explicit lane-change flag activity.
+      condition:
+        any_of:
+          - "lc_left_present > lc_flag_thresh"
+          - "lc_right_present > lc_flag_thresh"
+          - all_of:
+              - "abs(vy_last) >= lateral_velocity_threshold"
+              - "abs(ay_last) >= lateral_acceleration_threshold"
+              - "abs(vy_slope) >= lateral_velocity_slope_threshold"
+              - "ay_zero_frac <= ay_zero_frac_max"
+
+    a2:
+      name: sustained_braking
+      description: Sustained braking under close car-following, with highly consistent negative longitudinal acceleration and tight interaction headway.
+      condition:
+        all_of:
+          - "ax_neg_frac >= brake_ax_neg_frac"
+          - "ax_last <= brake_ax_last"
+          - "front_exists_frac >= brake_front_exists_min"
+          - any_of:
+              - "front_thw_last <= brake_thw_max (if feature exists)"
+              - "front_ttc_min <= brake_ttc_max (if feature exists)"
+
+    a3:
+      name: stable_following
+      description: Default stable-following regime with near-zero longitudinal control on average, moderate front interaction, and smooth micro-adjustments.
+      condition:
+        all_of:
+          - "front_exists_frac >= stable_follow_front_exists_min"
+          - "abs(vx_slope) <= stable_follow_vx_slope_abs_max"
+          - "abs(ax_last) <= stable_follow_ax_last_abs_max"
+          - "lc_left_present <= stable_follow_lc_max"
+          - "lc_right_present <= stable_follow_lc_max"
+          - "NOT tight_interaction"
+
+    a4:
+      name: constrained_acceleration
+      description: Sustained positive longitudinal acceleration while still interacting with a front vehicle.
+      condition:
+        all_of:
+          - "ax_pos_frac >= accel_ax_pos_frac"
+          - "ax_last >= accel_ax_last"
+          - "front_exists_frac >= accel_front_exists_min"
+
+other_cases:
+  unknown:
+    description: No lane-change, braking, acceleration, low-speed regulation, or stable-following pattern detected.
+    condition:
+      - "no_other_condition_matched"
