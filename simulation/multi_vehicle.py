@@ -232,8 +232,11 @@ class MultiVehicleSimulation:
             nonlocal fps_count, fps_window_start, last_frame_num
 
             # loop reset (repeat=True)
-            if last_frame_num is not None and frame_num < last_frame_num:
-                self._reset_simulation()
+            if last_frame_num is not None:
+                if frame_num < last_frame_num:
+                    self._reset_simulation()
+                elif frame_num == last_frame_num:
+                    return
             last_frame_num = frame_num
 
             frame_df = frame_to_df.get(frame_num)

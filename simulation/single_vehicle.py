@@ -209,8 +209,11 @@ class SingleVehicleSimulation:
         def update(frame_num):
             nonlocal last_frame_num, fps_count, fps_window_start, direction
 
-            if last_frame_num is not None and frame_num < last_frame_num:
-                self._reset_simulation()
+            if last_frame_num is not None:
+                if frame_num < last_frame_num:
+                    self._reset_simulation()
+                elif frame_num == last_frame_num:
+                    return
             last_frame_num = frame_num
 
             ego_row = ego_rows.get(frame_num)
