@@ -5,39 +5,33 @@ label_rules:
   thresholds:
     # Lane change
     lc_flag_thresh: 0.5
-    lateral_velocity_threshold: 0.10
+    lateral_velocity_threshold: 0.10 # sits betweeen  noise level lateral drift and genuine lateral motion
     lateral_acceleration_threshold: 0.10
     lateral_velocity_slope_threshold: 0.003
     ay_zero_frac_max: 0.10 # lane-change windows here are laterally active, so ay_zero_frac should stay low rather than high
 
     # Sustained braking
-    brake_ax_neg_frac: 0.90
-    brake_ax_last: -0.15
-    brake_front_exists_min: 0.90
-    brake_thw_max: 2.0
-    brake_ttc_max: 70.0
+    brake_ax_neg_frac: 0.85
+    brake_ax_last: -0.15 # lies between mild deceleration and strong braking
+    brake_front_exists_min: 0.80
 
     # Sustained acceleration
     accel_ax_pos_frac: 0.90
-    accel_ax_last: 0.15
-    accel_front_exists_min: 0.90
+    accel_ax_last: 0.10 # lies between neutral control and real acceleration.
+    accel_front_exists_min: 0.50 # acceleration state occurs in constrained interaction, not free-flow.
 
     # Stable following
-    stable_follow_front_exists_min: 0.65
-    stable_follow_vx_slope_abs_max: 0.008
-    stable_follow_ax_last_abs_max: 0.10
-    stable_follow_lc_max: 0.01
+    stable_follow_front_exists_min: 0.65 # stable following should involve a front vehicle most of the time, but we allow more flexibility than braking 
+    stable_follow_vx_slope_abs_max: 0.008 # speed changes remain small.
+    stable_follow_ax_last_abs_max: 0.20 # captures near-neutral control while avoiding braking/acceleration regimes.
 
     # Low-speed regulation
-    low_speed_vx_last_max: 21.0
-    low_speed_front_exists_max: 0.85
-    low_speed_side_exists_min: 0.20
-    low_speed_ax_neg_frac_min: 0.45
-    low_speed_jerk_x_min: 0.18
+    low_speed_vx_last_max: 21 # seperates slow regimes from typical traffic speeds
+    low_speed_front_exists_max: 0.90
+    low_speed_side_exists_min: 0.18
+    low_speed_ax_neg_frac_min: 0.40
+    low_speed_jerk_x_min: 0.14
 
-    # Interaction tightness
-    tight_interaction_thw: 2.0
-    tight_interaction_ttc: 60.0
 
   priority:
     - a1_lane_change
@@ -47,11 +41,6 @@ label_rules:
     - a3_stable_following
     - unknown
 
-  tight_interaction_definition:
-    any_of:
-      - "front_thw_last <= tight_interaction_thw (if feature exists)"
-      - "front_ttc_min <= tight_interaction_ttc (if feature exists)"
-
 styles:
   s0:
     name: dummy
@@ -60,7 +49,7 @@ styles:
 actions_by_style:
   s0:
     a0:
-      name: low_speed_regulation
+      name: low_speed_adjustments
       description: Low-speed constrained regulation with irregular longitudinal adjustment, denser surrounding traffic, and broader variability than the pure braking or stable-following states.
       condition:
         all_of:
@@ -93,10 +82,7 @@ actions_by_style:
           - "ax_neg_frac >= brake_ax_neg_frac"
           - "ax_last <= brake_ax_last"
           - "front_exists_frac >= brake_front_exists_min"
-          - any_of:
-              - "front_thw_last <= brake_thw_max (if feature exists)"
-              - "front_ttc_min <= brake_ttc_max (if feature exists)"
-
+        
     a3:
       name: stable_following
       description: Default stable-following regime with near-zero longitudinal control on average, moderate front interaction, and smooth micro-adjustments.
@@ -105,9 +91,6 @@ actions_by_style:
           - "front_exists_frac >= stable_follow_front_exists_min"
           - "abs(vx_slope) <= stable_follow_vx_slope_abs_max"
           - "abs(ax_last) <= stable_follow_ax_last_abs_max"
-          - "lc_left_present <= stable_follow_lc_max"
-          - "lc_right_present <= stable_follow_lc_max"
-          - "NOT tight_interaction"
 
     a4:
       name: constrained_acceleration
