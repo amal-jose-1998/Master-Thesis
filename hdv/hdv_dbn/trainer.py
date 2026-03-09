@@ -87,7 +87,7 @@ class HDVTrainer:
             emission parameters updated from gamma (responsibilities)
     """
 
-    def __init__(self, obs_names, emission_model=None):
+    def __init__(self, obs_names, emission_model=None, device=None, dtype=None):
         """
         Parameters
         obs_names : list[str]
@@ -120,12 +120,13 @@ class HDVTrainer:
         pi_s0_np, pi_a0_given_s0_np, As_np, Aa_np = build_structured_transition_params(self.hdv_dbn)
 
 
-        self.device = torch.device(getattr(TRAINING_CONFIG, "device", "cpu"))
+        device_value = device if device is not None else getattr(TRAINING_CONFIG, "device", "cpu")
+        self.device = torch.device(device_value)
         if self.device.type == "cuda" and not torch.cuda.is_available():
             if getattr(TRAINING_CONFIG, "verbose", 1):
                 print("[HDVTrainer] WARNING: CUDA requested but not available. Falling back to CPU.")
             self.device = torch.device("cpu")
-        dtype_str = getattr(TRAINING_CONFIG, "dtype", "float32")
+        dtype_str = dtype if dtype is not None else getattr(TRAINING_CONFIG, "dtype", "float32")
         self.dtype = torch.float32 if dtype_str == "float32" else torch.float64
 
         self.pi_s0 = torch.as_tensor(pi_s0_np, device=self.device, dtype=self.dtype)            # (S,)
@@ -1211,7 +1212,7 @@ class HDVTrainer:
         print(f"[HDVTrainer] Saved model parameters to {path}")
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, device=None, dtype=None):
         """
         Load a trained HDVTrainer instance from a .npz file and restore Mixed emissions.
         Restores:
@@ -1222,6 +1223,12 @@ class HDVTrainer:
         Parameters
         path : str or Path
             Path to the saved .npz file.
+        device : str | torch.device | None
+            Optional device override used during construction (e.g., "cpu").
+            If None, uses TRAINING_CONFIG.device.
+        dtype : str | None
+            Optional dtype override ("float32" or "float64").
+            If None, uses TRAINING_CONFIG.dtype.
 
         Returns
         HDVTrainer
@@ -1243,7 +1250,7 @@ class HDVTrainer:
         if "emission_model" in data.files:
             em_mode = str(np.asarray(data["emission_model"]).reshape(-1)[0])
 
-        trainer = cls(obs_names=obs_names, emission_model=em_mode)
+        trainer = cls(obs_names=obs_names, emission_model=em_mode, device=device, dtype=dtype)
 
         trainer.emissions.from_arrays(em_payload)
         trainer.emissions.to_device(device=trainer.device, dtype=trainer.dtype)
