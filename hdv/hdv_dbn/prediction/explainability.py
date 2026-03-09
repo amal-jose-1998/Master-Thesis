@@ -63,6 +63,11 @@ def _normalize_logprob(logp: torch.Tensor):
     return torch.exp(norm) 
 
 
+def _normalized_logprob_matrix(logp: torch.Tensor):
+    z = torch.logsumexp(logp.reshape(-1), dim=0)
+    return logp - z
+
+
 def _topk_states(logp_sa: torch.Tensor, k, semantic_map=None):
     p = _normalize_logprob(logp_sa) # convert log probabilities to actual probabilities; shape: (S, A) 
     flat_p = p.reshape(-1) # flatten to 1D for topk selection
@@ -245,6 +250,9 @@ def explain_prediction_at_t(*, obs_scaled, emissions: HierarchicalMixedEmissionM
     post_prob = _normalize_logprob(post_t)
     emit_prob = _normalize_logprob(emit_t)
     forecast_prob = _normalize_logprob(forecast_t1)
+    prior_logprob = _normalized_logprob_matrix(prior_t)
+    post_logprob = _normalized_logprob_matrix(post_t)
+    forecast_logprob = _normalized_logprob_matrix(forecast_t1)
 
     # Get the top-k most likely states for each distribution 
     top_prior = _topk_states(prior_t, top_k, semantic_map=semantic_map)
@@ -309,19 +317,19 @@ def explain_prediction_at_t(*, obs_scaled, emissions: HierarchicalMixedEmissionM
             "map": _state_summary_from_logp(prior_t, semantic_map=semantic_map),
             "topk": [s.__dict__ for s in top_prior],
             "prob_matrix": prior_prob.detach().cpu().numpy().astype(np.float64).tolist(),
-            "logprob_matrix": _normalize_logprob(prior_t).detach().cpu().numpy().astype(np.float64).tolist(),
+            "logprob_matrix": prior_logprob.detach().cpu().numpy().astype(np.float64).tolist(),
         },
         "posterior": {
             "map": _state_summary_from_logp(post_t, semantic_map=semantic_map),
             "topk": [s.__dict__ for s in top_post],
             "prob_matrix": post_prob.detach().cpu().numpy().astype(np.float64).tolist(),
-            "logprob_matrix": _normalize_logprob(post_t).detach().cpu().numpy().astype(np.float64).tolist(),
+            "logprob_matrix": post_logprob.detach().cpu().numpy().astype(np.float64).tolist(),
         },
         "forecast_t_plus_1": {
             "map": _state_summary_from_logp(forecast_t1, semantic_map=semantic_map),
             "topk": [s.__dict__ for s in top_forecast],
             "prob_matrix": forecast_prob.detach().cpu().numpy().astype(np.float64).tolist(),
-            "logprob_matrix": _normalize_logprob(forecast_t1).detach().cpu().numpy().astype(np.float64).tolist(),
+            "logprob_matrix": forecast_logprob.detach().cpu().numpy().astype(np.float64).tolist(),
         },
         "diagnostics": {
             "tv_distance_prior_to_posterior": float(tv),
