@@ -1,25 +1,26 @@
-from __future__ import annotations
-
 import json
 from pathlib import Path
 import sys
-
 import numpy as np
 
+
+
 try:
-    from ..config import CONTINUOUS_FEATURES, WINDOW_FEATURE_COLS
+    from ..config import CONTINUOUS_FEATURES, WINDOW_FEATURE_COLS, WindowConfig
     from ..evaluate_highd_dbn import load_test_sequences_from_experiment_split
     from ..trainer import HDVTrainer
     from ..utils.eval_common import scale_obs_masked, seq_key
     from .explainability import explain_prediction_at_t
+    from ..datasets.dataset import TrajectorySequence
 except ImportError:
     project_root = Path(__file__).resolve().parents[3]
     sys.path.insert(0, str(project_root))
-    from hdv.hdv_dbn.config import CONTINUOUS_FEATURES, WINDOW_FEATURE_COLS
+    from hdv.hdv_dbn.config import CONTINUOUS_FEATURES, WINDOW_FEATURE_COLS, WindowConfig
     from hdv.hdv_dbn.evaluate_highd_dbn import load_test_sequences_from_experiment_split
     from hdv.hdv_dbn.trainer import HDVTrainer
     from hdv.hdv_dbn.utils.eval_common import scale_obs_masked, seq_key
     from hdv.hdv_dbn.prediction.explainability import explain_prediction_at_t
+    from hdv.hdv_dbn.datasets.dataset import TrajectorySequence
 
 
 def _load_semantic_map_yaml(path: Path):
@@ -36,51 +37,7 @@ def _load_semantic_map_yaml(path: Path):
         return None
 
 
-def _semantic_names_for_sa(sem_map, s: int, a: int, default_style: str, default_action: str) -> tuple[str, str]:
-    if sem_map is None:
-        return default_style, default_action
-    try:
-        s_key = f"s{int(s)}"
-        a_key = f"a{int(a)}"
-        style_name = sem_map.get("styles", {}).get(s_key, {}).get("name")
-        action_name = sem_map.get("actions_by_style", {}).get(s_key, {}).get(a_key, {}).get("name")
-        return str(style_name or default_style), str(action_name or default_action)
-    except Exception:
-        return default_style, default_action
-
-
-def _rewrite_result_with_semantics(result: dict, sem_map) -> dict:
-    if sem_map is None:
-        return result
-
-    def _rewrite_row(row: dict) -> None:
-        style_name, action_name = _semantic_names_for_sa(
-            sem_map,
-            row.get("s", -1),
-            row.get("a", -1),
-            str(row.get("style_name", "")),
-            str(row.get("action_name", "")),
-        )
-        row["style_name"] = style_name
-        row["action_name"] = action_name
-
-    for block in ("emission", "prior", "posterior", "forecast_t_plus_1"):
-        if block in result and isinstance(result[block], dict):
-            if "map" in result[block] and isinstance(result[block]["map"], dict):
-                _rewrite_row(result[block]["map"])
-            for row in result[block].get("topk", []):
-                if isinstance(row, dict):
-                    _rewrite_row(row)
-
-    diag = result.get("diagnostics", {})
-    winning = diag.get("winning_state", {}) if isinstance(diag, dict) else {}
-    if isinstance(winning, dict):
-        _rewrite_row(winning)
-
-    return result
-
-
-def resolve_seq_index(test_seqs, trajectory_id=None, trajectory_index=None) -> int:
+def resolve_seq_index(test_seqs, trajectory_id=None, trajectory_index=None):
     """
     Resolve which test trajectory to explain.
 
@@ -132,60 +89,43 @@ def select_scaler_for_seq(trainer: HDVTrainer, seq):
     return np.asarray(mean, dtype=np.float64), np.asarray(std, dtype=np.float64)
 
 
-def frame_to_window_index(
-    *,
-    frame_no: int,
-    window_start_frame: int,
-    W: int,
-    stride: int,
-    allow_nearest: bool = False,
-) -> tuple[int, int | None]:
+def frame_to_window_index(frame_no, window_start_frame, n_steps, stride):
     """
-    Convert absolute frame number to window-local index using (start, W, stride).
+    Convert absolute frame number to window-local index using
+    (window grid start frame, number of windowed steps, stride).
 
     Returns:
     - (index, None) if frame aligns exactly to the window grid
-    - (index, snapped_frame) if allow_nearest=True and nearest grid point is used
+    - (index, snapped_frame) if nearest grid point is used
     """
-    frame_no = int(frame_no)
+    frame_no = int(frame_no) # absolute frame number to resolve
     window_start_frame = int(window_start_frame)
-    W = int(W)
+    n_steps = int(n_steps)
     stride = int(stride)
 
-    if W <= 0:
-        raise ValueError(f"W must be > 0, got {W}")
+    if n_steps <= 0:
+        raise ValueError(f"n_steps must be > 0, got {n_steps}")
     if stride <= 0:
         raise ValueError(f"stride must be > 0, got {stride}")
 
-    max_frame = window_start_frame + (W - 1) * stride
+    max_frame = window_start_frame + (n_steps - 1) * stride
     if frame_no < window_start_frame or frame_no > max_frame:
         raise IndexError(
             f"frame_no={frame_no} out of window range [{window_start_frame}, {max_frame}]"
         )
 
-    offset = frame_no - window_start_frame
-    q, r = divmod(offset, stride)
-    if r == 0:
+    offset = frame_no - window_start_frame # how many frames from the start of the window
+    q, r = divmod(offset, stride) # q is how many strides fit in the offset, r is the remainder
+    if r == 0: # exact match to the window grid
         return int(q), None
 
-    if not allow_nearest:
-        raise ValueError(
-            f"frame_no={frame_no} is not aligned with stride={stride} from start={window_start_frame}"
-        )
-
-    nearest_idx = int(np.rint(offset / float(stride)))
-    nearest_idx = max(0, min(W - 1, nearest_idx))
-    nearest_frame = window_start_frame + nearest_idx * stride
+    nearest_idx = int(np.rint(offset / float(stride))) # round to nearest stride index
+    nearest_idx = max(0, min(n_steps - 1, nearest_idx)) # clamp to valid range
+    nearest_frame = window_start_frame + nearest_idx * stride # compute the actual frame number of the snapped index
     return nearest_idx, int(nearest_frame)
 
 
-def resolve_local_t(
-    frames: np.ndarray,
-    requested_t: int,
-    *,
-    window_W: int | None = None,
-    window_stride: int | None = None,
-) -> tuple[int, int | None]:
+def resolve_local_t(frames, requested_t, window_stride=None):
     """
     Resolve absolute frame number to a local timestep index.
 
@@ -193,40 +133,16 @@ def resolve_local_t(
     - `requested_t` is treated strictly as a frame number.
     - If frame is within window range but off-stride, nearest stride frame is used.
     """
-    T = int(frames.shape[0])
-    frame_no = int(requested_t)
+    T = int(frames.shape[0]) # total number of frames in this windowed sequence
+    frame_no = int(requested_t) # absolute frame number to resolve
 
-    if window_W is not None and window_stride is not None and frames.size > 0:
+    if window_stride is not None and frames.size > 0:
         try:
-            local_W = min(int(window_W), T)
-            idx, snapped_frame = frame_to_window_index(
-                frame_no=frame_no,
-                window_start_frame=int(frames[0]),
-                W=local_W,
-                stride=int(window_stride),
-                allow_nearest=True,
-            )
-            if 0 <= idx < T:
+            idx, snapped_frame = frame_to_window_index(frame_no=frame_no, window_start_frame=int(frames[0]), n_steps=T, stride=int(window_stride))
+            if 0 <= idx < T: # if it is between the first and last frame of this window, return it
                 return idx, snapped_frame
         except (ValueError, IndexError):
             pass
-
-    idx = np.where(frames == frame_no)[0]
-    if idx.size > 0:
-        return int(idx[0]), None
-
-    frame_min = int(np.min(frames))
-    frame_max = int(np.max(frames))
-    if frame_min <= frame_no <= frame_max:
-        nearest_idx = int(np.argmin(np.abs(frames.astype(np.float64) - float(frame_no))))
-        nearest_frame = int(frames[nearest_idx])
-        return nearest_idx, nearest_frame
-
-    raise IndexError(
-        f"Requested frame={frame_no} is outside this sequence window "
-        f"(frame range: {frame_min}..{frame_max})."
-    )
-
 
 def main():
     # ======================================================================
@@ -241,7 +157,7 @@ def main():
     TRAJECTORY_ID = "4.0:19.0"                 # example: "4.0:123.0"
     TRAJECTORY_INDEX = 0                # used only if TRAJECTORY_ID is None
 
-    T = 325                              # absolute frame number to explain (324)
+    T = 214                              # absolute frame number to explain 
     TOP_K = 3                   # how many of the top posterior states and top emission states to include in the printed output and the output JSON
     OUT_JSON = EXP_DIR / "explanations" / f"explain_t{T}.json"                     
     # ======================================================================
@@ -249,9 +165,9 @@ def main():
     if not CHECKPOINT.exists():
         raise FileNotFoundError(f"Checkpoint not found: {CHECKPOINT}")
 
-    trainer = HDVTrainer.load(CHECKPOINT)
+    trainer = HDVTrainer.load(CHECKPOINT, device="cpu")
 
-    test_seqs, feature_cols, split_payload, _ = load_test_sequences_from_experiment_split(
+    test_seqs, feature_cols, _, _ = load_test_sequences_from_experiment_split(
         exp_dir=EXP_DIR,
         data_root=DATA_ROOT,
     )
@@ -259,54 +175,32 @@ def main():
     if list(feature_cols) != list(WINDOW_FEATURE_COLS):
         raise RuntimeError("Feature mismatch with WINDOW_FEATURE_COLS")
 
-    seq_idx = resolve_seq_index(
-        test_seqs=test_seqs,
-        trajectory_id=TRAJECTORY_ID,
-        trajectory_index=TRAJECTORY_INDEX,
-    )
-    seq = test_seqs[seq_idx]
+    seq_idx = resolve_seq_index(test_seqs=test_seqs, trajectory_id=TRAJECTORY_ID, trajectory_index=TRAJECTORY_INDEX)
+    seq: TrajectorySequence = test_seqs[seq_idx] # windowed sequence, not the full original trajectory
 
     mean, std = select_scaler_for_seq(trainer, seq)
 
-    scale_idx = np.asarray(
+    scale_idx = np.asarray( # integer index array of all continuous feature positions.
         [i for i, name in enumerate(feature_cols) if name in set(CONTINUOUS_FEATURES)],
         dtype=np.int64,
     )
 
     obs_raw = np.asarray(seq.obs, dtype=np.float64)
-    obs_scaled = scale_obs_masked(obs_raw, mean, std, scale_idx)
+    obs_scaled = scale_obs_masked(obs_raw, mean, std, scale_idx) # actual observation matrix that will go into emission likelihood evaluation. (T_seq, F)
     frames = np.asarray(seq.frames)
-    local_t, nearest_frame = resolve_local_t(
-        frames=frames,
-        requested_t=int(T),
-        window_W=int(split_payload.get("W", int(frames.shape[0]))),
-        window_stride=int(split_payload.get("stride", 1)),
-    )
-
-    result = explain_prediction_at_t(
-        obs_scaled=obs_scaled,
-        obs_raw=obs_raw,
-        frames=frames,
-        emissions=trainer.emissions,
-        pi_s0=trainer.pi_s0,
-        pi_a0_given_s0=trainer.pi_a0_given_s0,
-        A_s=trainer.A_s,
-        A_a=trainer.A_a,
-        t=local_t,
-        top_k=int(TOP_K),
-        feature_cols=list(feature_cols),
-    )
+    local_t, nearest_frame = resolve_local_t(frames=frames, requested_t=int(T), window_stride=WindowConfig.stride)
     sem_map = _load_semantic_map_yaml(SEMANTIC_MAP_YAML)
-    result = _rewrite_result_with_semantics(result, sem_map)
 
-    traj_key = seq_key(seq)
+    result = explain_prediction_at_t(obs_scaled=obs_scaled, obs_raw=obs_raw, frames=frames, emissions=trainer.emissions, pi_s0=trainer.pi_s0,
+                                     pi_a0_given_s0=trainer.pi_a0_given_s0, A_s=trainer.A_s, A_a=trainer.A_a, t=local_t, top_k=int(TOP_K), feature_cols=list(feature_cols), semantic_map=sem_map)
 
-    post_map = result["posterior"]["map"]
-    next_map = result["forecast_t_plus_1"]["map"]
-    diag = result["diagnostics"]
+    traj_key = seq_key(seq) # trajectory identifier string, e.g. "4.0:19.0"
 
-    ranked_groups = result.get("feature_group_contributions", {}).get("ranked_groups", [])
-    top_group = ranked_groups[0]["group"] if ranked_groups else None
+    post_map = result["posterior"]["map"] # dict for posterior MAP state
+    next_map = result["forecast_t_plus_1"]["map"] # dict for one-step forecast MAP state
+    diag = result["diagnostics"] # dict of summary diagnostics
+
+    group_scores = result.get("feature_group_contributions", {}).get("group_scores_loglik", {})
 
     print("=" * 80)
     print(f"trajectory = {traj_key}")
@@ -319,7 +213,7 @@ def main():
             f"snapping to nearest stride frame {nearest_frame}"
         )
         print(f"resolved_t  = {local_t}")
-    print(f"t          = {result['t']}")
+    print(f"window_index   = {result.get('window_index', local_t)}")
     print(f"frame      = {result.get('frame')}")
     print("=" * 80)
 
@@ -338,10 +232,13 @@ def main():
     )
 
     print("\nDIAGNOSTICS")
-    print(f"driver                         = {diag['driver']}")
+    driver_name = diag.get("driver")
+    if driver_name is None:
+        seq_meta = getattr(seq, "meta", None) or {}
+        driver_name = seq_meta.get("driver") or seq_meta.get("meta_class")
+    print(f"driver                         = {driver_name if driver_name is not None else 'n/a'}")
     print(f"tv(prior -> posterior)         = {diag['tv_distance_prior_to_posterior']:.4f}")
     print(f"prior/posterior MAP changed    = {diag['prior_to_posterior_map_changed']}")
-    print(f"top feature group contribution = {top_group}")
 
     print("\nTOP POSTERIOR STATES")
     for i, row in enumerate(result["posterior"]["topk"], start=1):
@@ -360,8 +257,8 @@ def main():
         )
 
     print("\nFEATURE GROUP CONTRIBUTIONS")
-    for row in ranked_groups:
-        print(f"{row['group']}: {row['loglik']:.4f}")
+    for group, loglik in group_scores.items():
+        print(f"{group}: {float(loglik):.4f}")
 
     if OUT_JSON is not None:
         out_path = Path(OUT_JSON)

@@ -1,0 +1,362 @@
+{
+  "window_index": 10,
+  "frame": 216,
+  "sequence_length": 29,
+  "feature_dim": 43,
+  "topk": 3,
+  "observation": {
+    "feature_values_scaled": {
+      "vx_last": 0.393864207029003,
+      "vx_slope": -0.25471957519423455,
+      "ax_last": -0.339355236820161,
+      "vy_last": -0.0006668446018734525,
+      "vy_slope": 2.483640473044082,
+      "ay_last": 1.385030892615433,
+      "ax_neg_frac": 1.1504050188435277,
+      "ax_pos_frac": -1.1180761266034978,
+      "ax_zero_frac": -0.30934499080534966,
+      "ay_neg_frac": -1.1099856504889531,
+      "ay_pos_frac": 1.3601147283026784,
+      "ay_zero_frac": -0.6364528175348644,
+      "jerk_x_p95": -0.9217911617586877,
+      "jerk_y_p95": -0.8799467785551686,
+      "lc_left_present": 0.0,
+      "lc_right_present": 0.0,
+      "d_left_lane_last": 0.2339905564985008,
+      "d_left_lane_min": 0.47392130227924273,
+      "d_right_lane_last": -0.40017623202212277,
+      "d_right_lane_min": -0.8242829436199193,
+      "front_thw_last": -0.00779653054996132,
+      "front_thw_vfrac": 0.4346722864691842,
+      "front_ttc_min": null,
+      "front_ttc_vfrac": -0.9799002991834905,
+      "front_dx_min": -0.27009333477381586,
+      "front_dvx_slope": 0.43608841504514506,
+      "front_exists_frac": 0.4340932002901017,
+      "left_side_dvx_last": null,
+      "left_side_dvx_slope": null,
+      "left_side_dy_last": null,
+      "left_side_exists_frac": -0.38897014463455154,
+      "right_side_dvx_last": -0.10071377867051055,
+      "right_side_dvx_slope": 0.24995140440116664,
+      "right_side_dy_last": -0.72673675280086,
+      "right_side_exists_frac": 2.2518995452516557,
+      "left_front_dx_last": null,
+      "left_front_dvx_slope": null,
+      "left_front_dy_last": null,
+      "left_front_exists_frac": -1.0155681610306295,
+      "right_front_dx_last": 0.2849308596704129,
+      "right_front_dvx_slope": -0.053768180287499245,
+      "right_front_dy_last": 0.23334466675252985,
+      "right_front_exists_frac": 0.5892201688078841
+    },
+    "feature_values_raw": {
+      "vx_last": 30.33,
+      "vx_slope": -0.004068667466986799,
+      "ax_last": -0.13,
+      "vy_last": 0.01,
+      "vy_slope": 0.008566626650660264,
+      "ay_last": 0.11,
+      "ax_neg_frac": 1.0,
+      "ax_pos_frac": 0.0,
+      "ax_zero_frac": 0.0,
+      "ay_neg_frac": 0.0,
+      "ay_pos_frac": 1.0,
+      "ay_zero_frac": 0.0,
+      "jerk_x_p95": 0.0,
+      "jerk_y_p95": 0.0,
+      "lc_left_present": 0.0,
+      "lc_right_present": 0.0,
+      "d_left_lane_last": 1.9700000000000024,
+      "d_left_lane_min": 1.9700000000000024,
+      "d_right_lane_last": 1.759999999999998,
+      "d_right_lane_min": 1.4399999999999977,
+      "front_thw_last": 1.31,
+      "front_thw_vfrac": 1.0,
+      "front_ttc_min": null,
+      "front_ttc_vfrac": 0.0,
+      "front_dx_min": 42.795000000000016,
+      "front_dvx_slope": 0.0156201680672269,
+      "front_exists_frac": 1.0,
+      "left_side_dvx_last": null,
+      "left_side_dvx_slope": null,
+      "left_side_dy_last": null,
+      "left_side_exists_frac": 0.0,
+      "right_side_dvx_last": -4.889999999999997,
+      "right_side_dvx_slope": 0.003401788467468407,
+      "right_side_dy_last": 3.7799999999999976,
+      "right_side_exists_frac": 0.92,
+      "left_front_dx_last": null,
+      "left_front_dvx_slope": null,
+      "left_front_dy_last": null,
+      "left_front_exists_frac": 0.0,
+      "right_front_dx_last": 63.375,
+      "right_front_dvx_slope": -0.0014324129651860631,
+      "right_front_dy_last": 4.07,
+      "right_front_exists_frac": 1.0
+    }
+  },
+  "emission": {
+    "map": {
+      "s": 1,
+      "a": 3,
+      "style_name": "high_interaction",
+      "action_name": "tactical_brake",
+      "prob": 1.0,
+      "num_states": 8
+    },
+    "topk": [
+      {
+        "s": 1,
+        "a": 3,
+        "style_name": "high_interaction",
+        "action_name": "tactical_brake",
+        "prob": 1.0
+      },
+      {
+        "s": 0,
+        "a": 0,
+        "style_name": "low_interaction",
+        "action_name": "free_flow",
+        "prob": 4.503636572288257e-14
+      },
+      {
+        "s": 1,
+        "a": 1,
+        "style_name": "high_interaction",
+        "action_name": "lane_change",
+        "prob": 2.26956284288363e-16
+      }
+    ],
+    "prob_matrix": [
+      [
+        4.503636572288257e-14,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        2.26956284288363e-16,
+        5.026423576695994e-21,
+        1.0
+      ]
+    ],
+    "loglik_matrix": [
+      [
+        -41.013858795166016,
+        -1512.85205078125,
+        -169834.28125,
+        -185.52880859375
+      ],
+      [
+        -18704.18359375,
+        -46.30432891845703,
+        -57.02212905883789,
+        -10.282552719116211
+      ]
+    ]
+  },
+  "prior": {
+    "map": {
+      "s": 1,
+      "a": 3,
+      "style_name": "high_interaction",
+      "action_name": "tactical_brake",
+      "prob": 0.8727389574050903,
+      "num_states": 8
+    },
+    "topk": [
+      {
+        "s": 1,
+        "a": 3,
+        "style_name": "high_interaction",
+        "action_name": "tactical_brake",
+        "prob": 0.8727389574050903
+      },
+      {
+        "s": 0,
+        "a": 3,
+        "style_name": "low_interaction",
+        "action_name": "stable_following",
+        "prob": 0.05819862708449364
+      },
+      {
+        "s": 1,
+        "a": 0,
+        "style_name": "high_interaction",
+        "action_name": "strong_acceleration",
+        "prob": 0.021747050806879997
+      }
+    ],
+    "prob_matrix": [
+      [
+        0.009368890896439552,
+        0.002569108735769987,
+        0.006075732875615358,
+        0.05819862708449364
+      ],
+      [
+        0.021747050806879997,
+        0.016197342425584793,
+        0.013104254379868507,
+        0.8727389574050903
+      ]
+    ],
+    "logprob_matrix": [
+      [
+        0.009368890896439552,
+        0.002569108735769987,
+        0.006075732875615358,
+        0.05819862708449364
+      ],
+      [
+        0.021747050806879997,
+        0.016197342425584793,
+        0.013104254379868507,
+        0.8727389574050903
+      ]
+    ]
+  },
+  "posterior": {
+    "map": {
+      "s": 1,
+      "a": 3,
+      "style_name": "high_interaction",
+      "action_name": "tactical_brake",
+      "prob": 1.0,
+      "num_states": 8
+    },
+    "topk": [
+      {
+        "s": 1,
+        "a": 3,
+        "style_name": "high_interaction",
+        "action_name": "tactical_brake",
+        "prob": 1.0
+      },
+      {
+        "s": 0,
+        "a": 0,
+        "style_name": "low_interaction",
+        "action_name": "free_flow",
+        "prob": 4.83466977474527e-16
+      },
+      {
+        "s": 1,
+        "a": 1,
+        "style_name": "high_interaction",
+        "action_name": "lane_change",
+        "prob": 4.2121107990093425e-18
+      }
+    ],
+    "prob_matrix": [
+      [
+        4.83466977474527e-16,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        4.2121107990093425e-18,
+        7.547217189245604e-23,
+        1.0
+      ]
+    ],
+    "logprob_matrix": [
+      [
+        4.83466977474527e-16,
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        4.2121107990093425e-18,
+        7.547217189245604e-23,
+        1.0
+      ]
+    ]
+  },
+  "forecast_t_plus_1": {
+    "map": {
+      "s": 1,
+      "a": 3,
+      "style_name": "high_interaction",
+      "action_name": "tactical_brake",
+      "prob": 0.8727389574050903,
+      "num_states": 8
+    },
+    "topk": [
+      {
+        "s": 1,
+        "a": 3,
+        "style_name": "high_interaction",
+        "action_name": "tactical_brake",
+        "prob": 0.8727389574050903
+      },
+      {
+        "s": 0,
+        "a": 3,
+        "style_name": "low_interaction",
+        "action_name": "stable_following",
+        "prob": 0.05819862708449364
+      },
+      {
+        "s": 1,
+        "a": 0,
+        "style_name": "high_interaction",
+        "action_name": "strong_acceleration",
+        "prob": 0.021747050806879997
+      }
+    ],
+    "prob_matrix": [
+      [
+        0.009368890896439552,
+        0.002569108735769987,
+        0.006075732875615358,
+        0.05819862708449364
+      ],
+      [
+        0.021747050806879997,
+        0.016197342425584793,
+        0.013104254379868507,
+        0.8727389574050903
+      ]
+    ],
+    "logprob_matrix": [
+      [
+        0.009368890896439552,
+        0.002569108735769987,
+        0.006075732875615358,
+        0.05819862708449364
+      ],
+      [
+        0.021747050806879997,
+        0.016197342425584793,
+        0.013104254379868507,
+        0.8727389574050903
+      ]
+    ]
+  },
+  "diagnostics": {
+    "tv_distance_prior_to_posterior": 0.12726102769374847,
+    "prior_to_posterior_map_changed": false,
+    "winning_state": {
+      "s": 1,
+      "a": 3,
+      "style_name": "high_interaction",
+      "action_name": "tactical_brake"
+    }
+  },
+  "feature_group_contributions": {
+    "group_scores_loglik": {
+      "ego_kinematics": -4.915817426882184,
+      "lane_change_flags": -5.099220702048518e-05,
+      "lane_geometry": -3.7795703351736774,
+      "front_risk": 7.309049050914666,
+      "neighbor_interaction": -8.63869271850917
+    }
+  }
+}
