@@ -12,21 +12,21 @@ coexist and interact with \acp{SAV} and \acp{HDV}. A major
 challenge in these scenarios is the presence of asymmetric information. These agents differ not only in
 their dynamics but also in the type and quality of information they expose. \acp{AV} typically rely on
 rich on-board sensing and potentially \ac{V2X} communication, whereas \acp{HDV} provide
-no explicit communication and exhibit strongly stochastic behaviour \cite{Schwarting2018}\cite{abedi2025precisehdvpositioningsafetyaware}. \acp{SAV} form an intermediate class
-in which partial automation and limited communication capabilities may be available, while a human driver still retains controll 
-authority over the vehicle.
+no explicit communication and exhibit strongly stochastic behavior \cite{Schwarting2018}\cite{abedi2025precisehdvpositioningsafetyaware}. \acp{SAV} form an intermediate class
+in which partial automation and limited communication capabilities may be available, while a human driver still retains control 
+authority over the vehicle...
 
 \par This mixture of agents creates a fundamentally asymmetric information setting. The \ac{AV} must reason
 about other road users whose internal goals, intentions, and perceptions are only indirectly observable. To
-navigate safely and efficiently, the \ac{AV} must infer their likely behaviour, anticipate their responses to its
-own actions, and choose manoeuvres that keep risk within acceptable bounds.
+navigate safely and efficiently, the \ac{AV} must infer their likely behavior, anticipate their responses to its
+own actions, and choose maneuvers that keep risk within acceptable bounds.
 
-\par Over roughly the last two decades, the researchers have developed three broad families of behavioural
+\par Over roughly the last two decades, the researchers have developed three broad families of behavioral
 models for road users: rule-based models, probabilistic models, and data-driven or learning-based methods \cite{10054035} \cite{Rudenko_2020} \cite{Lefevre2014}.
 In parallel, several game-theoretic decision-making paradigms for \acp{AV} have emerged \cite{automotiveinnovation}. For \acp{HDV}, the discussion
 highlights the limitations of deterministic and purely data-driven models in this context and motivates
 the use of \ac{DBN} as a principled framework capable of representing latent
 driver intentions, handling partial observability, and supporting probabilistic prediction. Unlike \ac{HDV}
-behaviour modelling, which has matured through rule-based, probabilistic, and learning-based frameworks,
+behavior modelling, which has matured through rule-based, probabilistic, and learning-based frameworks,
 the modelling of \acp{SAV} is far less developed. There is currently no widely accepted
-\ac{SAV} behavioural model or trajectory prediction framework. 
+\ac{SAV} behavioral model or trajectory prediction framework. 
