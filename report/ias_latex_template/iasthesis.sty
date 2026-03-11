@@ -1,0 +1,360 @@
+% iasthesis ... simplifying thesis writing in LaTeX complying with the style of IAS, University of Stuttgart
+% This class does the styling for you (together with a komascript class).
+%
+% It handles the following:
+% - Proper input and font encoding (Just type, don't care about the LaTeX compiler you use or how to type German umlauts)
+% - Fonts with ligatures and kerning (Tex Gyre fonts are used, part of every LaTeX installation, text is nice to read)
+% - Bibliography styling for biblatex (declare your bibliography file and you are ready to go)
+% - Provide command for title page (\makeIAStitle) and declaration of originality ( \declarationOfOriginality)
+% - Loads packages "biblatex" and "graphics"
+%
+% Package dependencies:
+%	- ifthen, ifpdf, ifxetex, ifluatex, iflang, kvoptions ... Options handling
+%	- microtype ... font kerning
+%	- [just pdflatex] fontenc, inputenc ... handle encodings
+%	- tgheros ... sans serif font for headings
+%	- [just luatex and xetex] fontspec ... font loading
+%	- mathpazo, tgpagella, textcomp 	 ... math, serif and unicode fonts
+%	- csquotes ... handling quotes correctly with biblatex
+%	- biblatex ... bibliography
+%	- graphicx ... loading logo image for the titlepage
+%
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{iasthesis}[2023-02-03 v0.0.1 Basic styling for a student thesis written at IAS, University of Stuttgart.]
+\providecommand{\iasthesis}{iasthesis v0.0.1}
+
+\RequirePackage{ifthen}
+\RequirePackage{ifpdf}
+\RequirePackage{ifxetex}
+\RequirePackage{ifluatex}
+\usepackage{iflang}
+
+% ********************************************************************
+% Template commands (mainly used for title page)
+% ********************************************************************
+\providecommand{\runningauthor}[1]{\gdef\iast@runningauthor{#1}}
+\providecommand{\major}[1]{\gdef\iast@major{#1}}
+
+\providecommand{\thesisno}[1]{\gdef\iast@thesisno{#1}}
+
+\providecommand{\supervisor}[1]{\gdef\iast@supervisor{#1}}
+\providecommand{\professor}[1]{\gdef\iast@professor{#1}}
+\providecommand{\extsupervisor}[1]{\gdef\iast@extsupervisor{#1}}
+\providecommand{\extcompany}[1]{\gdef\iast@extcompany{#1}}
+\providecommand{\confidentialthesis}[0]{\gdef\iast@confidentialthesis{}}
+
+
+% ********************************************************************
+% Package options
+% ********************************************************************
+\RequirePackage{kvoptions}
+\SetupKeyvalOptions{family=iast, prefix=iast@}
+
+
+\DeclareStringOption[bachelor]{type}[]
+
+% Parse the given options
+\ProcessKeyvalOptions{iast}
+
+% ********************************************************************
+% Style
+% ********************************************************************
+
+% micro-typographic extensions to have a better readable text
+\RequirePackage{microtype}
+
+\ifthenelse{\boolean{xetex}\OR\boolean{luatex}}{
+	\relax
+}{
+	% pdflatex needs to know the font and file formats
+	\PassOptionsToPackage{T1}{fontenc} % T2A for cyrillics
+	\RequirePackage{fontenc}
+
+	\PassOptionsToPackage{utf8}{inputenc} % directly support utf8 characters, as ä,ö,ü,Ü,ß
+	\RequirePackage{inputenc}
+
+}
+
+
+% Disable single lines at the start of a paragraph (Schusterjungen)
+\clubpenalty = 10000
+% Disable single lines at the end of a paragraph (Hurenkinder)
+\widowpenalty = 10000
+\displaywidowpenalty = 10000 % formulas
+
+% load fonts with ligatures and proper kerning
+
+\PassOptionsToPackage{osf,sc}{mathpazo}%
+\RequirePackage{mathpazo} % Palatino with real small caps and old style figures
+\usepackage{tgheros}
+\linespread{1.05} % a bit more for Palatino
+\PassOptionsToPackage{scaled=0.85}{DejaVuSansMon}%
+\RequirePackage{tgpagella}% bera monospace font
+\RequirePackage{textcomp}% declare missing symbols
+
+\ifthenelse{\boolean{xetex}\OR\boolean{luatex}}
+   { % use fontspec and OpenType fonts with utf8 engines
+	\RequirePackage{fontspec}
+	\defaultfontfeatures{Ligatures=TeX}
+	\setsansfont{Tex Gyre Heros}
+	\setmainfont[Numbers=OldStyle]{TeX Gyre Pagella}
+	\setmonofont[Scale=0.85]{DejaVu Sans Mono}
+   }{
+	\relax
+   }
+
+
+
+% Bibliography
+\PassOptionsToPackage{%
+  backend=biber,%
+  backref=false,%
+  giveninits=true,%
+  autocite=inline,%
+  sorting=none,% in order of occurence. Other option: nyt (name year title)
+  sortcites=true,%
+  mincitenames=1,%
+  maxcitenames=2,%
+  maxbibnames=10,%
+  doi=false,%
+  isbn=false,%
+  url=false,%
+  natbib=true,
+}{biblatex}
+
+\ifthenelse{\equal{\iast@type}{diss}}{% TRUE
+  \PassOptionsToPackage{%
+    style=authoryear,%
+  }{biblatex}
+}{% FALSE
+  \PassOptionsToPackage{%
+    style=ieee,%
+  }{biblatex}
+}%
+
+\RequirePackage{csquotes}
+\RequirePackage{biblatex}
+\setcounter{biburlnumpenalty}{100}
+
+\RequirePackage{graphicx}
+
+% ********************************************************************
+% Style
+% ********************************************************************
+
+% detect German language, assume English otherwise (https://tex.stackexchange.com/a/174206)
+\newcommand*{\IfLangGerman}{%
+% The order can be optimized by putting more often used names first.
+\IfLanguageName{ngerman}\@firstoftwo{%
+\IfLanguageName{german}\@firstoftwo\@secondoftwo}%
+}%
+
+
+% Process variables
+\def\iast@thesisType{\texttt{type}-Option invalid}
+\def\iast@aimedDegree{}
+
+\ifthenelse{\equal{\iast@type}{bachelor}}{
+	\def\iast@thesisType{\IfLangGerman{Bachelorarbeit}{Bachelor Thesis}}
+%	\def\iast@aimedDegree{B.\,Sc.}
+}{}
+\ifthenelse{\equal{\iast@type}{master}}{
+	\def\iast@thesisType{\IfLangGerman{Masterarbeit}{Master Thesis}}
+%	\def\iast@aimedDegree{M.\,Sc.}
+}{}
+\ifthenelse{\equal{\iast@type}{study}}{
+	\def\iast@thesisType{\IfLangGerman{Studienarbeit}{Study Paper}}
+%	\def\iast@aimedDegree{M.\,Sc.}
+}{}
+\ifthenelse{\equal{\iast@type}{diss}}{
+	\def\iast@thesisType{Dissertation}
+%	\def\iast@aimedDegree{Dr.-Ing.}
+}{}
+\ifthenelse{\equal{\iast@type}{bachelorproject}}{
+	\def\iast@thesisType{\IfLangGerman{Bachelor-Projektarbeit}{Bachelor Project}}
+%	\def\iast@aimedDegree{B.\,Sc.}
+}{}
+
+
+\newcommand{\makeIAStitle}{%
+\begin{titlepage}
+    \begin{tikzpicture}[remember picture, overlay]
+
+        \filldraw[UStuttDarkBlue] (125mm,-48mm) circle (67mm);
+        \pgftext[at=\pgfpoint{155mm}{-250mm}]{\includegraphics[width=2.7cm]{template-images/logo-ias.pdf}};
+        \filldraw[UStuttLightBlue] (15mm,-195mm) circle (137.5mm);
+
+                %\pgftext[at=\pgfpoint{14mm}{7.5mm}]{\includegraphics[width=80mm, height=25mm]{template-images/logo-unistuttgart-englisch+ias_80x25.pdf}};
+                \IfLanguageName {ngerman} {
+                    \pgftext[at=\pgfpoint{14mm}{7.5mm}]{\includegraphics[width=80mm, height=25mm]{template-images/logo-unistuttgart-deutsch+ias_80x25.pdf}};
+                } {
+                    \pgftext[at=\pgfpoint{14mm}{7.5mm}]{\includegraphics[width=80mm, height=25mm]{template-images/logo-unistuttgart-englisch+ias_80x25.pdf}};
+                }
+                %\pgftext[at=\pgfpoint{10mm}{7.5mm}]{\IfLangGerman{\includegraphics[width=80mm, height=25mm]{template-images/logo-unistuttgart-englisch+ias_80x25.pdf}{\includegraphics[width=80mm, height=25mm]{template-images/logo-uni-stuttgart-deutsch+ias_80x25.pdf}}}};
+
+        \@ifundefined{iast@confidentialthesis}{}{
+            \node[draw, text width=7cm, line width=2mm, color=UStuttLightBlue, text=UStuttDarkBlue, align=left] at (14mm,-30mm) {\fontsize{30}{40}\selectfont\bfseries\sffamily This~~thesis~~is  confidential\par}; % draw shows the box around the text
+        }
+		%\node[draw, text width=8cm, color=white, align=center] at (120mm,-30mm) {as}; % draw shows the box around the text
+		\node[text width=8cm, color=white, align=center] at (120mm,-30mm) {\fontsize{30}{35}\selectfont \textbf{\bfseries\sffamily {\@title}}\par};
+
+		\node[color=white, align=center] at (50mm, -130mm) {\bfseries\sffamily\Large{\iast@thesisType~\iast@thesisno}\\\vspace{7mm}\\\bfseries\sffamily\Large{\IfLangGerman{Eingereicht an der Universität Stuttgart von}{Submitted at the University of Stuttgart by}}\\\bfseries\sffamily\Large{\textbf{\@author}}\\\vspace{5mm}\\\bfseries\sffamily\Large{\iast@aimedDegree~\iast@major}};
+
+		\node[color=white, align=left] (A1) at (-10mm, -180mm) {\bfseries\sffamily\Large{\IfLangGerman{Prüfer:}{Examiner:}}};
+		\node[color=white, align=left] (A2) at (60mm, -180mm) {\bfseries\sffamily\Large{\iast@professor}};
+
+		\node[color=white, align=left, below=15mm of A1.west,anchor=west] (B1) {\bfseries\sffamily\Large{\IfLangGerman{Betreuer:}{Supervisor:}}};
+		\node[color=white, align=left, below=15mm of A2.west,anchor=west] (B2) {\bfseries\sffamily\Large{\iast@supervisor}};
+
+		\@ifundefined{iast@extsupervisor}{}{
+		\node[color=white, align=left, below=15mm of B1.west,anchor=west] (C1) {\bfseries\sffamily\Large{\IfLangGerman{Externer}{External}}\\\bfseries\sffamily\Large{\IfLangGerman{Betreuer:}{Supervisor:}}};
+		\node[color=white, align=left, below=15mm of B2.west,anchor=west] (C2) {\bfseries\sffamily\Large{\iast@extsupervisor}\\\bfseries\sffamily\Large{(\iast@extcompany)}};
+		};
+
+		\node[color=white, align=left, below=40mm of B2.west,anchor=west] (D2) {\bfseries\sffamily\Large{\@date}};
+	\end{tikzpicture}
+
+\end{titlepage}
+
+    \@ifundefined{iast@confidentialthesis}{}{
+        \chapter*{\IfLangGerman{Geheimhaltung}{Confidential}}
+        \begin{small}
+            \IfLangGerman{ Hier muss der Deutsche Text zu Arbeiten mit Geheimhaltung rein
+            } {
+                \begin{enumerate}
+                    \item This work is an audit work which contains confidential information of third parties
+                        (companies) and is subject to secrecy (obligation of confidentiality). This work may only be
+                        made accessible to persons if and to the extent that the proper conduct of the examination
+                        the procedure requires this. This includes all steps of the examination procedure, including legal
+                        action against examination decisions and a possible plagiarism check; the provisions of the
+                        respective study and examination regulations and the legal provisions are decisive.
+                    \item All employees of the University of Stuttgart to whom this work is made available must
+                        maintain confidentiality about the content of the work. This confidentiality obligation applies
+                        to all persons who are not entrusted with this work. This does not affect the duty of
+                        confidentiality of employees of the University of Stuttgart according to the relevant
+                        regulations (e.g. § 37 Beamtenstatusgesetz - BeamtStG, § 57 Landesbeamtengesetz - LBG,
+                        § 3 Abs. 2 TV-L) and legal duties of confidentiality (§ 3b
+                        Landesverwaltungsverfahrensgesetz - Geheimhaltung von Betriebs- und
+                        Geschäftsgeheimnissen, § 17 UWG - Verrat von Geschäfts- und Betriebsgeheimnissen, §
+                        203 StGB - Verletzung von Privatgeheimnissen, § 353b StGB - Verletzung des
+                        Dienstgeheimnisses und einer besonderen Geheimhaltungspflicht, u.a.).
+                    \item Secrecy shall not apply or shall end if and to the extent that
+                        \begin{enumerate}
+                            \item the information is public knowledge,
+                            \item the person concerned (company) has consented in writing to the disclosure of the information,
+                            \item the information became known to the recipient by means other than through the
+                                person (company) concerned and no obligation of secrecy was violated by anyone
+                                in the process, or
+                            \item the disclosure of the information is permitted by or on the basis of a law.
+                        \end{enumerate}
+                        Otherwise, the secrecy ends at \rule{5cm}{0.66pt} (coordinate the specific date with the respective
+                        company, maximum 5 years from the date of submission of the work).
+                    \item This work is to be kept in a safe place at the Institute for Industrial Automation and Software Engineering for the duration of the
+                        secrecy. During the period of secrecy, any access to the work and the knowledge of the
+                        employee(s) of the University of Stuttgart of this secrecy must be verifiably documented.
+                \end{enumerate}
+            }
+
+            Stuttgart, \IfLangGerman{den}{the}
+
+            \vspace{1.5cm}
+
+            \begin{flushright}
+                \IfLangGerman{Institutsstempel}{Institute stamp}
+            \end{flushright}
+            \IfLangGerman{Unterschrift}{Signed}: \iast@professor \enspace(\IfLangGerman{Institutsleiter}{Head of IAS})
+
+        \end{small}
+        \newpage
+        \begin{center}
+            \Large{\textbf{\IfLangGerman{Liste von Personen mit Zugang}{List of people with access to the work}}}
+            \begin{tabular}{ |l|l|l| }
+                \hline
+                \IfLangGerman{Vorname}{Surname} & \IfLangGerman{Nachname}{Name} & \IfLangGerman{Datum}{Date} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+                \hspace{0.3\textwidth}\rule{0pt}{0.8cm} & \hspace{0.3\textwidth} & \hspace{0.3\textwidth} \\
+                \hline
+            \end{tabular}
+        \end{center}
+    }
+}
+
+\newcommand{\declarationOfOriginality}{
+\chapter*{\IfLangGerman{Eigenständigkeitserklärung}{Declaration of Compliance}}
+
+\vspace*{8cm}
+
+\IfLangGerman{
+    \noindent Ich erkläre, die Arbeit selbständig verfasst und bei der Erstellung
+    dieser Arbeit die einschlägigen Bestimmungen, insbesondere zum
+    Urheberrechtsschutz fremder Beiträge, eingehalten zu haben. Soweit meine
+    Arbeit fremde Beiträge (z.\,B. Bilder, Zeichnungen, Textpassagen)
+    enthält, erkläre ich, dass diese Beiträge als solche gekennzeichnet sind
+    (z.\,B. Zitat, Quellenangabe) und ich eventuell erforderlich gewordene
+    Zustimmungen der Urheber zur Nutzung dieser Beiträge in meiner Arbeit
+    eingeholt habe.
+}{
+    \noindent I hereby declare to have written this work independently
+    and to have respected in its preparation the relevant provisions,
+    in particular those corresponding to the copyright protection of external
+    materials. Whenever external materials (such as images,
+    drawings, text passages) are used in this work, I declare that these materials are
+    referenced accordingly (e.\,g. quote, source) and, whenever necessary, consent from
+    the author to use such materials in my work has been obtained.
+}
+
+\vspace*{1cm}
+
+\noindent\IfLangGerman{Unterschrift}{Signature}:
+
+\vspace*{3cm}
+
+\begin{flushright}
+Stuttgart, \IfLangGerman{den}{on the} \@date
+\end{flushright}
+
+}
+
+
+
+
+\endinput

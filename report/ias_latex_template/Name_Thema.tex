@@ -1,0 +1,74 @@
+\documentclass[ a4paper,
+                oneside,
+                toc=bibliography,
+                toc=listof
+                ]{scrbook}
+
+\input{settings}
+
+% Path to .bib file for BibLatex
+\addbibresource{bibliography.bib}
+% \addbibresource{someOtherBibFile}
+
+% Select your type and language of thesis in the settings.tex document
+\author{Amal Chulliyat Jose}
+\major{Electrical Engineering}
+\title{Probabilistic Action Prediction of Human Drivers Using Dynamic Bayesian Networks}
+
+\thesisno{1111}
+\date{15 April 2026}
+\supervisor{Georgios Katranis, M.Sc.}
+\professor{Prof. Dr.-Ing. Andrey Morozov}
+
+%\extsupervisor{}
+%\extcompany{}
+%\confidentialthesis{}
+
+\begin{document}
+    \frontmatter
+    \makeIAStitle
+    %\setcounter{page}{1} % start at page (i) after title page
+
+    \cleardoublepage
+    \currentpdfbookmark{\contentsname}{Inhalt}
+    \tableofcontents
+    \cleardoublepage
+    \listoffigures
+    \cleardoublepage
+    \listoftables
+     \cleardoublepage
+    \input{chapters/Acronyms}
+    \cleardoublepage
+    \input{chapters/Glossary}
+    \acresetall
+
+
+    % Kurzfassung/Abstract
+    \input{chapters/Abstract}
+    \acresetall
+    \cleardoublepage
+
+
+    \mainmatter
+    % ********************************************************************
+    % Write your own contents here:
+    % ********************************************************************
+
+    \input{chapters/Introduction}
+
+    \chapter{Conclusions}
+
+    % ********************************************************************
+    % End of contents
+    % ********************************************************************
+
+    \cleardoublepage
+    \printbibliography
+
+    % Appendix, if needed:
+    \appendix
+    \chapter{Example appendix chapter}
+
+    \declarationOfOriginality
+
+\end{document}
