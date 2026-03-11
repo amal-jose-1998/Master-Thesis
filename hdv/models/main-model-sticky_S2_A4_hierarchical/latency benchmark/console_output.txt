@@ -1,0 +1,116 @@
+[benchmark-env]
+{
+  "platform": "Linux-5.15.0-139-generic-x86_64-with-glibc2.31",
+  "python": "3.11.0",
+  "pytorch": "2.9.1+cu128",
+  "torch_num_threads": 16,
+  "torch_num_interop_threads": 32,
+  "cuda_available": true,
+  "torch_cuda_version": "12.8",
+  "cudnn_version": 91002,
+  "cpu_model": "AMD Ryzen 9 7950X 16-Core Processor",
+  "gpu_name": "NVIDIA GeForce RTX 4090",
+  "gpu_total_mem_gb": 23.65,
+  "gpu_cc": "8.9",
+  "nvidia_smi": "NVIDIA GeForce RTX 4090, 535.183.01, 24564 MiB\nNVIDIA GeForce RTX 4090, 535.183.01, 24564 MiB"
+}
+[HDVTrainer] Loaded model parameters from /home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/final.npz
+[benchmark] Using 5 synthetic RNG *window* obs vectors, F=43, seed=123
+
+[audit:CPU] trainer.device/dtype: cpu torch.float32
+[audit:CPU] pi_s0: cpu torch.float32
+[audit:CPU] pi_a0_given_s0: cpu torch.float32
+[audit:CPU] A_s: cpu torch.float32
+[audit:CPU] A_a: cpu torch.float32
+[audit:CPU] emissions._device/_dtype: cpu torch.float32
+[audit:CPU] gauss._mean_t: cpu
+[audit:CPU] bern._p_t: cpu
+
+[CPU] single (update+predict)
+  warmup_updates: 5
+  first_prediction_total_ms: 1.1554320808500051
+  subsequent total: mean=0.1642 ms | p50=0.1615 | p90=0.1723 | p99=0.1873
+
+[CPU] loop_multi (N=5, update+predict)
+  warmup_updates: 5
+  first_prediction_total_ms: 3.4228551667183638
+  subsequent total: mean=0.7957 ms | p50=0.7927 | p90=0.8115 | p99=0.8201
+
+[CPU] batched (B=5, update+predict)
+  warmup_updates: 5
+  first_prediction_total_ms: 1.1112289503216743
+  subsequent total: mean=0.2096 ms | p50=0.2069 | p90=0.2206 | p99=0.2331
+
+[CPU] single_e2e (frame->window->predict)
+  warmup_updates: 5
+  warmup_frames: 90
+  window_W: 50
+  window_stride: 10
+  first_prediction_total_ms: 3.0851480551064014
+  subsequent total: mean=0.5728 ms | p50=0.5694 | p90=0.5897 | p99=0.6112
+
+[CPU] loop_multi_e2e (N=5, frame->window->predict)
+  warmup_updates: 5
+  warmup_frames: 90
+  window_W: 50
+  window_stride: 10
+  first_prediction_total_ms: 12.671624077484012
+  subsequent total: mean=2.6668 ms | p50=2.6672 | p90=2.6957 | p99=2.7498
+
+[CPU] batched_e2e (B=5, frame->window->predict)
+  warmup_updates: 5
+  warmup_frames: 90
+  window_W: 50
+  window_stride: 10
+  first_prediction_total_ms: 10.048810858279467
+  subsequent total: mean=1.9084 ms | p50=1.9052 | p90=1.9314 | p99=1.9600
+
+[audit:GPU] trainer.device/dtype: cuda torch.float32
+[audit:GPU] pi_s0: cuda:0 torch.float32
+[audit:GPU] pi_a0_given_s0: cuda:0 torch.float32
+[audit:GPU] A_s: cuda:0 torch.float32
+[audit:GPU] A_a: cuda:0 torch.float32
+[audit:GPU] emissions._device/_dtype: cuda torch.float32
+[audit:GPU] gauss._mean_t: cuda:0
+[audit:GPU] bern._p_t: cuda:0
+
+[GPU] single (update+predict)
+  warmup_updates: 5
+  first_prediction_total_ms: 164.98237499035895
+  subsequent total: mean=6.0960 ms | p50=6.9926 | p90=7.0396 | p99=7.0792
+
+[GPU] loop_multi (N=5, update+predict)
+  warmup_updates: 5
+  first_prediction_total_ms: 44.606881914660335
+  subsequent total: mean=15.8495 ms | p50=25.7494 | p90=25.9105 | p99=26.0365
+
+[GPU] batched (B=5, update+predict)
+  warmup_updates: 5
+  first_prediction_total_ms: 15.574096934869885
+  subsequent total: mean=0.5483 ms | p50=0.5429 | p90=0.5649 | p99=0.5917
+
+[GPU] single_e2e (frame->window->predict)
+  warmup_updates: 5
+  warmup_frames: 90
+  window_W: 50
+  window_stride: 10
+  first_prediction_total_ms: 4.4067129492759705
+  subsequent total: mean=8.4220 ms | p50=9.2315 | p90=9.2946 | p99=9.3334
+
+[GPU] loop_multi_e2e (N=5, frame->window->predict)
+  warmup_updates: 5
+  warmup_frames: 90
+  window_W: 50
+  window_stride: 10
+  first_prediction_total_ms: 176.45558482035995
+  subsequent total: mean=33.3626 ms | p50=37.1608 | p90=37.3324 | p99=38.8159
+
+[GPU] batched_e2e (B=5, frame->window->predict)
+  warmup_updates: 5
+  warmup_frames: 90
+  window_W: 50
+  window_stride: 10
+  first_prediction_total_ms: 258.0087911337614
+  subsequent total: mean=13.1136 ms | p50=13.7747 | p90=13.8562 | p99=14.5953
+
+[benchmark] Wrote CSV summary: /home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/latency benchmark/benchmark_latency_results.csv

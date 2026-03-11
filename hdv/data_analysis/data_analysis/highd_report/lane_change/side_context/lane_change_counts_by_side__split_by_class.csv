@@ -1,0 +1,7 @@
+class_bucket,side,count,pct_within_split
+car,left,2667,45.496417604913
+car,right,3195,54.503582395087
+car,unknown,0,0.0
+truck,left,305,53.04347826086956
+truck,right,270,46.95652173913044
+truck,unknown,0,0.0

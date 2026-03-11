@@ -1,0 +1,47 @@
+{
+  "config": {
+    "window_len": 150,
+    "stride": 10,
+    "a_brake": 0.34,
+    "a_accel": 0.34,
+    "min_event_frames": 5,
+    "min_gap_frames": 10,
+    "min_frames_in_window": 8
+  },
+  "trajectories": {
+    "num_total": 50543,
+    "num_shorter_than_W": 433,
+    "num_missing_or_bad_ax": 0
+  },
+  "brake_events": {
+    "num_events_total": 20934,
+    "num_events_valid_centered": 13238,
+    "num_events_dropped_boundary": 7696,
+    "valid_centered_rate": 0.6323683959109583,
+    "event_pos_norm_stats": {
+      "count": 13238,
+      "p10": 0.21657916551533574,
+      "median": 0.43676429857360477,
+      "p90": 0.7330316742081447
+    }
+  },
+  "accel_events": {
+    "num_events_total": 24806,
+    "num_events_valid_centered": 12329,
+    "num_events_dropped_boundary": 12477,
+    "valid_centered_rate": 0.49701685076191243,
+    "event_pos_norm_stats": {
+      "count": 12329,
+      "p10": 0.26229508196721313,
+      "median": 0.5420098846787479,
+      "p90": 0.7810235921908091
+    }
+  },
+  "windows": {
+    "total_sliding_windows": 1214514,
+    "brake_windows": 273400,
+    "accel_windows": 265605,
+    "brake_window_fraction": 0.22511062037983917,
+    "accel_window_fraction": 0.21869241523770003
+  }
+}
