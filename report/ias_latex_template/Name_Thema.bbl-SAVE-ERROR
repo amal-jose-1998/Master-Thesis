@@ -1,0 +1,468 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global/global}
+    \entry{Schwarting2018}{article}{}{}
+      \name{author}{3}{}{%
+        {{hash=1d9453b50e6412a1d9bbfc911aaf489d}{%
+           family={Schwarting},
+           familyi={S\bibinitperiod},
+           given={Wilko},
+           giveni={W\bibinitperiod}}}%
+        {{hash=248bd79f5e503f11eb095282260ee29f}{%
+           family={Alonso-Mora},
+           familyi={A\bibinithyphendelim M\bibinitperiod},
+           given={Javier},
+           giveni={J\bibinitperiod}}}%
+        {{hash=f74192f92945701041a41bfa429ee111}{%
+           family={Rus},
+           familyi={R\bibinitperiod},
+           given={Daniela},
+           giveni={D\bibinitperiod}}}%
+      }
+      \strng{namehash}{a32d67009f71e20ded268dc426d9824d}
+      \strng{fullhash}{098ff23ab442227694cf61611b75faa6}
+      \strng{fullhashraw}{098ff23ab442227694cf61611b75faa6}
+      \strng{bibnamehash}{098ff23ab442227694cf61611b75faa6}
+      \strng{authorbibnamehash}{098ff23ab442227694cf61611b75faa6}
+      \strng{authornamehash}{a32d67009f71e20ded268dc426d9824d}
+      \strng{authorfullhash}{098ff23ab442227694cf61611b75faa6}
+      \strng{authorfullhashraw}{098ff23ab442227694cf61611b75faa6}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Annual Review of Control, Robotics, and Autonomous Systems}
+      \field{number}{1}
+      \field{title}{Planning and Decision-Making for Autonomous Vehicles}
+      \field{volume}{1}
+      \field{year}{2018}
+      \field{pages}{187\bibrangedash 210}
+      \range{pages}{24}
+      \verb{doi}
+      \verb 10.1146/annurev-control-060117-105157
+      \endverb
+    \endentry
+    \entry{abedi2025precisehdvpositioningsafetyaware}{misc}{}{}
+      \name{author}{5}{}{%
+        {{hash=ed606e9525083f2e6ff4c0db156d36a1}{%
+           family={Abedi},
+           familyi={A\bibinitperiod},
+           given={Mohammad\bibnamedelima Reza},
+           giveni={M\bibinitperiod\bibinitdelim R\bibinitperiod}}}%
+        {{hash=94ed77da0cfc82302e6595a6c23ab983}{%
+           family={Rashidi},
+           familyi={R\bibinitperiod},
+           given={Zahra},
+           giveni={Z\bibinitperiod}}}%
+        {{hash=20baa9866963659d3420dd07e7761323}{%
+           family={Mokari},
+           familyi={M\bibinitperiod},
+           given={Nader},
+           giveni={N\bibinitperiod}}}%
+        {{hash=9404ea23975709d315d801dd824f31c7}{%
+           family={Saeedi},
+           familyi={S\bibinitperiod},
+           given={Hamid},
+           giveni={H\bibinitperiod}}}%
+        {{hash=2c787a1882098ac343b2b23006b37267}{%
+           family={Zorba},
+           familyi={Z\bibinitperiod},
+           given={Nizar},
+           giveni={N\bibinitperiod}}}%
+      }
+      \strng{namehash}{9712c8758d6a7dfec7bf3a82cf69b687}
+      \strng{fullhash}{5d99afd70d03e65fe15e2d70ef436383}
+      \strng{fullhashraw}{5d99afd70d03e65fe15e2d70ef436383}
+      \strng{bibnamehash}{5d99afd70d03e65fe15e2d70ef436383}
+      \strng{authorbibnamehash}{5d99afd70d03e65fe15e2d70ef436383}
+      \strng{authornamehash}{9712c8758d6a7dfec7bf3a82cf69b687}
+      \strng{authorfullhash}{5d99afd70d03e65fe15e2d70ef436383}
+      \strng{authorfullhashraw}{5d99afd70d03e65fe15e2d70ef436383}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{eess.SY}
+      \field{eprinttype}{arXiv}
+      \field{title}{Precise HDV Positioning through Safety-Aware Integrated Sensing and Communication in a Value-of-Information-Driven 6G V2X System}
+      \field{year}{2025}
+      \verb{eprint}
+      \verb 2510.02363
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2510.02363
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2510.02363
+      \endverb
+    \endentry
+    \entry{Madjid_2026}{article}{}{}
+      \name{author}{10}{}{%
+        {{hash=681bcaacae61a8e03ff024dd3280596c}{%
+           family={Madjid},
+           familyi={M\bibinitperiod},
+           given={Nadya\bibnamedelima Abdel},
+           giveni={N\bibinitperiod\bibinitdelim A\bibinitperiod}}}%
+        {{hash=5bd560452c893f42950e684683e5a112}{%
+           family={Ahmad},
+           familyi={A\bibinitperiod},
+           given={Abdulrahman},
+           giveni={A\bibinitperiod}}}%
+        {{hash=ee1658c2a4aef9eef67dfc2facaef937}{%
+           family={Mebrahtu},
+           familyi={M\bibinitperiod},
+           given={Murad},
+           giveni={M\bibinitperiod}}}%
+        {{hash=fb71ca68f25acd603e4d559fafb3c1ee}{%
+           family={Babaa},
+           familyi={B\bibinitperiod},
+           given={Yousef},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=c4f0f6bc3ffa8d646fb911492e3d9cdd}{%
+           family={Nasser},
+           familyi={N\bibinitperiod},
+           given={Abdelmoamen},
+           giveni={A\bibinitperiod}}}%
+        {{hash=1d7faeef466fd38ad4156168d4bd2cf0}{%
+           family={Malik},
+           familyi={M\bibinitperiod},
+           given={Sumbal},
+           giveni={S\bibinitperiod}}}%
+        {{hash=8292ab4fe2959a6205ed2d9f2cf2777d}{%
+           family={Hassan},
+           familyi={H\bibinitperiod},
+           given={Bilal},
+           giveni={B\bibinitperiod}}}%
+        {{hash=deae07f06a62cdcc9f774869f8f0ac0c}{%
+           family={Werghi},
+           familyi={W\bibinitperiod},
+           given={Naoufel},
+           giveni={N\bibinitperiod}}}%
+        {{hash=2043b69c7dd389d1347d8b7be6ad5665}{%
+           family={Dias},
+           familyi={D\bibinitperiod},
+           given={Jorge},
+           giveni={J\bibinitperiod}}}%
+        {{hash=16247fa6677d64d314c53e50cb9e8fa6}{%
+           family={Khonji},
+           familyi={K\bibinitperiod},
+           given={Majid},
+           giveni={M\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {Elsevier BV}%
+      }
+      \strng{namehash}{b4ad5afa5ac652ed76d54daf76251384}
+      \strng{fullhash}{b77373611c300990d86da93e825df9ac}
+      \strng{fullhashraw}{b77373611c300990d86da93e825df9ac}
+      \strng{bibnamehash}{b77373611c300990d86da93e825df9ac}
+      \strng{authorbibnamehash}{b77373611c300990d86da93e825df9ac}
+      \strng{authornamehash}{b4ad5afa5ac652ed76d54daf76251384}
+      \strng{authorfullhash}{b77373611c300990d86da93e825df9ac}
+      \strng{authorfullhashraw}{b77373611c300990d86da93e825df9ac}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{issn}{1566-2535}
+      \field{journaltitle}{Information Fusion}
+      \field{month}{2}
+      \field{title}{Trajectory prediction for autonomous driving: Progress, limitations, and future directions}
+      \field{volume}{126}
+      \field{year}{2026}
+      \field{pages}{103588}
+      \range{pages}{1}
+      \verb{doi}
+      \verb 10.1016/j.inffus.2025.103588
+      \endverb
+      \verb{urlraw}
+      \verb http://dx.doi.org/10.1016/j.inffus.2025.103588
+      \endverb
+      \verb{url}
+      \verb http://dx.doi.org/10.1016/j.inffus.2025.103588
+      \endverb
+    \endentry
+    \entry{10054035}{article}{}{}
+      \name{author}{2}{}{%
+        {{hash=20c4d5733480a2d8b9eb73c206d56b6b}{%
+           family={Negash},
+           familyi={N\bibinitperiod},
+           given={Natnael\bibnamedelima M.},
+           giveni={N\bibinitperiod\bibinitdelim M\bibinitperiod}}}%
+        {{hash=33345761e6c0f8c793722e3cd442ce6c}{%
+           family={Yang},
+           familyi={Y\bibinitperiod},
+           given={James},
+           giveni={J\bibinitperiod}}}%
+      }
+      \strng{namehash}{3f4c0361f89cb07d690623e9da370073}
+      \strng{fullhash}{3f4c0361f89cb07d690623e9da370073}
+      \strng{fullhashraw}{3f4c0361f89cb07d690623e9da370073}
+      \strng{bibnamehash}{3f4c0361f89cb07d690623e9da370073}
+      \strng{authorbibnamehash}{3f4c0361f89cb07d690623e9da370073}
+      \strng{authornamehash}{3f4c0361f89cb07d690623e9da370073}
+      \strng{authorfullhash}{3f4c0361f89cb07d690623e9da370073}
+      \strng{authorfullhashraw}{3f4c0361f89cb07d690623e9da370073}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{IEEE Access}
+      \field{title}{Driver Behavior Modeling Toward Autonomous Vehicles: Comprehensive Review}
+      \field{volume}{11}
+      \field{year}{2023}
+      \field{pages}{22788\bibrangedash 22821}
+      \range{pages}{34}
+      \verb{doi}
+      \verb 10.1109/ACCESS.2023.3249144
+      \endverb
+      \keyw{Behavioral sciences;Predictive models;Vehicle safety;Accidents;Autonomous vehicles;Vehicle dynamics;Decision making;Vehicle driving;Autonomous driving;Human factors;Driver behavior modeling (DBM);autonomous vehicles;behavior recognition;human-like;car-following;lane-changing;perception;decision-making;data-driven;vehicle control}
+    \endentry
+    \entry{Rudenko_2020}{article}{}{}
+      \name{author}{6}{}{%
+        {{hash=13c6989444f303b4c021e84269281776}{%
+           family={Rudenko},
+           familyi={R\bibinitperiod},
+           given={Andrey},
+           giveni={A\bibinitperiod}}}%
+        {{hash=5254aa689957585f81608a5c73d2cd41}{%
+           family={Palmieri},
+           familyi={P\bibinitperiod},
+           given={Luigi},
+           giveni={L\bibinitperiod}}}%
+        {{hash=d3fe45ef459015988ddd22cd8a865162}{%
+           family={Herman},
+           familyi={H\bibinitperiod},
+           given={Michael},
+           giveni={M\bibinitperiod}}}%
+        {{hash=994bb86e3815b1df0d1868fc16fb4866}{%
+           family={Kitani},
+           familyi={K\bibinitperiod},
+           given={Kris\bibnamedelima M},
+           giveni={K\bibinitperiod\bibinitdelim M\bibinitperiod}}}%
+        {{hash=bc649211ffb4a2742215b8aefc850bdb}{%
+           family={Gavrila},
+           familyi={G\bibinitperiod},
+           given={Dariu\bibnamedelima M},
+           giveni={D\bibinitperiod\bibinitdelim M\bibinitperiod}}}%
+        {{hash=45104550687ed10d9291b848f1f9234b}{%
+           family={Arras},
+           familyi={A\bibinitperiod},
+           given={Kai\bibnamedelima O},
+           giveni={K\bibinitperiod\bibinitdelim O\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {SAGE Publications}%
+      }
+      \strng{namehash}{d82d7478917784ba30e2ef48eb050c4f}
+      \strng{fullhash}{09ba1364bb46539b55e4354f9464afd6}
+      \strng{fullhashraw}{09ba1364bb46539b55e4354f9464afd6}
+      \strng{bibnamehash}{09ba1364bb46539b55e4354f9464afd6}
+      \strng{authorbibnamehash}{09ba1364bb46539b55e4354f9464afd6}
+      \strng{authornamehash}{d82d7478917784ba30e2ef48eb050c4f}
+      \strng{authorfullhash}{09ba1364bb46539b55e4354f9464afd6}
+      \strng{authorfullhashraw}{09ba1364bb46539b55e4354f9464afd6}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{issn}{1741-3176}
+      \field{journaltitle}{The International Journal of Robotics Research}
+      \field{month}{6}
+      \field{number}{8}
+      \field{title}{Human motion trajectory prediction: a survey}
+      \field{volume}{39}
+      \field{year}{2020}
+      \field{pages}{895\bibrangedash 935}
+      \range{pages}{41}
+      \verb{doi}
+      \verb 10.1177/0278364920917446
+      \endverb
+      \verb{urlraw}
+      \verb http://dx.doi.org/10.1177/0278364920917446
+      \endverb
+      \verb{url}
+      \verb http://dx.doi.org/10.1177/0278364920917446
+      \endverb
+    \endentry
+    \entry{Lefevre2014}{article}{}{}
+      \name{author}{3}{}{%
+        {{hash=7896aa6ea84b7879515613257af3aaaa}{%
+           family={Lefevre},
+           familyi={L\bibinitperiod},
+           given={Stephanie},
+           giveni={S\bibinitperiod}}}%
+        {{hash=a77e14b4e9a60ea6b265455b2612c80c}{%
+           family={Vasquez},
+           familyi={V\bibinitperiod},
+           given={Dizan},
+           giveni={D\bibinitperiod}}}%
+        {{hash=0bf5ccc440e4e111121482bd8caf8827}{%
+           family={Laugier},
+           familyi={L\bibinitperiod},
+           given={Christian},
+           giveni={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{7932fee226500c52733e1d9b5410e370}
+      \strng{fullhash}{23130021e932e61b43f9262639e92c51}
+      \strng{fullhashraw}{23130021e932e61b43f9262639e92c51}
+      \strng{bibnamehash}{23130021e932e61b43f9262639e92c51}
+      \strng{authorbibnamehash}{23130021e932e61b43f9262639e92c51}
+      \strng{authornamehash}{7932fee226500c52733e1d9b5410e370}
+      \strng{authorfullhash}{23130021e932e61b43f9262639e92c51}
+      \strng{authorfullhashraw}{23130021e932e61b43f9262639e92c51}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Robomech Journal}
+      \field{month}{07}
+      \field{title}{A survey on motion prediction and risk assessment for intelligent vehicles}
+      \field{volume}{1}
+      \field{year}{2014}
+      \verb{doi}
+      \verb 10.1186/s40648-014-0001-z
+      \endverb
+    \endentry
+    \entry{automotiveinnovation}{article}{}{}
+      \name{author}{3}{}{%
+        {{hash=507c2c78c13629e3e2d989d4181faf34}{%
+           family={Yang},
+           familyi={Y\bibinitperiod},
+           given={Yanwen},
+           giveni={Y\bibinitperiod}}}%
+        {{hash=c74342a8d8c068bfa3af179c08b3720a}{%
+           family={Negash},
+           familyi={N\bibinitperiod},
+           given={Natnael},
+           giveni={N\bibinitperiod}}}%
+        {{hash=f6da0beb9390b31bca5f5cec5331cb77}{%
+           family={Yang},
+           familyi={Y\bibinitperiod},
+           given={Jingzhou},
+           giveni={J\bibinitperiod}}}%
+      }
+      \strng{namehash}{25c94fac468b2614fb18a4fb2be7b09a}
+      \strng{fullhash}{751fde3d6efb19ef65349d8c14a51a33}
+      \strng{fullhashraw}{751fde3d6efb19ef65349d8c14a51a33}
+      \strng{bibnamehash}{751fde3d6efb19ef65349d8c14a51a33}
+      \strng{authorbibnamehash}{751fde3d6efb19ef65349d8c14a51a33}
+      \strng{authornamehash}{25c94fac468b2614fb18a4fb2be7b09a}
+      \strng{authorfullhash}{751fde3d6efb19ef65349d8c14a51a33}
+      \strng{authorfullhashraw}{751fde3d6efb19ef65349d8c14a51a33}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Automotive Innovation}
+      \field{month}{04}
+      \field{title}{Recent Advances in Interactive Driving of Autonomous Vehicles: Comprehensive Review of Approaches}
+      \field{volume}{8}
+      \field{year}{2025}
+      \verb{doi}
+      \verb 10.1007/s42154-024-00332-w
+      \endverb
+    \endentry
+    \entry{murphy2002dynamic}{book}{}{}
+      \name{author}{1}{}{%
+        {{hash=8d5884fbe19bc9c4ab9214b2f05705b3}{%
+           family={Murphy},
+           familyi={M\bibinitperiod},
+           given={K.P.},
+           giveni={K\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {University of California, Berkeley}%
+      }
+      \strng{namehash}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \strng{fullhash}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \strng{fullhashraw}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \strng{bibnamehash}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \strng{authorbibnamehash}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \strng{authornamehash}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \strng{authorfullhash}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \strng{authorfullhashraw}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Dynamic Bayesian Networks: Representation, Inference and Learning}
+      \field{year}{2002}
+      \verb{urlraw}
+      \verb https://books.google.de/books?id=4Uc6HQAACAAJ
+      \endverb
+      \verb{url}
+      \verb https://books.google.de/books?id=4Uc6HQAACAAJ
+      \endverb
+    \endentry
+    \entry{krajewski2018highddatasetdronedataset}{misc}{}{}
+      \name{author}{4}{}{%
+        {{hash=413f1e27002a53ce6c8dc5269d7e09ca}{%
+           family={Krajewski},
+           familyi={K\bibinitperiod},
+           given={Robert},
+           giveni={R\bibinitperiod}}}%
+        {{hash=a01e5e8c9cbbc3d4211b1ecf9588fa1f}{%
+           family={Bock},
+           familyi={B\bibinitperiod},
+           given={Julian},
+           giveni={J\bibinitperiod}}}%
+        {{hash=5f24cdbf5370e4f826a1a3e8608f75b3}{%
+           family={Kloeker},
+           familyi={K\bibinitperiod},
+           given={Laurent},
+           giveni={L\bibinitperiod}}}%
+        {{hash=175f35cd7ccffb357f0e8c7a458e5508}{%
+           family={Eckstein},
+           familyi={E\bibinitperiod},
+           given={Lutz},
+           giveni={L\bibinitperiod}}}%
+      }
+      \strng{namehash}{2a51368a4da77278006e577c616468be}
+      \strng{fullhash}{4cd0ec29a36aef3ab86f2778435178cc}
+      \strng{fullhashraw}{4cd0ec29a36aef3ab86f2778435178cc}
+      \strng{bibnamehash}{4cd0ec29a36aef3ab86f2778435178cc}
+      \strng{authorbibnamehash}{4cd0ec29a36aef3ab86f2778435178cc}
+      \strng{authornamehash}{2a51368a4da77278006e577c616468be}
+      \strng{authorfullhash}{4cd0ec29a36aef3ab86f2778435178cc}
+      \strng{authorfullhashraw}{4cd0ec29a36aef3ab86f2778435178cc}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{cs.CV}
+      \field{eprinttype}{arXiv}
+      \field{title}{The highD Dataset: A Drone Dataset of Naturalistic Vehicle Trajectories on German Highways for Validation of Highly Automated Driving Systems}
+      \field{year}{2018}
+      \verb{eprint}
+      \verb 1810.05642
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/1810.05642
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/1810.05642
+      \endverb
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

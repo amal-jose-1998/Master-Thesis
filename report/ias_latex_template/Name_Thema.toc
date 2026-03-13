@@ -4,14 +4,23 @@
 \contentsline {chapter}{\nonumberline List of Abbreviations}{v}{chapter*.4}%
 \contentsline {chapter}{\nonumberline Glossary}{vi}{chapter*.5}%
 \babel@toc {ngerman}{}\relax 
-\contentsline {chapter}{\nonumberline Kurzfassung}{viii}{chapter*.13}%
+\contentsline {chapter}{\nonumberline Kurzfassung}{viii}{chapter*.14}%
 \babel@toc {english}{}\relax 
 \babel@toc {english}{}\relax 
-\contentsline {chapter}{\nonumberline Abstract}{x}{chapter*.18}%
+\contentsline {chapter}{\nonumberline Abstract}{x}{chapter*.19}%
 \babel@toc {english}{}\relax 
 \contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
-\contentsline {chapter}{\numberline {2}Conclusions}{2}{chapter.2}%
-\contentsline {chapter}{\nonumberline Bibliography}{3}{chapter*.30}%
+\contentsline {chapter}{\numberline {2}Theoretical Background}{3}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Probability Theory}{3}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Bayes' Theorem}{4}{subsection.2.1.1}%
+\contentsline {section}{\numberline {2.2}Probabilistic Graphical Models}{5}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Bayesian Networks}{5}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Hidden Markov Models}{5}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Dynamic Bayesian Networks}{5}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Inference in DBN}{5}{section.2.6}%
+\contentsline {section}{\numberline {2.7}Parameter Learning with Expectation-Maximization}{5}{section.2.7}%
+\contentsline {chapter}{\numberline {3}Conclusions}{6}{chapter.3}%
+\contentsline {chapter}{\nonumberline Bibliography}{7}{chapter*.32}%
 \def \@chapapp {\appendixname }
-\contentsline {chapter}{\numberline {A}Example appendix chapter}{4}{appendix.A}%
+\contentsline {chapter}{\numberline {A}Example appendix chapter}{8}{appendix.A}%
 \providecommand \tocbasic@end@toc@file {}\tocbasic@end@toc@file 

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.3.10)  11 MAR 2026 21:49
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.3.10)  13 MAR 2026 13:55
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -1089,7 +1089,7 @@ File: bkm-pdftex.def 2023-12-10 v1.31 bookmark driver for pdfTeX and luaTeX (HO)
 \BKM@id=\count497
 )) (Name_Thema.aux
 Package babel Info: 'ngerman' activates 'german' shorthands.
-(babel)             Reported on input line 63.
+(babel)             Reported on input line 67.
 )
 \openout1 = `Name_Thema.aux'.
 
@@ -1235,7 +1235,50 @@ Missing character: There is no ; in font nullfont!
 pdfTeX warning: pdflatex (file ./template-images/logo-unistuttgart-englisch+ias_80x25.pdf): PDF inclusion: multiple pdfs with page group included in a single page
 >]
 Package tocbasic Info: character protrusion at toc deactivated on input line 34.
- (Name_Thema.toc)
+ (Name_Thema.toc
+LaTeX Font Info:    Trying to load font information for OT1+pplx on input line 14.
+ (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\ot1pplx.fd
+File: ot1pplx.fd 2004/09/06 font definitions for OT1/pplx.
+)
+LaTeX Font Info:    Trying to load font information for OML+zplm on input line 14.
+ (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\omlzplm.fd
+File: omlzplm.fd 2002/09/08 Fontinst v1.914 font definitions for OML/zplm.
+)
+LaTeX Font Info:    Trying to load font information for OMS+zplm on input line 14.
+ (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\omszplm.fd
+File: omszplm.fd 2002/09/08 Fontinst v1.914 font definitions for OMS/zplm.
+)
+LaTeX Font Info:    Trying to load font information for OMX+zplm on input line 14.
+ (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\omxzplm.fd
+File: omxzplm.fd 2002/09/08 Fontinst v1.914 font definitions for OMX/zplm.
+)
+LaTeX Font Info:    Trying to load font information for OT1+zplm on input line 14.
+ (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\ot1zplm.fd
+File: ot1zplm.fd 2002/09/08 Fontinst v1.914 font definitions for OT1/zplm.
+)
+Package microtype Info: Loading generic protrusion settings for font family
+(microtype)             `zplm' (encoding: OT1).
+(microtype)             For optimal results, create family-specific settings.
+(microtype)             See the microtype manual for details.
+LaTeX Font Info:    Font shape `U/msa/m/n' will be
+(Font)              scaled to size 11.40997pt on input line 14.
+ (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/microtype\mt-msa.cfg
+File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
+)
+LaTeX Font Info:    Font shape `U/msa/m/n' will be
+(Font)              scaled to size 8.33606pt on input line 14.
+LaTeX Font Info:    Font shape `U/msa/m/n' will be
+(Font)              scaled to size 6.25204pt on input line 14.
+LaTeX Font Info:    Font shape `U/msb/m/n' will be
+(Font)              scaled to size 11.40997pt on input line 14.
+ (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/microtype\mt-msb.cfg
+File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
+)
+LaTeX Font Info:    Font shape `U/msb/m/n' will be
+(Font)              scaled to size 8.33606pt on input line 14.
+LaTeX Font Info:    Font shape `U/msb/m/n' will be
+(Font)              scaled to size 6.25204pt on input line 14.
+)
 \tf@toc=\write5
 \openout5 = `Name_Thema.toc'.
 
@@ -1297,6 +1340,8 @@ although it is yet undefined on input line 12.
 ]
 Package acronym Info: Label `acro:MAP' newly defined as it shall be overridden
 although it is yet undefined on input line 22.
+Package acronym Info: Label `acro:RV' newly defined as it shall be overridden
+although it is yet undefined on input line 28.
 ) (chapters/Abstract.tex
 
 LaTeX Font Warning: Font shape `T1/qpl/m/sl' in size <10.95> not available
@@ -1315,48 +1360,6 @@ Package acronym Info: Label `acro:DBN' overridden on input line 8.
 
 
 ]
-LaTeX Font Info:    Trying to load font information for OT1+pplx on input line 11.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\ot1pplx.fd
-File: ot1pplx.fd 2004/09/06 font definitions for OT1/pplx.
-)
-LaTeX Font Info:    Trying to load font information for OML+zplm on input line 11.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\omlzplm.fd
-File: omlzplm.fd 2002/09/08 Fontinst v1.914 font definitions for OML/zplm.
-)
-LaTeX Font Info:    Trying to load font information for OMS+zplm on input line 11.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\omszplm.fd
-File: omszplm.fd 2002/09/08 Fontinst v1.914 font definitions for OMS/zplm.
-)
-LaTeX Font Info:    Trying to load font information for OMX+zplm on input line 11.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\omxzplm.fd
-File: omxzplm.fd 2002/09/08 Fontinst v1.914 font definitions for OMX/zplm.
-)
-LaTeX Font Info:    Trying to load font information for OT1+zplm on input line 11.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/psnfss\ot1zplm.fd
-File: ot1zplm.fd 2002/09/08 Fontinst v1.914 font definitions for OT1/zplm.
-)
-Package microtype Info: Loading generic protrusion settings for font family
-(microtype)             `zplm' (encoding: OT1).
-(microtype)             For optimal results, create family-specific settings.
-(microtype)             See the microtype manual for details.
-LaTeX Font Info:    Font shape `U/msa/m/n' will be
-(Font)              scaled to size 11.40997pt on input line 11.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/microtype\mt-msa.cfg
-File: mt-msa.cfg 2006/02/04 v1.1 microtype config. file: AMS symbols (a) (RS)
-)
-LaTeX Font Info:    Font shape `U/msa/m/n' will be
-(Font)              scaled to size 8.33606pt on input line 11.
-LaTeX Font Info:    Font shape `U/msa/m/n' will be
-(Font)              scaled to size 6.25204pt on input line 11.
-LaTeX Font Info:    Font shape `U/msb/m/n' will be
-(Font)              scaled to size 11.40997pt on input line 11.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/microtype\mt-msb.cfg
-File: mt-msb.cfg 2005/06/01 v1.0 microtype config. file: AMS symbols (b) (RS)
-)
-LaTeX Font Info:    Font shape `U/msb/m/n' will be
-(Font)              scaled to size 8.33606pt on input line 11.
-LaTeX Font Info:    Font shape `U/msb/m/n' will be
-(Font)              scaled to size 6.25204pt on input line 11.
 Package babel Info: 'ngerman' activates 'german' shorthands.
 (babel)             Reported on input line 21.
  [9{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/base/8r.enc}]
@@ -1364,32 +1367,38 @@ chapter without number
 Package acronym Info: Label `acro:AI' newly defined as it shall be overridden
 although it is yet undefined on input line 23.
 Package acronym Info: Label `acro:AV' overridden on input line 23.
-Package acronym Info: Label `acro:HDV' overridden on input line 23.
-Package acronym Info: Label `acro:DBN' overridden on input line 24.
+Package acronym Info: Label `acro:HDV' overridden on input line 24.
+Package acronym Info: Label `acro:DBN' overridden on input line 27.
 Package acronym Info: Label `acro:CPU' newly defined as it shall be overridden
-although it is yet undefined on input line 27.
+although it is yet undefined on input line 49.
 [10
 
 
 ]) [11] (chapters/Introduction.tex
 chapter 1.
 Package acronym Info: Label `acro:AV' overridden on input line 4.
-Package acronym Info: Label `acro:AI' overridden on input line 5.
+Package acronym Info: Label `acro:AI' overridden on input line 4.
 Package acronym Info: Label `acro:SAV' newly defined as it shall be overridden
-although it is yet undefined on input line 11.
-Package acronym Info: Label `acro:HDV' overridden on input line 11.
+although it is yet undefined on input line 9.
+Package acronym Info: Label `acro:HDV' overridden on input line 9.
 Package acronym Info: Label `acro:V2X' newly defined as it shall be overridden
-although it is yet undefined on input line 14.
-Package acronym Info: Label `acro:DBN' overridden on input line 28.
-) [1
+although it is yet undefined on input line 11.
+Package acronym Info: Label `acro:DBN' overridden on input line 30.
+[1
 
 
 
 
 
-]
+]) (chapters/Theoretical_Background.tex [2]
 chapter 2.
-[2
+Package acronym Info: Label `acro:RV' overridden on input line 11.
+[3
+
+
+] [4]) [5]
+chapter 3.
+[6
 
 
 ]
@@ -1398,17 +1407,17 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `cmtt' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
-[3
+[7
 
 
 
 
 ]
 chapter A.
-[4
+[8
 
 
-] [5
+] [9
 
 
 ] (Name_Thema.aux)
@@ -1421,17 +1430,17 @@ Package logreq Info: Writing requests to 'Name_Thema.run.xml'.
 
  ) 
 Here is how much of TeX's memory you used:
- 50351 strings out of 467871
- 1123589 string characters out of 5418376
- 2214710 words of memory out of 5000000
- 78253 multiletter control sequences out of 15000+600000
- 694863 words of font info for 170 fonts, out of 8000000 for 9000
+ 50494 strings out of 467871
+ 1126788 string characters out of 5418376
+ 2215228 words of memory out of 5000000
+ 78324 multiletter control sequences out of 15000+600000
+ 703775 words of font info for 199 fonts, out of 8000000 for 9000
  1143 hyphenation exceptions out of 8191
  108i,8n,107p,11304b,2500s stack positions out of 10000i,1000n,20000p,200000b,200000s
- <C:\Users\amalj\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1095.pk><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplri.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/urw/palatino/uplri8a.pfb>
-Output written on Name_Thema.pdf (16 pages, 273517 bytes).
+ <C:\Users\amalj\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1095.pk><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/mathpazo/fplmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplri.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/urw/palatino/uplr8a.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/urw/palatino/uplri8a.pfb>
+Output written on Name_Thema.pdf (20 pages, 340018 bytes).
 PDF statistics:
- 327 PDF objects out of 1000 (max. 8388607)
- 70 named destinations out of 1000 (max. 500000)
- 35439 words of extra memory for PDF output out of 35830 (max. 10000000)
+ 464 PDF objects out of 1000 (max. 8388607)
+ 94 named destinations out of 1000 (max. 500000)
+ 37559 words of extra memory for PDF output out of 42996 (max. 10000000)
 

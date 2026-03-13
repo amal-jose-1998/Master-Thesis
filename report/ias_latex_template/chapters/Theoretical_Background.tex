@@ -1,0 +1,97 @@
+\chapter{Theoretical Background}
+
+\section{Probability Theory}
+
+Human driving behaviour is inherently stochastic. In a traffic scenario, different drivers may interpret the same situation differently depending on their perception, 
+experience, and intentions. As a result, multiple maneuvers may be possible under the same traffic conditions. For example, a driver approaching a slower vehicle may 
+choose to brake, maintain speed, or initiate a lane change. Since such decisions cannot be determined deterministically, behaviour prediction must account for uncertainty.
+Probability theory provides a mathematical framework for representing and reasoning about uncertainty. Instead of predicting a single deterministic outcome, probabilistic 
+models represent a distribution over possible outcomes and their likelihoods. This allows the model to capture the variability and uncertainty inherent in human decision-making.
+
+\par In probability theory, each uncertain quantity is represented as a \ac{RV} \cite{pml1Book}. 
+In the context of driver behaviour modelling, variables such as vehicle velocity, acceleration, or lane position can be treated as observable \acp{RV}. 
+In addition, latent quantities such as driver style or driving maneuver intention can also be represented as \acp{RV} that must be inferred from observations.
+
+\par Complex systems require modelling interactions between many \acp{RV}. When several \acp{RV} are considered together, their behaviour can be described using a joint probability distribution \cite{pml1Book}. 
+ For two \acp{RV}, $O$ and $Z$, representing the observable \ac{RV} and latent \ac{RV}, the joint probability is written as $P(O,Z)$ and represents the probability that both 
+ variables take specific values at the same time. 
+ This idea can be extended to any number of variables. In driver behaviour modelling, joint probability is important 
+ because observable variables and latent variables influence each other and must often be described together within a unified probabilistic framework.
+
+ \par It is also important to describe dependencies between \acp{RV}. This is done using conditional probability \cite{pml1Book}. The conditional probability of $O$ 
+ given $Z$ is defined as
+\[
+P(O \mid Z) = \frac{P(O,Z)}{P(Z)},
+\]
+provided that $P(Z) > 0$. Conditional probability describes how the probability of one \ac{RV} changes when information about another \ac{RV} is known. 
+This concept is essential because the probability of a future driving maneuver is estimated conditioned on the observed traffic context during inference. 
+During model learning, the probability of observations conditioned on latent states is also required.
+
+\par Another important concept is marginal probability, which gives the probability of a subset of \acp{RV} irrespective of the values of the others \cite{pml1Book}. For example, 
+if the joint distribution $P(O,Z)$ is known, the marginal probability of $Z$ can be obtained by summing over all possible values of $O$:
+\[
+P(Z) = \sum_O P(O,Z).
+\]
+
+\par In addition to describing dependencies between \acp{RV}, it is also useful to identify situations where variables do not influence each other. 
+Two \acp{RV} are said to be independent if the value of one variable does not affect the probability of the other. Formally, two variables $A$ and $B$ are independent 
+if their joint probability can be written as
+\[
+P(A,B) = P(A)P(B).
+\]
+
+\par In many practical problems, variables are not completely independent but may become independent when conditioned on another variable. This property is 
+known as conditional independence. Two variables $A$ and $B$ are conditionally independent given a third variable $C$ if
+\[
+P(A,B \mid C) = P(A \mid C)P(B \mid C).
+\]
+
+Conditional independence is a key concept in probabilistic graphical models because it allows complex joint probability distributions to be represented using simpler 
+conditional relationships between variables \cite{koller2009probabilistic}.
+
+\subsection{Bayes' Theorem}
+
+A fundamental principle in probabilistic reasoning is Bayes' theorem, which allows beliefs about uncertain events to be updated when new observations become available \cite{pml1Book}. 
+It relates conditional and marginal probabilities and is expressed as
+
+\begin{equation}
+P(Z \mid O) = \frac{P(O \mid Z) P(Z)}{P(O)}
+\label{eq:bayes}
+\end{equation}
+
+\par Here, $P(Z)$ is called the prior probability. The prior represents the initial belief about a variable before observing any new data. In the context of driver 
+behaviour modelling, the prior can represent the initial probability of different latent driver states before considering the current traffic situation.
+The term $P(O \mid Z)$ is called the likelihood. The likelihood describes how probable the observed data $O$ is, given a particular latent state $Z$. In driver behaviour 
+prediction, it measures how compatible the observed vehicle motion and traffic features are with a given latent driver state.
+The term $P(O)$ is called the evidence (or marginal likelihood). It represents the total probability of observing the data $O$ under all possible values of $Z$. 
+The evidence acts as a normalization factor that ensures the resulting probabilities sum to one.
+Finally, $P(Z \mid O)$ is called the posterior probability. The posterior represents the updated belief about $Z$ after observing $O$. In behaviour modelling, 
+the posterior corresponds to the updated probability distribution over the latent driver state given the observed traffic context.
+
+
+\par Bayes' theorem therefore provides a systematic way to update probabilistic beliefs when new information becomes available. 
+This principle forms the basis for probabilistic inference in many models used for behaviour prediction, including \ac{DBN}.
+
+\section{Probabilistic Graphical Models}
+
+Probabilistic graphical models provides an efficient way to represent complex joint probability distributions, whixh may have large number of \acp{RV}. 
+This framework uses nodes and edges to represent \acp{RV} 
+and dependencies respectively. Conditional independence is then used to factorise the joint distribution. There are 2 types of grapghical models:
+\begin{enumerate}
+    \item Directed graphical models, which has edges with direction to show the dependency between 2 \acp{RV}.
+    \item Undirected graphical models which has edges without direction to show the dependency between 2 \acp{RV}. 
+\end{enumerate}
+
+\par In this thesis we will use Directed graphical model as it allows factorisation 
+
+
+\section{Bayesian Networks}
+
+\section{Hidden Markov Models}
+
+\section{Dynamic Bayesian Networks}
+
+\section{Inference in DBN}
+
+\section{Parameter Learning with Expectation-Maximization}
+

@@ -2376,10 +2376,19 @@
   <bcf:section number="0">
     <bcf:citekey order="1" intorder="1">Schwarting2018</bcf:citekey>
     <bcf:citekey order="2" intorder="1">abedi2025precisehdvpositioningsafetyaware</bcf:citekey>
-    <bcf:citekey order="3" intorder="1">10054035</bcf:citekey>
-    <bcf:citekey order="4" intorder="1">Rudenko_2020</bcf:citekey>
-    <bcf:citekey order="5" intorder="1">Lefevre2014</bcf:citekey>
-    <bcf:citekey order="6" intorder="1">automotiveinnovation</bcf:citekey>
+    <bcf:citekey order="3" intorder="1">Madjid_2026</bcf:citekey>
+    <bcf:citekey order="4" intorder="1">10054035</bcf:citekey>
+    <bcf:citekey order="5" intorder="1">Rudenko_2020</bcf:citekey>
+    <bcf:citekey order="6" intorder="1">Lefevre2014</bcf:citekey>
+    <bcf:citekey order="7" intorder="1">automotiveinnovation</bcf:citekey>
+    <bcf:citekey order="8" intorder="1">murphy2002dynamic</bcf:citekey>
+    <bcf:citekey order="9" intorder="1">krajewski2018highddatasetdronedataset</bcf:citekey>
+    <bcf:citekey order="10" intorder="1">pml1Book</bcf:citekey>
+    <bcf:citekey order="11" intorder="1">pml1Book</bcf:citekey>
+    <bcf:citekey order="12" intorder="1">pml1Book</bcf:citekey>
+    <bcf:citekey order="13" intorder="1">pml1Book</bcf:citekey>
+    <bcf:citekey order="14" intorder="1">koller2009probabilistic</bcf:citekey>
+    <bcf:citekey order="15" intorder="1">pml1Book</bcf:citekey>
   </bcf:section>
   <!-- SORTING TEMPLATES -->
   <bcf:sortingtemplate name="none">

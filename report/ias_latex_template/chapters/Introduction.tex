@@ -1,32 +1,39 @@
 \chapter{Introduction}
 
-Automation is increasingly influencing nearly every aspect of daily life, and transportation, one
-of humanity’s greatest inventions for progress, is also undergoing a drastic transformation. \acp{AV} are at the forefront of this change, revolutionizing the transportation sector and advancing
-rapidly with each technological breakthrough. The rapid progress in \ac{AI}, advanced
-sensing, and communication technologies has accelerated the development of \acp{AV}. These innovations promise to enhance traffic efficiency, improve travel comfort, increase road
-safety, and, most importantly, reshape the future of mobility.
+Automation is influencing almost every part of daily life, and transportation is one of the areas changing most rapidly. 
+\acp{AV} are at the forefront of this change, revolutionizing the transportation sector. Their development has accelerated because of recent progress in \ac{AI}, 
+sensing systems, computing, and communication technologies. These innovations could enhance traffic efficiency, increase travel comfort, improve road
+safety, and, most importantly, reshape future mobility.
 
-\par \acp{AV} are increasingly deployed in road environments. However, their integration into existing traffic
-networks introduces significant complexities, particularly in mixed-traffic environments where they must
-coexist and interact with \acp{SAV} and \acp{HDV}. A major
-challenge in these scenarios is the presence of asymmetric information. These agents differ not only in
-their dynamics but also in the type and quality of information they expose. \acp{AV} typically rely on
-rich on-board sensing and potentially \ac{V2X} communication, whereas \acp{HDV} provide
-no explicit communication and exhibit strongly stochastic behavior \cite{Schwarting2018}\cite{abedi2025precisehdvpositioningsafetyaware}. \acp{SAV} form an intermediate class
-in which partial automation and limited communication capabilities may be available, while a human driver still retains control 
-authority over the vehicle...
+\par However, fully autonomous traffic systems do not yet exist anywhere in the world. \acp{AV} will have to operate in mixed traffic together with 
+\acp{SAV} and \acp{HDV}. This creates important challenges because different road users provide the different level of information. 
+\acp{AV} typically rely on
+rich on-board sensing and potentially have \ac{V2X} communication, while \acp{HDV} do not explicitly communicate their future intentions and often behave in a stochastic way 
+\cite{Schwarting2018}\cite{abedi2025precisehdvpositioningsafetyaware}. As a result, the internal goals, decisions, and reactions of human drivers cannot be observed directly. 
+They must instead be inferred from observable signals such as vehicle motion, lane changes, relative positions, and interactions with nearby vehicles.
 
-\par This mixture of agents creates a fundamentally asymmetric information setting. The \ac{AV} must reason
-about other road users whose internal goals, intentions, and perceptions are only indirectly observable. To
-navigate safely and efficiently, the \ac{AV} must infer their likely behavior, anticipate their responses to its
-own actions, and choose maneuvers that keep risk within acceptable bounds.
+\par For this reason, human driver behavior prediction is an important problem in autonomous driving. If an \ac{AV} can estimate what nearby human drivers are likely to do next, 
+it can make safer and better-informed decisions. For example, knowledge of likely braking, lane-changing, or car-following behavior can support downstream tasks such as risk 
+assessment, trajectory prediction, and motion planning \cite{Madjid_2026}.
 
-\par Over roughly the last two decades, the researchers have developed three broad families of behavioral
-models for road users: rule-based models, probabilistic models, and data-driven or learning-based methods \cite{10054035} \cite{Rudenko_2020} \cite{Lefevre2014}.
-In parallel, several game-theoretic decision-making paradigms for \acp{AV} have emerged \cite{automotiveinnovation}. For \acp{HDV}, the discussion
-highlights the limitations of deterministic and purely data-driven models in this context and motivates
-the use of \ac{DBN} as a principled framework capable of representing latent
-driver intentions, handling partial observability, and supporting probabilistic prediction. Unlike \ac{HDV}
-behavior modelling, which has matured through rule-based, probabilistic, and learning-based frameworks,
-the modelling of \acp{SAV} is far less developed. There is currently no widely accepted
-\ac{SAV} behavioral model or trajectory prediction framework. 
+\par Over the last two decades, the researchers have developed three broad families of behavioral
+models for road users: rule-based models, probabilistic models, and learning-based methods \cite{10054035} \cite{Rudenko_2020} \cite{Lefevre2014}.
+In parallel, several game-theoretic decision-making paradigms for \acp{AV} have emerged \cite{automotiveinnovation}. Rule-based models are simple and easy to understand, 
+but they are often too rigid to capture the variability of real human behavior. Learning-based methods can learn complex patterns from large datasets, but many of them 
+are difficult to interpret and often behave like black boxes. 
+Probabilistic models provide a useful middle ground because they can explicitly represent uncertainty, capture temporal dependencies, and still remain interpretable.
+
+\par This thesis focuses on probabilistic modeling of high-level human driving behavior in highway traffic. 
+Rather than building the full control or planning stack of an \ac{AV}, this work addresses an important upstream problem: predicting the likely future maneuvers of surrounding human drivers. 
+The goal is to develop a model that can estimate future driver actions while also representing uncertainty in a clear and interpretable way.
+
+\par To achieve this, the thesis uses a \ac{DBN} to model the temporal relationship between observable driving features and hidden behavioral states. 
+Since driver intentions are not directly observable, the model represents them through latent variables and infers them probabilistically from trajectory-based observations \cite{murphy2002dynamic}. 
+In particular, the \ac{DBN} is designed to capture latent factors such as driving context and action dynamics, and to produce probabilistic predictions of future high-level maneuvers.
+The model is trained and evaluated using the highD dataset, a naturalistic highway driving dataset containing detailed vehicle trajectory recordings \cite{krajewski2018highddatasetdronedataset}. From these trajectories, 
+relevant features are extracted to describe motion, surrounding traffic context, and interaction behavior. These features serve as observations for the \ac{DBN}.
+
+\par The thesis studies whether such a probabilistic framework can provide accurate, interpretable, and computationally efficient short-horizon predictions of human driving actions. 
+In particular, it examines the suitability of the dataset, the structure of the \ac{DBN}, the usefulness of the selected observation features, the quality of future action prediction, 
+the interpretability of the learned states, and the runtime performance of the model for online use.
+
