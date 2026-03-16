@@ -1,0 +1,15 @@
+\begin{tikzpicture}[
+    node distance=2.5cm,
+    >=stealth,
+    every node/.style={draw, circle, minimum size=1cm, align=center}
+]
+
+\node (S) {$S$};
+\node[right of=S] (A) {$A$};
+\node[below right=1.5cm and 1.25cm of S] (O) {$O$};
+
+\draw[->] (S) -- (A);
+\draw[->] (S) -- (O);
+\draw[->] (A) -- (O);
+
+\end{tikzpicture}

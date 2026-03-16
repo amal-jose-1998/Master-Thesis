@@ -1,0 +1,52 @@
+\chapter{State of the Art}
+
+Existing approaches for modelling and predicting driver behaviour can be broadly grouped into rule-based models, probabilistic models, and learning-based data-driven models. 
+In addition, hybrid methods combine elements from more than one of these families in order to exploit their complementary strengths. 
+
+
+\section{Rule-Based Models}
+
+Rule-based models characterize driving behaviour through explicit mathematical or logical rules. 
+These models relate observable variables such as spacing, relative velocity, and desired speed to longitudinal acceleration or lane-change decisions. 
+Their main advantages are interpretability and low computational cost \cite{zhou2025}. For this reason, they are widely used in traffic simulation, 
+\ac{ADAS}, and baseline behaviour modelling.  
+However, as they rely on hand-crafted assumptions about driver decision-making, they often represent behaviour in a deterministic or simplified manner. 
+
+
+\subsection{Car-Following Models}
+
+\subsubsection{Intelligent Driver Model}
+The \ac{IDM} is one of the most widely used car-following models \cite{zhou2025}. 
+It expresses a vehicle's acceleration as a continuous function of its current velocity, 
+desired velocity, spacing to the leading vehicle, and relative velocity \cite{PhysRevE.62.1805}. The formulation also includes parameters related to desired time headway and comfortable 
+braking, which make the model suitable for safety-oriented traffic simulation. 
+Because of its simple structure and physically meaningful parameters, the \ac{IDM} remains a common reference model in intelligent driving research.
+
+\subsubsection{Gipps' Model}
+Gipps' model is one of the earliest rule-based car-following models. 
+It is based on the idea that a driver chooses a speed that is both desirable and safe with respect to the 
+preceding vehicle \cite{GIPPS1981105}. This safety-oriented formulation
+allows the model to capture conservative driving behaviour and ensures collision-free motion under typical
+traffic conditions.
+
+\subsubsection{Optimal Velocity Model and Full Velocity Difference Model}
+Another classical approach is the \ac{OVM}, in which the driver's acceleration depends on the difference 
+between the current velocity and an optimal velocity determined by the spacing to the leading vehicle \cite{PhysRevE.51.1035}. This model captures
+the driver's intuition to accelerate when the gap ahead increases and decelerate when it decreases. An extension of the \ac{OVM} is the \ac{FVDM}, 
+where, instead of only considering the gap between the vehicles, the model also captures
+the velocity difference between the ego and preceding vehicles when calculating the acceleration \cite{PhysRevE.64.017101}. This
+helps reduce the oscillations observed in the original \ac{OVM}.
+
+
+\subsection{Lane-Change Models}
+
+\subsubsection{MOBIL Model}
+The \ac{MOBIL} model is a lane-changing model built upon the \ac{IDM} to describe lateral driving behaviour \cite{zhou2025} \cite{Kesting2007GeneralLM}. 
+It incorporates incentive and safety criteria
+to evaluate the feasibility of lane changes. The incentive criterion indicates whether a lane
+change could be advantageous in terms of the driver's acceleration, whereas the safety criterion ensures
+that the lane change does not cause unnecessary deceleration for surrounding vehicles.
+
+
+\par Despite their interpretability and efficiency, rule-based models have limited ability to represent uncertainty and inter-driver variability in complex traffic scenarios. 
+These limitations motivate the use of probabilistic and learning-based approaches.

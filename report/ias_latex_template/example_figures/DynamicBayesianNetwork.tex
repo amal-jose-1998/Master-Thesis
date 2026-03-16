@@ -1,0 +1,18 @@
+\begin{tikzpicture}[
+    node distance=2.5cm,
+    >=stealth,
+    latent/.style={draw, circle, minimum size=1cm, align=center},
+    obs/.style={draw, rectangle, minimum width=1.2cm, minimum height=0.8cm, align=center}
+]
+
+\node[latent] (Zt) {$Z_t$};
+\node[latent, right=3cm of Zt] (Ztp1) {$Z_{t+1}$};
+
+\node[obs, below=1.8cm of Zt] (Ot) {$O_t$};
+\node[obs, below=1.8cm of Ztp1] (Otp1) {$O_{t+1}$};
+
+\draw[->] (Zt) -- (Ztp1);
+\draw[->] (Zt) -- (Ot);
+\draw[->] (Ztp1) -- (Otp1);
+
+\end{tikzpicture}
