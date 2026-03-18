@@ -1,16 +1,16 @@
 \chapter{State of the Art}
 
-Existing approaches for modelling and predicting driver behaviour can be broadly grouped into rule-based models, probabilistic models, and learning-based data-driven models. 
+Existing approaches for modeling and predicting human driver behavior can be broadly grouped into rule-based models, probabilistic models, and learning-based models. 
 In addition, hybrid methods combine elements from more than one of these families in order to exploit their complementary strengths. 
 
 
 \section{Rule-Based Models}
 
-Rule-based models characterize driving behaviour through explicit mathematical or logical rules. 
+Rule-based models characterize driving behavior through explicit mathematical or logical rules. 
 These models relate observable variables such as spacing, relative velocity, and desired speed to longitudinal acceleration or lane-change decisions. 
 Their main advantages are interpretability and low computational cost \cite{zhou2025}. For this reason, they are widely used in traffic simulation, 
-\ac{ADAS}, and baseline behaviour modelling.  
-However, as they rely on hand-crafted assumptions about driver decision-making, they often represent behaviour in a deterministic or simplified manner. 
+\ac{ADAS}, and baseline behavior modeling.  
+However, as they rely on hand-crafted assumptions about driver decision-making, they often represent behavior in a deterministic or simplified manner. 
 
 
 \subsection{Car-Following Models}
@@ -26,7 +26,7 @@ Because of its simple structure and physically meaningful parameters, the \ac{ID
 Gipps' model is one of the earliest rule-based car-following models. 
 It is based on the idea that a driver chooses a speed that is both desirable and safe with respect to the 
 preceding vehicle \cite{GIPPS1981105}. This safety-oriented formulation
-allows the model to capture conservative driving behaviour and ensures collision-free motion under typical
+allows the model to capture conservative driving behavior and ensures collision-free motion under typical
 traffic conditions.
 
 \subsubsection{Optimal Velocity Model and Full Velocity Difference Model}
@@ -41,7 +41,7 @@ helps reduce the oscillations observed in the original \ac{OVM}.
 \subsection{Lane-Change Models}
 
 \subsubsection{MOBIL Model}
-The \ac{MOBIL} model is a lane-changing model built upon the \ac{IDM} to describe lateral driving behaviour \cite{zhou2025} \cite{Kesting2007GeneralLM}. 
+The \ac{MOBIL} model is a lane-changing model built upon the \ac{IDM} to describe lateral driving behavior \cite{zhou2025}, \cite{Kesting2007GeneralLM}. 
 It incorporates incentive and safety criteria
 to evaluate the feasibility of lane changes. The incentive criterion indicates whether a lane
 change could be advantageous in terms of the driver's acceleration, whereas the safety criterion ensures
@@ -50,3 +50,282 @@ that the lane change does not cause unnecessary deceleration for surrounding veh
 
 \par Despite their interpretability and efficiency, rule-based models have limited ability to represent uncertainty and inter-driver variability in complex traffic scenarios. 
 These limitations motivate the use of probabilistic and learning-based approaches.
+
+\section{Probabilistic Models}
+
+Probabilistic models describe driving behavior as a stochastic process, where driving actions are mapped
+to probability distributions, and represent uncertainty explicitly \cite{wang2023probabilisticpredictionlongitudinaltrajectory}. 
+In this framework, a driver’s decision to
+accelerate or change lanes is modeled as a probability function that depends on the current traffic context.
+This approach allows for multiple possible behavioral outcomes, rather than a single deterministic response.
+This makes them suitable for modeling the variability and ambiguity that are inherent in human driving behavior.
+
+\subsection{Hidden Markov Models}
+
+The \ac{HMM} is a widely used probabilistic framework for modeling time-varying
+stochastic processes in which the underlying system states are not directly observable but produce observable
+outputs \cite{rabiner1989tutorial}. \ac{HMM} assumes that human driving behavior evolves through a sequence of decision states,
+such as lane-keeping, braking, and overtaking, that are not directly measurable \cite{8500717}. These states produce
+observable vehicle signals like speed, acceleration, and lane position. The objective of the \ac{HMM} is to infer
+the most probable state sequence and predict future states from the observed driving data. The main
+strengths of \acp{HMM} are conceptual simplicity and efficient inference. However, \acp{HMM} rely on the Markov
+property, which simplify the model but limit its ability to capture long-term temporal dependencies and
+complex contextual interactions \cite{chen2023datadriventrafficsimulationcomprehensive}.
+
+
+\subsection{Dynamic Bayesian Networks}
+
+\acp{DBN} extend static \acp{BN} to temporal settings and model dependencies among variables across successive time steps \cite{murphy2002dynamic}, \cite{pearl1995bayesian}. 
+Compared with \acp{HMM}, \acp{DBN} provide a more flexible representation because the system state can be represented in factored form rather than as a single discrete variable.
+This allows \acp{DBN} to represent multiple interacting hidden and observed variables, which makes them suitable for modeling the joint evolution of driver state, 
+vehicle behavior, and surrounding traffic context \cite{electronics8010040}. For instance, \citeauthor{młynarczyk2025bayesiannetworkapproachbuilding} (\citeyear{młynarczyk2025bayesiannetworkapproachbuilding}) 
+applied \acp{BN} to capture causal links between drivers’ affective states and behavioral responses \cite{młynarczyk2025bayesiannetworkapproachbuilding}, while
+\citeauthor{talluri2025enhancingsafetystandardsautomated} (\citeyear{talluri2025enhancingsafetystandardsautomated}) employed \acp{DBN} to enhance safety standards in automated driving systems through
+causal reasoning for lane-change prediction and safety assessment \cite{talluri2025enhancingsafetystandardsautomated}. By explicitly modeling dependencies
+between hidden cognitive states and observable signals, \acp{DBN} provide an excellent framework for intention
+recognition and maneuver prediction in autonomous driving systems \cite{electronics8010040}.
+
+\subsection{Gaussian-Based Probabilistic Models}
+
+Gaussian-based probabilistic models are widely used for modeling continuous-valued driving behaviors
+such as acceleration or trajectory changes. A single Gaussian distribution is unimodal, 
+whereas driver behavior in a given traffic context may admit multiple plausible future actions or trajectories  
+\cite{mozaffari2023multimodalmanoeuvretrajectoryprediction}. 
+To capture such variability, \acp{GMM} represent the joint distribution of relevant variables, such as positions, velocities, 
+headways, or steering angles, as a weighted sum of multiple Gaussian components. 
+For the behavioral
+modeling of \acp{HDV} at the operational level, probabilistic regression techniques such as \ac{GMR} and \ac{GPR} are often employed to model continuous
+driving actions, like acceleration or steering angle, for a given traffic context \cite{zhang2024learningcarfollowingbehaviorsusing}, \cite{Bethge2023ModelPC}. 
+For example, Zhang et al. use a \ac{GMR} model to capture feature correlations and temporal dynamics in car-following behavior \cite{zhang2024learningcarfollowingbehaviorsusing}, 
+while Bethge et al. use Gaussian processes to predict human driving behavior and explicitly account for predictive uncertainty \cite{Bethge2023ModelPC}. These models provide low-level 
+behavior representations by capturing the stochastic nature of human responses.
+
+\section{Learning-Based Models}
+
+\ac{DL} has enabled powerful data-driven models that predict future trajectories directly from
+historical motion, map information, and interaction context. Unlike traditional rule-based or probabilistic
+frameworks that rely on explicit assumptions about driver intent or traffic interactions, these models learn
+patterns directly from extensive driving data. By making use of large datasets, they can capture complex,
+nonlinear relationships between driving context and human decisions with high accuracy.
+
+\subsection{Classical Machine Learning Models}
+
+Classical machine learning methods formed the earliest data-driven foundation for behavior prediction before the advent of modern \ac{DL}. Algorithms
+such as \acp{kNN}, \acp{SVM}, Decision Trees, and
+Random Forests were widely applied to predict driver intent, classify maneuvers, or recognize driving
+styles \cite{app112210562}. These approaches rely on manually designed features rather than automatically learned representations,
+as used in modern \ac{DL} approaches \cite{bengio2014representationlearningreviewnew}.
+
+\subsection{Recurrent Neural Network-Based Models}
+
+\acp{RNN} form a specialized class of \acp{NN} designed to model temporal relationships in
+sequential data \cite{Goodfellow-et-al-2016}. They incorporate internal states and cyclic connections that enable them to process
+time-dependent information, making them suitable for driver intention recognition and trajectory prediction 
+in behavioral prediction tasks \cite{xin2019intentionawarelonghorizontrajectory,inproceedings}.
+However, traditional \acp{RNN} suffer from the vanishing gradient problem \cite{10.1162/neco.1997.9.8.1735}. To address this limitation, the \ac{LSTM} architecture was
+introduced. \ac{LSTM} networks incorporate a dedicated memory cell that helps preserve contextual information
+over longer time horizons. Although such models perform well in vehicle prediction tasks, they still face limitations 
+in long-horizon forecasting and in handling complex road geometries \cite{xin2019intentionawarelonghorizontrajectory,HUI2022126869}.
+
+\par \citeauthor{xin2019intentionawarelonghorizontrajectory} (\citeyear{xin2019intentionawarelonghorizontrajectory}) proposed an intention-aware dual \ac{LSTM} network that separately models the
+driver's intention and motion dynamics \cite{xin2019intentionawarelonghorizontrajectory}. The first \ac{LSTM} module captures the latent driving intention using
+past motion data and environmental context, while the second predicts the future trajectory conditioned
+on the inferred intention. This dual-stage design allows the model to reason about how inferred driver
+intentions influence subsequent maneuvers.
+
+\par \citeauthor{inproceedings} (\citeyear{inproceedings}) present a hybrid framework that combines a \ac{DBN} for
+lane-change intention prediction with a driving-style estimator constructed from K-means clustering and
+Bayesian filtering \cite{inproceedings}. These probabilistic cues are then integrated into an \ac{LSTM} encoder-–decoder, which
+produces personalized future trajectories conditioned on both driver intent and style. This fusion allows
+the network to capture maneuver likelihoods and behavioral variability more effectively than pure \ac{LSTM}
+models.
+
+\subsection{Graph Neural Networks}
+
+Modeling the relational structure among traffic participants is important in dynamic traffic scenes. \acp{GNN}
+provide an effective framework for representing and learning such multi-agent interactions. In a
+\ac{GNN}, each vehicle can be represented as a node, while edges encode the interactions between 
+vehicles \cite{diehl2019graphneuralnetworksmodelling}. Recent research has explored integrating \acp{GNN} with temporal sequence models such
+as \acp{LSTM} and Transformers to jointly capture spatial and temporal dependencies. \citeauthor{abdelraouf2023} (\citeyear{abdelraouf2023}) 
+proposed a \ac{T-GNN} that combines \acp{GCN} with \ac{LSTM} layers to personalize trajectory prediction for different driving styles \cite{abdelraouf2023}.
+
+\par However, the performance of \acp{GNN} depends strongly on the design of the interaction graph, since graph construction determines which neighboring agents and relations are
+modeled \cite{diehl2019graphneuralnetworksmodelling}.
+An overly sparse graph structure may lead to loss of critical interaction information, while overly dense
+connections can introduce noise and computational complexity. Moreover, most existing \ac{GNN}-based
+trajectory prediction models are highly data-driven and require large, diverse datasets for generalization.
+
+\subsection{Transformers}
+
+Transformers are a recent and powerful \ac{DL} architecture that are particularly effective at capturing
+long-range dependencies in sequential data. Unlike recurrent networks, they rely on self-attention
+mechanisms that directly model relationships between all elements in a sequence, regardless of their
+temporal distance. In addition, self-attention enables parallel processing of the entire input sequence,
+which improves computational efficiency \cite{vaswaniattention,winland_self_attention_ibm}. In the
+multi-head self-attention mechanism, different attention heads can focus on different aspects of the input,
+and the resulting representations are aggregated to predict future maneuvers or trajectories.
+
+\par SceneTransformer introduced a model that unified motion prediction and planning through a scene-level
+attention mechanism that jointly predicts the trajectories of all agents within a traffic scene \cite{ngiam2022scenetransformerunifiedarchitecture}. Instead
+of treating each vehicle as an independent entity, SceneTransformer predicts the joint future of multiple
+interacting agents. \ac{MTR} extended this approach by introducing a hierarchical
+encoder–decoder framework that explicitly models behavioural uncertainty, producing multiple possible
+future trajectories per agent \cite{shi2023motiontransformerglobalintention}. Building upon these advances, the \ac{HiVT} 
+introduces a multi-scale hierarchical attention structure designed to handle large numbers of
+interacting agents efficiently \cite{inproceedingshivt}. \ac{HiVT} first applies local attention to encode trajectory and map features
+for each agent, then applies a global attention layer to model interactions among all agents in the scene.
+Using these representations, the decoder predicts the future trajectories of all agents in a single forward
+pass.
+
+\par However, despite their strong representation capacity, Transformer-based models generally require large datasets and careful
+regularization to avoid overfitting. Moreover, their interpretability remains limited compared to probabilistic
+graphical models or physics-based approaches.
+
+\subsection{Diffusion Models}
+
+Diffusion models are generative models that learn a data distribution through a forward process that gradually adds noise to training samples and 
+a reverse process that learns to remove this noise \cite{ho2020denoisingdiffusionprobabilisticmodels}. 
+During inference, the model starts from random noise and iteratively denoises it into a future trajectory conditioned on the observed scene context. 
+In trajectory prediction, this allows the model to generate multiple plausible future motions instead of a single deterministic output, which is useful 
+because vehicle behaviour is inherently uncertain and often multimodal \cite{peng2025diffusionmodelsintelligenttransportation,AdvancedDiffusion}. 
+
+\par TrajDiffuse is a recent development in trajectory prediction that applies diffusion modelling. It generates
+accurate and diverse single-agent trajectory predictions while maintaining consistency with environmental
+constraints \cite{10.1007/978-3-031-78110-0_25}. MotionDiffuser extends this concept to multi-agent interaction scenarios \cite{jiang2023motiondiffusercontrollablemultiagentmotion}. It
+employs a conditional diffusion process to generate permutation-invariant joint trajectories for multiple
+interacting agents and integrates a \ac{PCA} based dimensionality reduction
+technique to improve computational efficiency.
+
+
+\subsection{Conditional Variational Autoencoders}
+
+\acp{CVAE} are probabilistic deep generative models that extend the
+traditional \ac{VAE} framework by incorporating external conditions or context
+into both the encoder and decoder networks \cite{NIPS2015_8d55a249}. In trajectory prediction, the input observation \(x\) captures
+contextual information while the corresponding output \(y\) represents the future trajectory to be predicted.
+A latent variable \(z\) is introduced such that its conditional posterior is approximated through
+\(q_{\phi}(z \mid x, y)\), which is learned by the encoder.
+
+\par By conditioning both the encoder and decoder on the contextual variable \(x\), a \ac{CVAE} can capture
+complex, multimodal relationships between the observed scene and possible futures, enabling diverse yet context-consistent
+predictions. The latent variable \(z\) captures hidden factors, such as intent or other stochastic influences, that
+are not directly observable from the input context. As a result, the model can generate a range of possible future
+trajectories that represent different behavioural modes within the same traffic scenario.
+
+\par Trajectron++ represents one of the popular \ac{CVAE}-based frameworks for multimodal trajectory prediction. 
+It combines \ac{LSTM}-based temporal encoding, graph-structured interaction modeling, and probabilistic
+latent variable reasoning \cite{salzmann2021trajectrondynamicallyfeasibletrajectoryforecasting}. 
+Each traffic participant is represented as a node in a dynamically
+evolving spatiotemporal graph, where edges capture interactions with surrounding agents. The past motion
+history of each agent is first processed through an \ac{LSTM} network to encode temporal dependencies,
+after which a \ac{GNN} aggregates contextual information across agents. The resulting embeddings are passed
+into a \ac{CVAE} decoder, which generates diverse future trajectories by sampling from a learned latent space.
+
+\par While Trajectron++ focuses on interaction-aware multimodality, \ac{PECNet} 
+follows a related goal-conditioned approach to trajectory prediction \cite{mangalam2020journeydestinationendpointconditioned}. 
+It models
+driver intent by predicting a distribution over potential final endpoints, which are spatial points that
+represent the driver’s intended goal. The model then generates complete trajectories conditioned on these
+sampled endpoints. This two-step design separates high-level intention from detailed motion planning.
+
+\par More recent research has explored hierarchical extensions of the \ac{CVAE} framework to reduce long-horizon
+prediction error and maintain trajectory consistency over time. Single-stage \ac{CVAE} models can suffer from
+reduced prediction quality at longer horizons. The Cascaded \ac{CVAE} addresses this by
+refining predictions through multiple \ac{CVAE} stages, where each stage predicts short-term motion and
+subsequently extends or corrects it over longer horizons \cite{ZHOU2023109030}.
+
+
+\subsection{Maximum Entropy Inverse Reinforcement Learning}
+
+Maximum Entropy \ac{IRL} is a learning-based behaviour modelling approach that infers a latent reward 
+function from demonstrations and defines a probabilistic distribution over trajectories \cite{ARORA2021103500,10.5555/1620270.1620297}.  
+Rather than directly mapping states to actions, \ac{IRL} aims to recover the latent reward or cost function
+that a human driver may implicitly optimize during driving. 
+Classical \ac{IRL} assumes that the expert follows an optimal policy for an unknown reward, without
+accounting for variations in actual human behaviour \cite{10.5555/645529.657801}. However, this can lead to ambiguity, since multiple reward functions
+may explain the same observed behaviour. To address this, 
+\ac{MaxEnt IRL} introduces the principle of maximum entropy \cite{10.5555/1620270.1620297}. Instead of selecting a single deterministic explanation,
+it learns the maximum-entropy distribution over trajectories that remains consistent with the demonstrated behaviour. 
+This makes the model better suited to capturing uncertainty and variability in human driving behaviour. 
+Recent work has also applied MaxEnt \ac{IRL} to autonomous driving scenarios \cite{10.1109/TITS.2024.3363497}.
+
+
+\section{Assessment of the Approaches}
+
+Rule-based models are simple, interpretable, and computationally efficient. Their parameters have a direct
+physical meaning, and they are widely used in microscopic traffic simulation and as baselines for evaluating
+more complex models. However, they typically treat driving as a largely deterministic process and do not account
+well for the uncertainty and variability inherent in human decision-making. As a result, they are limited in their
+ability to capture latent intent and behavioural adaptation in complex real-world scenarios.
+
+\par Probabilistic models address these limitations by treating driver behaviour as a stochastic process.
+They can represent multiple possible maneuvers and quantify uncertainty over future actions. Within
+this family, \acp{DBN} offer a useful compromise between expressive power and interpretability, since they allow
+richer dependency structures than simpler models such as \acp{HMM} while retaining an explicit probabilistic
+representation of latent variables. This makes them attractive for \ac{HDV} modelling, especially when uncertainty, 
+partial observability, and belief updating are important. However, probabilistic models still require careful model 
+design and representative data, and simpler variants may rely on restrictive conditional independence or parametric assumptions.
+
+\par Learning-based models, especially deep neural architectures, currently represent the dominant state of the art
+in trajectory prediction on large benchmark datasets. hey can capture complex nonlinear dependencies,
+model interactions between multiple agents, and generate multimodal futures through latent-variable or generative
+formulations. However, these benefits come at a cost.
+First, they often depend on large, diverse, annotated datasets, which may be limited for the specific mixed-traffic
+and asymmetric-information scenarios considered in this thesis. Second, their internal representations are
+often difficult to interpret, making it harder to relate model outputs to driver intent, uncertainty sources, or downstream risk reasoning.
+
+\par Given the goals of this thesis, probabilistic models, and \acp{DBN} in particular, offer the most suitable
+compromise. They are expressive enough to encode latent driver intentions, mixed discrete and continuous
+variables, while remaining interpretable and compatible with Bayesian belief updating and risk-aware
+decision making. Rule-based models remain useful as baselines and for scenario construction, whereas \ac{DL} 
+models provide an important reference for the current trajectory prediction frontier.
+
+\section{Risk Modelling in Autonomous Decision Making}
+
+In autonomous driving, risk is often characterised using criticality indicators that estimate how close a traffic interaction is to becoming unsafe. 
+Many existing approaches rely on time-based or distance-based surrogate safety measures derived from the relative motion between the ego vehicle and surrounding traffic.
+Time-based criticality indicators remain widely used in autonomous driving risk assessment. In particular, \ac{TTC} is one of the most commonly used Time-to-X measures, while 
+\ac{THW} is also an established indicator for longitudinal safety assessment \cite{Westhofen_2022,wevj14120348}.
+
+\par Such indicators are frequently incorporated into planning and collision-avoidance systems as safety constraints or risk terms. However, they are usually 
+most suitable for specific interaction types, such as longitudinal following or merging, and they do not always capture complex multi-vehicle interactions 
+well \cite{Westhofen_2022,wevj14120348}.
+
+\par To address these limitations, \citeauthor{inproceedingsRisk-aware} (\citeyear{inproceedingsRisk-aware}) proposed a risk measure derived directly from a formal safety specification 
+rather than from surrogate indicators alone \cite{inproceedingsRisk-aware}.
+Their method computes both the probability that the \ac{AV} violates a safety rule and the expected severity of that violation under uncertainty. 
+This severity-weighted probability of violation is then incorporated into the planner, enabling the decision maker to select trajectories that 
+explicitly balance risk and driving progress \cite{inproceedingsRisk-aware}.
+
+\section{Game-Theoretic Models for Mixed-Traffic Interactions}
+
+\subsubsection{Level-k Reasoning}
+Level-k models assume that different drivers operate at different reasoning levels. A level-0 driver is nonstrategic
+and follows a fixed, non-strategic policy like a standard car-following policy. A level-1 driver best
+responds to the forecasted behaviour of level-0 drivers, a level-2 driver responds to level-1 behaviour, and
+so on [54].
+
+\subsubsection{Stackelberg Games}
+In Stackelberg games, AGV is designated as a leader and the others as followers [55]. The leader chooses
+its action anticipating the followers’ best responses. Correspondingly, each follower chooses a strategy
+that maximizes its own reward given the leader’s decision. The interaction converges to a Stackelberg
+Equilibrium. This framework has been applied, for example, to merging and lane-changing scenarios
+where a self-driving car interacts with a human driver [56]. For AGVs, Stackelberg formulations are s well
+suited because they align with the idea of the AGV as a proactive but cautious decision-maker.
+
+\subsubsection{Bayesian Games}
+Bayesian games model interactions where agents do not have full knowledge of each other’s characteristics,
+such as driving style, aggressiveness, reaction time, or capability level. Each agent maintains probabilistic
+beliefs over the other agent’s “type” and chooses actions that maximise their expected gain under this uncertainty
+[57]. This framework is appealing to mixed-traffic risk assessment, where behavioural variability
+and environmental uncertainty play a crucial role.
+
+\subsubsection{Partially Observable Markov Decision Process}
+Although not a game-theoretic model, Partially Observable Markov Decision Processes (POMDPs) are
+often discussed alongside strategic frameworks because they explicitly reason about hidden intentions and
+uncertain environment states through belief updates. In a POMDP, the autonomous vehicle maintains
+a probability distribution over latent variables, such as driver intent, and updates this belief through
+Bayesian filtering. Recent work has applied POMDPs to interactive driving scenarios, where accounting
+for uncertainty in other road users’ behaviour is essential for safe and anticipatory manoeuvre planning
+[58]. However, POMDP-based planners remain computationally demanding, which restricts their use in
+real-time autonomous driving.
