@@ -2389,6 +2389,26 @@
     <bcf:citekey order="13" intorder="1">pml1Book</bcf:citekey>
     <bcf:citekey order="14" intorder="1">koller2009probabilistic</bcf:citekey>
     <bcf:citekey order="15" intorder="1">pml1Book</bcf:citekey>
+    <bcf:citekey order="16" intorder="1">pml1Book</bcf:citekey>
+    <bcf:citekey order="17" intorder="1">koller2009probabilistic</bcf:citekey>
+    <bcf:citekey order="18" intorder="1">koller2009probabilistic</bcf:citekey>
+    <bcf:citekey order="19" intorder="1">pml1Book</bcf:citekey>
+    <bcf:citekey order="20" intorder="1">koller2009probabilistic</bcf:citekey>
+    <bcf:citekey order="21" intorder="1">Murphy2012MachineL</bcf:citekey>
+    <bcf:citekey order="22" intorder="1">rabiner1989tutorial</bcf:citekey>
+    <bcf:citekey order="23" intorder="1">rabiner1989tutorial</bcf:citekey>
+    <bcf:citekey order="24" intorder="1">rabiner1989tutorial</bcf:citekey>
+    <bcf:citekey order="25" intorder="1">Murphy2012MachineL</bcf:citekey>
+    <bcf:citekey order="26" intorder="1">rabiner1989tutorial</bcf:citekey>
+    <bcf:citekey order="27" intorder="1">Murphy2012MachineL</bcf:citekey>
+    <bcf:citekey order="28" intorder="1">zhou2025</bcf:citekey>
+    <bcf:citekey order="29" intorder="1">zhou2025</bcf:citekey>
+    <bcf:citekey order="30" intorder="1">PhysRevE.62.1805</bcf:citekey>
+    <bcf:citekey order="31" intorder="1">GIPPS1981105</bcf:citekey>
+    <bcf:citekey order="32" intorder="1">PhysRevE.51.1035</bcf:citekey>
+    <bcf:citekey order="33" intorder="1">PhysRevE.64.017101</bcf:citekey>
+    <bcf:citekey order="34" intorder="1">zhou2025</bcf:citekey>
+    <bcf:citekey order="35" intorder="1">Kesting2007GeneralLM</bcf:citekey>
   </bcf:section>
   <!-- SORTING TEMPLATES -->
   <bcf:sortingtemplate name="none">

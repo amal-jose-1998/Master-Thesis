@@ -1,26 +1,41 @@
 \babel@toc {english}{}\relax 
 \contentsline {chapter}{\nonumberline List of Figures}{iii}{chapter*.2}%
-\contentsline {chapter}{\nonumberline List of Tables}{iv}{chapter*.3}%
-\contentsline {chapter}{\nonumberline List of Abbreviations}{v}{chapter*.4}%
-\contentsline {chapter}{\nonumberline Glossary}{vi}{chapter*.5}%
+\contentsline {chapter}{\nonumberline List of Tables}{iv}{chapter*.5}%
+\contentsline {chapter}{\nonumberline List of Abbreviations}{v}{chapter*.6}%
+\contentsline {chapter}{\nonumberline Glossary}{vii}{chapter*.7}%
 \babel@toc {ngerman}{}\relax 
-\contentsline {chapter}{\nonumberline Kurzfassung}{viii}{chapter*.14}%
+\contentsline {chapter}{\nonumberline Kurzfassung}{ix}{chapter*.15}%
 \babel@toc {english}{}\relax 
 \babel@toc {english}{}\relax 
-\contentsline {chapter}{\nonumberline Abstract}{x}{chapter*.19}%
+\contentsline {chapter}{\nonumberline Abstract}{xi}{chapter*.20}%
 \babel@toc {english}{}\relax 
 \contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
 \contentsline {chapter}{\numberline {2}Theoretical Background}{3}{chapter.2}%
 \contentsline {section}{\numberline {2.1}Probability Theory}{3}{section.2.1}%
 \contentsline {subsection}{\numberline {2.1.1}Bayes' Theorem}{4}{subsection.2.1.1}%
 \contentsline {section}{\numberline {2.2}Probabilistic Graphical Models}{5}{section.2.2}%
-\contentsline {section}{\numberline {2.3}Bayesian Networks}{5}{section.2.3}%
-\contentsline {section}{\numberline {2.4}Hidden Markov Models}{5}{section.2.4}%
-\contentsline {section}{\numberline {2.5}Dynamic Bayesian Networks}{5}{section.2.5}%
-\contentsline {section}{\numberline {2.6}Inference in DBN}{5}{section.2.6}%
-\contentsline {section}{\numberline {2.7}Parameter Learning with Expectation-Maximization}{5}{section.2.7}%
-\contentsline {chapter}{\numberline {3}Conclusions}{6}{chapter.3}%
-\contentsline {chapter}{\nonumberline Bibliography}{7}{chapter*.32}%
+\contentsline {subsection}{\numberline {2.2.1}Bayesian Networks}{5}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}Dynamic Bayesian Networks}{6}{subsection.2.2.2}%
+\contentsline {section}{\numberline {2.3}Inference in Chain-Structured DBNs}{7}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Forward–Backward Algorithm}{7}{subsection.2.3.1}%
+\contentsline {subsubsection}{\nonumberline Forward Pass}{8}{subsubsection*.40}%
+\contentsline {subsubsection}{\nonumberline Backward Pass}{8}{subsubsection*.41}%
+\contentsline {subsubsection}{\nonumberline Posterior State Estimation}{8}{subsubsection*.42}%
+\contentsline {subsubsection}{\nonumberline Posterior Transition Probability}{9}{subsubsection*.43}%
+\contentsline {section}{\numberline {2.4}Parameter Learning using Maximum Likelihood Estimation}{9}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}Expectation--Maximization Algorithm}{10}{subsection.2.4.1}%
+\contentsline {subsubsection}{\nonumberline Expectation Step}{10}{subsubsection*.46}%
+\contentsline {subsubsection}{\nonumberline Maximization Step}{11}{subsubsection*.47}%
+\contentsline {chapter}{\numberline {3}State of the Art}{12}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Rule-Based Models}{12}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Car-Following Models}{12}{subsection.3.1.1}%
+\contentsline {subsubsection}{\nonumberline Intelligent Driver Model}{12}{subsubsection*.49}%
+\contentsline {subsubsection}{\nonumberline Gipps' Model}{12}{subsubsection*.51}%
+\contentsline {subsubsection}{\nonumberline Optimal Velocity Model and Full Velocity Difference Model}{13}{subsubsection*.52}%
+\contentsline {subsection}{\numberline {3.1.2}Lane-Change Models}{13}{subsection.3.1.2}%
+\contentsline {subsubsection}{\nonumberline MOBIL Model}{13}{subsubsection*.55}%
+\contentsline {chapter}{\numberline {4}Conclusions}{14}{chapter.4}%
+\contentsline {chapter}{\nonumberline Bibliography}{15}{chapter*.57}%
 \def \@chapapp {\appendixname }
-\contentsline {chapter}{\numberline {A}Example appendix chapter}{8}{appendix.A}%
+\contentsline {chapter}{\numberline {A}Example appendix chapter}{17}{appendix.A}%
 \providecommand \tocbasic@end@toc@file {}\tocbasic@end@toc@file 

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.3.10)  13 MAR 2026 13:55
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.3.10)  16 MAR 2026 01:56
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -1089,7 +1089,7 @@ File: bkm-pdftex.def 2023-12-10 v1.31 bookmark driver for pdfTeX and luaTeX (HO)
 \BKM@id=\count497
 )) (Name_Thema.aux
 Package babel Info: 'ngerman' activates 'german' shorthands.
-(babel)             Reported on input line 67.
+(babel)             Reported on input line 82.
 )
 \openout1 = `Name_Thema.aux'.
 
@@ -1289,7 +1289,12 @@ LaTeX Font Info:    Font shape `U/msb/m/n' will be
 
 ]
 Package tocbasic Info: character protrusion at lof deactivated on input line 36.
- (Name_Thema.lof)
+ (Name_Thema.lof
+Package acronym Info: Label `acro:BN' newly defined as it shall be overridden
+although it is yet undefined on input line 12.
+Package acronym Info: Label `acro:DBN' newly defined as it shall be overridden
+although it is yet undefined on input line 13.
+)
 \tf@lof=\write6
 \openout6 = `Name_Thema.lof'.
 
@@ -1311,26 +1316,27 @@ Package tocbasic Info: character protrusion at lot deactivated on input line 38.
 
 ] (chapters/Acronyms.tex
 chapter without number
-) [5
+[5
 
 
 
 
-] (chapters/Glossary.tex
+])
+
+LaTeX Font Warning: Font shape `T1/qpl/m/sl' in size <10.95> not available
+(Font)              Font shape `T1/qpl/m/it' tried instead on input line 41.
+
+[6] (chapters/Glossary.tex
 chapter without number
 Package acronym Info: Label `acro:AV' newly defined as it shall be overridden
 although it is yet undefined on input line 5.
-Package acronym Info: Label `acro:HDV' newly defined as it shall be overridden
-although it is yet undefined on input line 6.
-Package acronym Info: Label `acro:DBN' newly defined as it shall be overridden
-although it is yet undefined on input line 7.
 Package acronym Info: Label `acro:DAG' newly defined as it shall be overridden
 although it is yet undefined on input line 8.
-Package acronym Info: Label `acro:THW' newly defined as it shall be overridden
-although it is yet undefined on input line 11.
-Package acronym Info: Label `acro:TTC' newly defined as it shall be overridden
-although it is yet undefined on input line 12.
-[6
+Package acronym Info: Label `acro:HDV' newly defined as it shall be overridden
+although it is yet undefined on input line 13.
+Package acronym Info: Label `acro:MAP' newly defined as it shall be overridden
+although it is yet undefined on input line 17.
+[7
 
 
 
@@ -1338,23 +1344,20 @@ although it is yet undefined on input line 12.
 
 
 ]
-Package acronym Info: Label `acro:MAP' newly defined as it shall be overridden
-although it is yet undefined on input line 22.
 Package acronym Info: Label `acro:RV' newly defined as it shall be overridden
-although it is yet undefined on input line 28.
-) (chapters/Abstract.tex
-
-LaTeX Font Warning: Font shape `T1/qpl/m/sl' in size <10.95> not available
-(Font)              Font shape `T1/qpl/m/it' tried instead on input line 1.
-
-[7]
+although it is yet undefined on input line 24.
+Package acronym Info: Label `acro:THW' newly defined as it shall be overridden
+although it is yet undefined on input line 26.
+Package acronym Info: Label `acro:TTC' newly defined as it shall be overridden
+although it is yet undefined on input line 27.
+) (chapters/Abstract.tex [8]
 chapter without number
 Package acronym Info: Label `acro:KI' newly defined as it shall be overridden
 although it is yet undefined on input line 7.
 Package acronym Info: Label `acro:AV' overridden on input line 7.
 Package acronym Info: Label `acro:HDV' overridden on input line 7.
 Package acronym Info: Label `acro:DBN' overridden on input line 8.
-[8
+[9
 
 
 
@@ -1362,7 +1365,7 @@ Package acronym Info: Label `acro:DBN' overridden on input line 8.
 ]
 Package babel Info: 'ngerman' activates 'german' shorthands.
 (babel)             Reported on input line 21.
- [9{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/base/8r.enc}]
+ [10{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/base/8r.enc}]
 chapter without number
 Package acronym Info: Label `acro:AI' newly defined as it shall be overridden
 although it is yet undefined on input line 23.
@@ -1371,10 +1374,10 @@ Package acronym Info: Label `acro:HDV' overridden on input line 24.
 Package acronym Info: Label `acro:DBN' overridden on input line 27.
 Package acronym Info: Label `acro:CPU' newly defined as it shall be overridden
 although it is yet undefined on input line 49.
-[10
+[11
 
 
-]) [11] (chapters/Introduction.tex
+]) [12] (chapters/Introduction.tex
 chapter 1.
 Package acronym Info: Label `acro:AV' overridden on input line 4.
 Package acronym Info: Label `acro:AI' overridden on input line 4.
@@ -1396,9 +1399,41 @@ Package acronym Info: Label `acro:RV' overridden on input line 11.
 [3
 
 
-] [4]) [5]
+] [4]
+Package acronym Info: Label `acro:CPD' newly defined as it shall be overridden
+although it is yet undefined on input line 82.
+Package acronym Info: Label `acro:BN' overridden on input line 90.
+Package acronym Info: Label `acro:DAG' overridden on input line 96.
+Package acronym Info: Label `acro:CPT' newly defined as it shall be overridden
+although it is yet undefined on input line 98.
+ (example_figures/BayesianNetwork.tex) [5] (example_figures/DynamicBayesianNetwork.tex) [6]
+Package acronym Info: Label `acro:HMM' newly defined as it shall be overridden
+although it is yet undefined on input line 177.
+ [7] [8]
+Package acronym Info: Label `acro:EM' newly defined as it shall be overridden
+although it is yet undefined on input line 292.
+ [9]
+Package acronym Info: Label `acro:MLE' newly defined as it shall be overridden
+although it is yet undefined on input line 311.
+ [10]) (chapters/SOTA.tex [11]
 chapter 3.
-[6
+Package acronym Info: Label `acro:ADAS' newly defined as it shall be overridden
+although it is yet undefined on input line 12.
+Package acronym Info: Label `acro:IDM' newly defined as it shall be overridden
+although it is yet undefined on input line 19.
+Package acronym Info: Label `acro:OVM' newly defined as it shall be overridden
+although it is yet undefined on input line 33.
+Package acronym Info: Label `acro:FVDM' newly defined as it shall be overridden
+although it is yet undefined on input line 35.
+[12
+
+
+]
+Package acronym Info: Label `acro:MOBIL' newly defined as it shall be overridden
+although it is yet undefined on input line 44.
+) [13]
+chapter 4.
+[14
 
 
 ]
@@ -1407,17 +1442,17 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             `cmtt' (encoding: T1).
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
-[7
+[15
 
 
 
 
-]
+] [16]
 chapter A.
-[8
+[17
 
 
-] [9
+] [18
 
 
 ] (Name_Thema.aux)
@@ -1430,17 +1465,17 @@ Package logreq Info: Writing requests to 'Name_Thema.run.xml'.
 
  ) 
 Here is how much of TeX's memory you used:
- 50494 strings out of 467871
- 1126788 string characters out of 5418376
- 2215228 words of memory out of 5000000
- 78324 multiletter control sequences out of 15000+600000
- 703775 words of font info for 199 fonts, out of 8000000 for 9000
+ 50834 strings out of 467871
+ 1133603 string characters out of 5418376
+ 2219836 words of memory out of 5000000
+ 78554 multiletter control sequences out of 15000+600000
+ 708171 words of font info for 216 fonts, out of 8000000 for 9000
  1143 hyphenation exceptions out of 8191
- 108i,8n,107p,11304b,2500s stack positions out of 10000i,1000n,20000p,200000b,200000s
- <C:\Users\amalj\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1095.pk><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/mathpazo/fplmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplri.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/urw/palatino/uplr8a.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/urw/palatino/uplri8a.pfb>
-Output written on Name_Thema.pdf (20 pages, 340018 bytes).
+ 108i,9n,107p,11304b,2500s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ <C:\Users\amalj\AppData\Local\MiKTeX\fonts/pk/ljfour/jknappen/ec/dpi600\ectt1095.pk><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmmi10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/mathpazo/fplmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/mathpazo/fplmri.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qplri.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/urw/palatino/uplr8a.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/urw/palatino/uplri8a.pfb>
+Output written on Name_Thema.pdf (30 pages, 423214 bytes).
 PDF statistics:
- 464 PDF objects out of 1000 (max. 8388607)
- 94 named destinations out of 1000 (max. 500000)
- 37559 words of extra memory for PDF output out of 42996 (max. 10000000)
+ 716 PDF objects out of 1000 (max. 8388607)
+ 169 named destinations out of 1000 (max. 500000)
+ 37599 words of extra memory for PDF output out of 42996 (max. 10000000)
 

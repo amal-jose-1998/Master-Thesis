@@ -400,6 +400,7 @@
       \strng{authornamehash}{8d5884fbe19bc9c4ab9214b2f05705b3}
       \strng{authorfullhash}{8d5884fbe19bc9c4ab9214b2f05705b3}
       \strng{authorfullhashraw}{8d5884fbe19bc9c4ab9214b2f05705b3}
+      \field{extraname}{1}
       \field{sortinit}{8}
       \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
       \field{labelnamesource}{author}
@@ -462,7 +463,403 @@
       \verb https://arxiv.org/abs/1810.05642
       \endverb
     \endentry
+    \entry{pml1Book}{book}{}{}
+      \name{author}{1}{}{%
+        {{hash=99413be56c82adf72b6474dcdf8d3023}{%
+           family={Murphy},
+           familyi={M\bibinitperiod},
+           given={Kevin\bibnamedelima P.},
+           giveni={K\bibinitperiod\bibinitdelim P\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {MIT Press}%
+      }
+      \strng{namehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{fullhash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{fullhashraw}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{bibnamehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authorbibnamehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authornamehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authorfullhash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authorfullhashraw}{99413be56c82adf72b6474dcdf8d3023}
+      \field{extraname}{2}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Probabilistic Machine Learning: An Introduction}
+      \field{year}{2022}
+      \verb{urlraw}
+      \verb http://probml.github.io/book1
+      \endverb
+      \verb{url}
+      \verb http://probml.github.io/book1
+      \endverb
+    \endentry
+    \entry{koller2009probabilistic}{book}{}{}
+      \name{author}{2}{}{%
+        {{hash=0ffc3f404f0baef79d60dfb5034ff37a}{%
+           family={Koller},
+           familyi={K\bibinitperiod},
+           given={D.},
+           giveni={D\bibinitperiod}}}%
+        {{hash=dd411fb220ac3217e90c536cb4cf7ae0}{%
+           family={Friedman},
+           familyi={F\bibinitperiod},
+           given={N.},
+           giveni={N\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {MIT Press}%
+      }
+      \strng{namehash}{ea653c3ad05b727b7a1862f2c41e0538}
+      \strng{fullhash}{ea653c3ad05b727b7a1862f2c41e0538}
+      \strng{fullhashraw}{ea653c3ad05b727b7a1862f2c41e0538}
+      \strng{bibnamehash}{ea653c3ad05b727b7a1862f2c41e0538}
+      \strng{authorbibnamehash}{ea653c3ad05b727b7a1862f2c41e0538}
+      \strng{authornamehash}{ea653c3ad05b727b7a1862f2c41e0538}
+      \strng{authorfullhash}{ea653c3ad05b727b7a1862f2c41e0538}
+      \strng{authorfullhashraw}{ea653c3ad05b727b7a1862f2c41e0538}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{isbn}{9780262013192}
+      \field{series}{Adaptive computation and machine learning}
+      \field{title}{Probabilistic Graphical Models: Principles and Techniques}
+      \field{year}{2009}
+      \verb{urlraw}
+      \verb https://books.google.co.in/books?id=7dzpHCHzNQ4C
+      \endverb
+      \verb{url}
+      \verb https://books.google.co.in/books?id=7dzpHCHzNQ4C
+      \endverb
+    \endentry
+    \entry{Murphy2012MachineL}{inproceedings}{}{}
+      \name{author}{1}{}{%
+        {{hash=99413be56c82adf72b6474dcdf8d3023}{%
+           family={Murphy},
+           familyi={M\bibinitperiod},
+           given={Kevin\bibnamedelima P.},
+           giveni={K\bibinitperiod\bibinitdelim P\bibinitperiod}}}%
+      }
+      \strng{namehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{fullhash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{fullhashraw}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{bibnamehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authorbibnamehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authornamehash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authorfullhash}{99413be56c82adf72b6474dcdf8d3023}
+      \strng{authorfullhashraw}{99413be56c82adf72b6474dcdf8d3023}
+      \field{extraname}{3}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Adaptive computation and machine learning series}
+      \field{title}{Machine learning - a probabilistic perspective}
+      \field{year}{2012}
+      \verb{urlraw}
+      \verb https://api.semanticscholar.org/CorpusID:17793133
+      \endverb
+      \verb{url}
+      \verb https://api.semanticscholar.org/CorpusID:17793133
+      \endverb
+    \endentry
+    \entry{rabiner1989tutorial}{article}{}{}
+      \name{author}{1}{}{%
+        {{hash=e8d997fb2a06a1d60cbe4a4376c323a2}{%
+           family={Rabiner},
+           familyi={R\bibinitperiod},
+           given={L.R.},
+           giveni={L\bibinitperiod}}}%
+      }
+      \strng{namehash}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \strng{fullhash}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \strng{fullhashraw}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \strng{bibnamehash}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \strng{authorbibnamehash}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \strng{authornamehash}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \strng{authorfullhash}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \strng{authorfullhashraw}{e8d997fb2a06a1d60cbe4a4376c323a2}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Proceedings of the IEEE}
+      \field{number}{2}
+      \field{title}{A tutorial on hidden Markov models and selected applications in speech recognition}
+      \field{volume}{77}
+      \field{year}{1989}
+      \field{pages}{257\bibrangedash 286}
+      \range{pages}{30}
+      \verb{doi}
+      \verb 10.1109/5.18626
+      \endverb
+      \keyw{Tutorial;Hidden Markov models;Speech recognition}
+    \endentry
+    \entry{zhou2025}{misc}{}{}
+      \name{author}{5}{}{%
+        {{hash=decadc835534046f2efa2ef4047e89de}{%
+           family={Zhou},
+           familyi={Z\bibinitperiod},
+           given={Shirui},
+           giveni={S\bibinitperiod}}}%
+        {{hash=3fc7138d2a5f2f9768be4d6b650216cd}{%
+           family={Zheng},
+           familyi={Z\bibinitperiod},
+           given={Shiteng},
+           giveni={S\bibinitperiod}}}%
+        {{hash=a28958443c939e7013db4ce6dff5dc4f}{%
+           family={Tian},
+           familyi={T\bibinitperiod},
+           given={Junfang},
+           giveni={J\bibinitperiod}}}%
+        {{hash=64c2e9605c732d29eddb8c53a90cfb09}{%
+           family={Jiang},
+           familyi={J\bibinitperiod},
+           given={Rui},
+           giveni={R\bibinitperiod}}}%
+        {{hash=a4ed2f4508e93a1c5d9f9a2b95f0b2e9}{%
+           family={Zhang},
+           familyi={Z\bibinitperiod},
+           given={H.\bibnamedelimi M.},
+           giveni={H\bibinitperiod\bibinitdelim M\bibinitperiod}}}%
+      }
+      \strng{namehash}{5fe8a87af989a994f64f29237d1f64de}
+      \strng{fullhash}{cfda802da212457012c40f5aab7a05bf}
+      \strng{fullhashraw}{cfda802da212457012c40f5aab7a05bf}
+      \strng{bibnamehash}{cfda802da212457012c40f5aab7a05bf}
+      \strng{authorbibnamehash}{cfda802da212457012c40f5aab7a05bf}
+      \strng{authornamehash}{5fe8a87af989a994f64f29237d1f64de}
+      \strng{authorfullhash}{cfda802da212457012c40f5aab7a05bf}
+      \strng{authorfullhashraw}{cfda802da212457012c40f5aab7a05bf}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprintclass}{physics.soc-ph}
+      \field{eprinttype}{arXiv}
+      \field{title}{Twenty-Five Years of the Intelligent Driver Model: Foundations, Extensions, Applications, and Future Directions}
+      \field{year}{2025}
+      \verb{eprint}
+      \verb 2506.05909
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2506.05909
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2506.05909
+      \endverb
+    \endentry
+    \entry{PhysRevE.62.1805}{article}{}{}
+      \name{author}{3}{}{%
+        {{hash=21d5ad5044c3bd92d3980f5df317324d}{%
+           family={Treiber},
+           familyi={T\bibinitperiod},
+           given={Martin},
+           giveni={M\bibinitperiod}}}%
+        {{hash=3bc9a4c3e9a2f89862b79deb849ee739}{%
+           family={Hennecke},
+           familyi={H\bibinitperiod},
+           given={Ansgar},
+           giveni={A\bibinitperiod}}}%
+        {{hash=6f85b2d8868cd1e16ae5c55cf158b6ce}{%
+           family={Helbing},
+           familyi={H\bibinitperiod},
+           given={Dirk},
+           giveni={D\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {American Physical Society}%
+      }
+      \strng{namehash}{579dc156ae1fa3c63876283789fb3c10}
+      \strng{fullhash}{0ad144c334319127bcee16276c377dab}
+      \strng{fullhashraw}{0ad144c334319127bcee16276c377dab}
+      \strng{bibnamehash}{0ad144c334319127bcee16276c377dab}
+      \strng{authorbibnamehash}{0ad144c334319127bcee16276c377dab}
+      \strng{authornamehash}{579dc156ae1fa3c63876283789fb3c10}
+      \strng{authorfullhash}{0ad144c334319127bcee16276c377dab}
+      \strng{authorfullhashraw}{0ad144c334319127bcee16276c377dab}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{issue}{2}
+      \field{journaltitle}{Phys. Rev. E}
+      \field{month}{8}
+      \field{title}{Congested traffic states in empirical observations and microscopic simulations}
+      \field{volume}{62}
+      \field{year}{2000}
+      \field{pages}{1805\bibrangedash 1824}
+      \range{pages}{20}
+      \verb{doi}
+      \verb 10.1103/PhysRevE.62.1805
+      \endverb
+      \verb{urlraw}
+      \verb https://link.aps.org/doi/10.1103/PhysRevE.62.1805
+      \endverb
+      \verb{url}
+      \verb https://link.aps.org/doi/10.1103/PhysRevE.62.1805
+      \endverb
+    \endentry
+    \entry{PhysRevE.51.1035}{article}{}{}
+      \name{author}{5}{}{%
+        {{hash=25fe70b072975c085bcb09c694792fcc}{%
+           family={Bando},
+           familyi={B\bibinitperiod},
+           given={M.},
+           giveni={M\bibinitperiod}}}%
+        {{hash=28173a8473bd3d6c95ad14f594db077e}{%
+           family={Hasebe},
+           familyi={H\bibinitperiod},
+           given={K.},
+           giveni={K\bibinitperiod}}}%
+        {{hash=baf4951dd35202c5644c1fae7ddc14e3}{%
+           family={Nakayama},
+           familyi={N\bibinitperiod},
+           given={A.},
+           giveni={A\bibinitperiod}}}%
+        {{hash=cc711495c22f5ae9dcfc469f922c958a}{%
+           family={Shibata},
+           familyi={S\bibinitperiod},
+           given={A.},
+           giveni={A\bibinitperiod}}}%
+        {{hash=0ae092f72ae113b3917d92c6d319a826}{%
+           family={Sugiyama},
+           familyi={S\bibinitperiod},
+           given={Y.},
+           giveni={Y\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {American Physical Society}%
+      }
+      \strng{namehash}{abc1e30719c7bdb8939479f3e7d58099}
+      \strng{fullhash}{501430b8580a7403564b69bb87185615}
+      \strng{fullhashraw}{501430b8580a7403564b69bb87185615}
+      \strng{bibnamehash}{501430b8580a7403564b69bb87185615}
+      \strng{authorbibnamehash}{501430b8580a7403564b69bb87185615}
+      \strng{authornamehash}{abc1e30719c7bdb8939479f3e7d58099}
+      \strng{authorfullhash}{501430b8580a7403564b69bb87185615}
+      \strng{authorfullhashraw}{501430b8580a7403564b69bb87185615}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{issue}{2}
+      \field{journaltitle}{Phys. Rev. E}
+      \field{month}{2}
+      \field{title}{Dynamical model of traffic congestion and numerical simulation}
+      \field{volume}{51}
+      \field{year}{1995}
+      \field{pages}{1035\bibrangedash 1042}
+      \range{pages}{8}
+      \verb{doi}
+      \verb 10.1103/PhysRevE.51.1035
+      \endverb
+      \verb{urlraw}
+      \verb https://link.aps.org/doi/10.1103/PhysRevE.51.1035
+      \endverb
+      \verb{url}
+      \verb https://link.aps.org/doi/10.1103/PhysRevE.51.1035
+      \endverb
+    \endentry
+    \entry{PhysRevE.64.017101}{article}{}{}
+      \name{author}{3}{}{%
+        {{hash=64c2e9605c732d29eddb8c53a90cfb09}{%
+           family={Jiang},
+           familyi={J\bibinitperiod},
+           given={Rui},
+           giveni={R\bibinitperiod}}}%
+        {{hash=54d8d6f468189954328680dafb0aa561}{%
+           family={Wu},
+           familyi={W\bibinitperiod},
+           given={Qingsong},
+           giveni={Q\bibinitperiod}}}%
+        {{hash=2f708823f13d9b02dfe401dd9ea2f69b}{%
+           family={Zhu},
+           familyi={Z\bibinitperiod},
+           given={Zuojin},
+           giveni={Z\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {American Physical Society}%
+      }
+      \strng{namehash}{d9f680245ae50c7df94a323c08e11cc7}
+      \strng{fullhash}{7bcd65f9bdc1d264166f095edc7013b4}
+      \strng{fullhashraw}{7bcd65f9bdc1d264166f095edc7013b4}
+      \strng{bibnamehash}{7bcd65f9bdc1d264166f095edc7013b4}
+      \strng{authorbibnamehash}{7bcd65f9bdc1d264166f095edc7013b4}
+      \strng{authornamehash}{d9f680245ae50c7df94a323c08e11cc7}
+      \strng{authorfullhash}{7bcd65f9bdc1d264166f095edc7013b4}
+      \strng{authorfullhashraw}{7bcd65f9bdc1d264166f095edc7013b4}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{issue}{1}
+      \field{journaltitle}{Phys. Rev. E}
+      \field{month}{6}
+      \field{title}{Full velocity difference model for a car-following theory}
+      \field{volume}{64}
+      \field{year}{2001}
+      \field{pages}{017101}
+      \range{pages}{1}
+      \verb{doi}
+      \verb 10.1103/PhysRevE.64.017101
+      \endverb
+      \verb{urlraw}
+      \verb https://link.aps.org/doi/10.1103/PhysRevE.64.017101
+      \endverb
+      \verb{url}
+      \verb https://link.aps.org/doi/10.1103/PhysRevE.64.017101
+      \endverb
+    \endentry
+    \entry{Kesting2007GeneralLM}{article}{}{}
+      \name{author}{3}{}{%
+        {{hash=469a2cc63f35c092e5db8571c4cada63}{%
+           family={Kesting},
+           familyi={K\bibinitperiod},
+           given={Arne},
+           giveni={A\bibinitperiod}}}%
+        {{hash=21d5ad5044c3bd92d3980f5df317324d}{%
+           family={Treiber},
+           familyi={T\bibinitperiod},
+           given={Martin},
+           giveni={M\bibinitperiod}}}%
+        {{hash=6f85b2d8868cd1e16ae5c55cf158b6ce}{%
+           family={Helbing},
+           familyi={H\bibinitperiod},
+           given={Dirk},
+           giveni={D\bibinitperiod}}}%
+      }
+      \strng{namehash}{ce34270dc8ccac47c70b95fad772629c}
+      \strng{fullhash}{973751158cca06beb7d9a3dfb81ab650}
+      \strng{fullhashraw}{973751158cca06beb7d9a3dfb81ab650}
+      \strng{bibnamehash}{973751158cca06beb7d9a3dfb81ab650}
+      \strng{authorbibnamehash}{973751158cca06beb7d9a3dfb81ab650}
+      \strng{authornamehash}{ce34270dc8ccac47c70b95fad772629c}
+      \strng{authorfullhash}{973751158cca06beb7d9a3dfb81ab650}
+      \strng{authorfullhashraw}{973751158cca06beb7d9a3dfb81ab650}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{Transportation Research Record}
+      \field{title}{General Lane-Changing Model MOBIL for Car-Following Models}
+      \field{volume}{1999}
+      \field{year}{2007}
+      \field{pages}{86\bibrangedash 94}
+      \range{pages}{9}
+      \verb{urlraw}
+      \verb https://api.semanticscholar.org/CorpusID:39345746
+      \endverb
+      \verb{url}
+      \verb https://api.semanticscholar.org/CorpusID:39345746
+      \endverb
+    \endentry
   \enddatalist
+  \missing{GE2026126769}
 \endrefsection
 \endinput
 
