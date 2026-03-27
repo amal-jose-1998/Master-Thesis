@@ -1,0 +1,138 @@
+\chapter{Complete Window-Level Observation Features}
+\label{appendix:window_features}
+
+This appendix lists the complete set of window-level features used to construct the observation vector of the proposed model. 
+The features are grouped according to their role in the representation. 
+
+\section{Ego-motion features}
+
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \caption{Window-level ego-motion features.}
+    \label{tab:appendix_ego_features}
+    \begin{tabularx}{\textwidth}{@{}p{4.2cm}X@{}}
+        \toprule
+        \textbf{Window feature} & \textbf{Aggregation rule} \\
+        \midrule
+        \texttt{vx\_last} & Most recent longitudinal velocity value in the window \\
+        \texttt{vx\_slope} & Temporal slope of longitudinal velocity over the window \\
+        \texttt{ax\_last} & Most recent longitudinal acceleration value in the window \\
+        \texttt{vy\_last} & Most recent lateral velocity value in the window \\
+        \texttt{vy\_slope} & Temporal slope of lateral velocity over the window \\
+        \texttt{ay\_last} & Most recent lateral acceleration value in the window \\
+        \texttt{ax\_neg\_frac} & Fraction of frames in the window with negative longitudinal acceleration \\
+        \texttt{ax\_pos\_frac} & Fraction of frames in the window with positive longitudinal acceleration \\
+        \texttt{ax\_zero\_frac} & Fraction of frames in the window with zero longitudinal acceleration \\
+        \texttt{ay\_neg\_frac} & Fraction of frames in the window with negative lateral acceleration \\
+        \texttt{ay\_pos\_frac} & Fraction of frames in the window with positive lateral acceleration \\
+        \texttt{ay\_zero\_frac} & Fraction of frames in the window with zero lateral acceleration \\
+        \texttt{jerk\_x\_p95} & 95th percentile of longitudinal jerk within the window \\
+        \texttt{jerk\_y\_p95} & 95th percentile of lateral jerk within the window \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Lane-change evidence and lane geometry}
+
+\begin{table}[!t]
+    \centering
+    \footnotesize
+    \caption{Window-level lane-change and lane-geometry features.}
+    \label{tab:appendix_lane_features}
+    \begin{tabularx}{\textwidth}{@{}p{4.2cm}X@{}}
+        \toprule
+        \textbf{Window feature} & \textbf{Aggregation rule} \\
+        \midrule
+        \texttt{lc\_left\_present} & Binary indicator showing whether a left lane-change event occurs anywhere inside the window \\
+        \texttt{lc\_right\_present} & Binary indicator showing whether a right lane-change event occurs anywhere inside the window \\
+        \texttt{d\_left\_lane\_last} & Most recent distance to the left lane boundary in the window \\
+        \texttt{d\_left\_lane\_min} & Minimum distance to the left lane boundary within the window \\
+        \texttt{d\_right\_lane\_last} & Most recent distance to the right lane boundary in the window \\
+        \texttt{d\_right\_lane\_min} & Minimum distance to the right lane boundary within the window \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Front-risk features}
+
+\begin{table}[!t]
+    \centering
+    \footnotesize
+    \caption{Window-level front-risk features.}
+    \label{tab:appendix_risk_features}
+    \begin{tabularx}{\textwidth}{@{}p{4.2cm}X@{}}
+        \toprule
+        \textbf{Window feature} & \textbf{Aggregation rule} \\
+        \midrule
+        \texttt{front\_thw\_last} & Most recent valid \ac{THW} value within the window \\
+        \texttt{front\_thw\_vfrac} & Fraction of frames in the window for which \ac{THW} is valid \\
+        \texttt{front\_ttc\_min} & Minimum valid \ac{TTC} value within the window \\
+        \texttt{front\_ttc\_vfrac} & Fraction of frames in the window for which \ac{TTC} is valid \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Front-neighbor interaction features}
+
+\begin{table}[!t]
+    \centering
+    \footnotesize
+    \caption{Window-level features related to the front neighbor.}
+    \label{tab:appendix_front_neighbor_features}
+    \begin{tabularx}{\textwidth}{@{}p{4.2cm}X@{}}
+        \toprule
+        \textbf{Window feature} & \textbf{Aggregation rule} \\
+        \midrule
+        \texttt{front\_dx\_min} & Minimum relative longitudinal distance to the front vehicle within the window \\
+        \texttt{front\_dvx\_slope} & Temporal slope of relative longitudinal velocity with respect to the front vehicle \\
+        \texttt{front\_exists\_frac} & Fraction of frames in the window in which a front vehicle is present \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Side-neighbor interaction features}
+
+\begin{table}[!t]
+    \centering
+    \footnotesize
+    \caption{Window-level features related to the side neighbors.}
+    \label{tab:appendix_side_neighbor_features}
+    \begin{tabularx}{\textwidth}{@{}p{4.2cm}X@{}}
+        \toprule
+        \textbf{Window feature} & \textbf{Aggregation rule} \\
+        \midrule
+        \texttt{left\_side\_dvx\_last} & Most recent relative longitudinal velocity with respect to the left-side neighbor \\
+        \texttt{left\_side\_dvx\_slope} & Temporal slope of relative longitudinal velocity with respect to the left-side neighbor \\
+        \texttt{left\_side\_dy\_last} & Most recent relative lateral position with respect to the left-side neighbor \\
+        \texttt{left\_side\_exists\_frac} & Fraction of frames in the window in which a left-side neighbor is present \\
+        \texttt{right\_side\_dvx\_last} & Most recent relative longitudinal velocity with respect to the right-side neighbor \\
+        \texttt{right\_side\_dvx\_slope} & Temporal slope of relative longitudinal velocity with respect to the right-side neighbor \\
+        \texttt{right\_side\_dy\_last} & Most recent relative lateral position with respect to the right-side neighbor \\
+        \texttt{right\_side\_exists\_frac} & Fraction of frames in the window in which a right-side neighbor is present \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\section{Adjacent-front interaction features}
+
+\begin{table}[!t]
+    \centering
+    \footnotesize
+    \caption{Window-level features related to the adjacent front neighbors.}
+    \label{tab:appendix_adjacent_front_features}
+    \begin{tabularx}{\textwidth}{@{}p{4.2cm}X@{}}
+        \toprule
+        \textbf{Window feature} & \textbf{Aggregation rule} \\
+        \midrule
+        \texttt{left\_front\_dx\_last} & Most recent relative longitudinal distance to the left-front neighbor \\
+        \texttt{left\_front\_dvx\_slope} & Temporal slope of relative longitudinal velocity with respect to the left-front neighbor \\
+        \texttt{left\_front\_dy\_last} & Most recent relative lateral position with respect to the left-front neighbor \\
+        \texttt{left\_front\_exists\_frac} & Fraction of frames in the window in which a left-front neighbor is present \\
+        \texttt{right\_front\_dx\_last} & Most recent relative longitudinal distance to the right-front neighbor \\
+        \texttt{right\_front\_dvx\_slope} & Temporal slope of relative longitudinal velocity with respect to the right-front neighbor \\
+        \texttt{right\_front\_dy\_last} & Most recent relative lateral position with respect to the right-front neighbor \\
+        \texttt{right\_front\_exists\_frac} & Fraction of frames in the window in which a right-front neighbor is present \\
+        \bottomrule
+    \end{tabularx}
+\end{table}

@@ -1,0 +1,25 @@
+\begin{tikzpicture}[
+    node distance=1.8cm and 1.8cm,
+    >=Stealth,
+    latent/.style={draw, circle, minimum size=9mm, inner sep=0pt, align=center}
+]
+
+\node[latent] (Sprev) {$S_{t-1}$};
+\node[latent, right=of Sprev] (St) {$S_t$};
+\node[latent, right=of St] (Snext) {$S_{t+1}$};
+
+\node[latent, below=1.5cm of Sprev] (Aprev) {$A_{t-1}$};
+\node[latent, below=1.5cm of St] (At) {$A_t$};
+\node[latent, below=1.5cm of Snext] (Anext) {$A_{t+1}$};
+
+\draw[->] (Sprev) -- (St);
+\draw[->] (St) -- (Snext);
+
+\draw[->] (Sprev) -- (Aprev);
+\draw[->] (St) -- (At);
+\draw[->] (Snext) -- (Anext);
+
+\draw[->] (Aprev) -- (At);
+\draw[->] (At) -- (Anext);
+
+\end{tikzpicture}

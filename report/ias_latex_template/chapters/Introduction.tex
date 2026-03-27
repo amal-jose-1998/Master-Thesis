@@ -6,10 +6,10 @@ sensing systems, computing, and communication technologies. These innovations co
 safety, and, most importantly, reshape future mobility.
 
 \par However, fully autonomous traffic systems do not yet exist anywhere in the world. \acp{AV} will have to operate in mixed traffic together with 
-\acp{SAV} and \acp{HDV}. This creates important challenges because different road users provide different types and amounts of information. 
+\acp{HDV}. This creates important challenges because different road users provide different types and amounts of information. 
 While \acp{AV} can rely on
 rich on-board sensing and may also use \ac{V2X} communication \cite{abedi2025precisehdvpositioningsafetyaware}, 
-the intentions of human drivers are not directly observable and must be inferred from their behaviour in traffic \cite{Schwarting2018}. 
+the intentions of human drivers are not directly observable and must be inferred from their behavior in traffic \cite{Schwarting2018}. 
 Consequently, their intentions and decisions cannot be measured directly,  
 but instead have to be estimated from observable cues such as vehicle motion, lane changes, relative positions, and interactions with nearby vehicles.
 
@@ -26,7 +26,8 @@ Probabilistic models provide a useful middle ground because they can explicitly 
 
 \par This thesis focuses on probabilistic modeling of high-level human driving behavior in highway traffic. 
 Rather than building the full control or planning stack of an \ac{AV}, this work addresses an important upstream problem: predicting the likely future maneuvers of surrounding human drivers. 
-The goal is to develop a model that can estimate future driver actions while also representing uncertainty in a clear and interpretable way.
+The goal is to develop a model that can estimate likely future maneuvers while also representing uncertainty in a clear and interpretable way.
+In this thesis, future maneuvers are represented internally as discrete action states.
 
 \par To achieve this, the thesis uses a \ac{DBN} to model the temporal relationship between observable driving features and hidden behavioral states. 
 Since driver intentions are not directly observable, the model represents them through latent variables and infers them probabilistically from trajectory-based observations \cite{murphy2002dynamic}. 
@@ -34,7 +35,7 @@ In particular, the \ac{DBN} is designed to capture latent factors such as drivin
 The model is trained and evaluated using the highD dataset, a naturalistic highway driving dataset containing detailed vehicle trajectory recordings \cite{krajewski2018highddatasetdronedataset}. From these trajectories, 
 relevant features are extracted to describe motion, surrounding traffic context, and interaction behavior. These features serve as observations for the \ac{DBN}.
 
-\par The thesis studies whether such a probabilistic framework can provide accurate, interpretable, and computationally efficient short-horizon predictions of human driving actions. 
-In particular, it examines the suitability of the dataset, the structure of the \ac{DBN}, the usefulness of the selected observation features, the quality of future action prediction, 
+\par The thesis studies whether such a probabilistic framework can provide accurate, interpretable, and computationally efficient short-horizon predictions of future human driving maneuvers. 
+In particular, it examines the suitability of the dataset, the structure of the \ac{DBN}, the usefulness of the selected observation features, the quality of future maneuver prediction, 
 the interpretability of the learned states, and the runtime performance of the model for online use.
 

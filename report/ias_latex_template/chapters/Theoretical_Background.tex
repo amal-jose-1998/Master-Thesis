@@ -74,12 +74,12 @@ This principle forms the basis for probabilistic inference in many models used f
 
 \section{Probabilistic Graphical Models}
 
-Probabilistic graphical models provide an efficient way to represent complex joint probability distributions over many \acp{RV} \cite{pml1Book}, \cite{koller2009probabilistic}. 
+Probabilistic graphical models provide an efficient way to represent complex joint probability distributions over many \acp{RV} \cite{pml1Book,koller2009probabilistic}. 
 As the number of variables increases, modeling the full joint distribution becomes difficult because the dependencies between variables also increase. 
 Probabilistic graphical models address this problem by representing \acp{RV} and their probabilistic relationships using a graph. 
 In this representation, nodes correspond to \acp{RV}, while edges describe dependencies between them. 
 The graph structure also encodes conditional independence assumptions. These assumptions allow the joint probability distribution to 
-be factorised into simpler \acp{CPD}.
+be factorized into simpler \acp{CPD}.
 
 \par There are two main types of probabilistic graphical models:
 \begin{enumerate}
@@ -97,19 +97,19 @@ A \ac{BN} is a directed probabilistic graphical model that represents a set of \
 Each variable in the network is associated with a \ac{CPD}, which describes how the variable depends on its parent variables. 
 These \acp{CPD} are often represented using \acp{CPT}. If a variable has no parents in the graph, its distribution is given by a prior probability distribution. 
 
-\par In general, the joint probability distribution of all variables in a \ac{BN} can be factorised according to the graph structure. For a set of variables 
+\par In general, the joint probability distribution of all variables in a \ac{BN} can be factorized according to the graph structure. For a set of variables 
 $X_1, X_2, \dots, X_n$, the joint distribution can be written as
 \begin{equation}
 P(X_1, X_2, \dots, X_n) = \prod_{i=1}^{n} P(X_i \mid \mathrm{Pa}(X_i))
 \label{eq:bn_factorization}
 \end{equation}
 
-Here, $\mathrm{Pa}(X_i)$ denotes the set of parent variables of $X_i$ in the graph. This factorisation reflects the conditional independence 
+Here, $\mathrm{Pa}(X_i)$ denotes the set of parent variables of $X_i$ in the graph. This factorization reflects the conditional independence 
 assumption embedded in the network structure.
 
 \begin{figure}[htbp]
     \centering
-    \input{example_figures/BayesianNetwork}
+    \input{figures/BayesianNetwork}
     \caption{Example of a \ac{BN}}
     \label{fig:bn}
 \end{figure}
@@ -131,7 +131,7 @@ only on the previous state and not on earlier states.
 
 \begin{figure}[htbp]
     \centering
-    \input{example_figures/DynamicBayesianNetwork}
+    \input{figures/DynamicBayesianNetwork}
     \caption{Two-slice representation of a \ac{DBN}.}
     \label{fig:dbn}
 \end{figure}
@@ -159,7 +159,7 @@ based on observed vehicle motion and traffic context.
 \section{Inference in Chain-Structured DBNs}
 
 Inference in probabilistic graphical models refers to computing the probability distribution of unknown variables given observed evidence. 
-In temporal models such as \acp{DBN}, this involves estimating the distribution of latent states from a sequence of observations \cite{pml1Book}, \cite{koller2009probabilistic}.
+In temporal models such as \acp{DBN}, this involves estimating the distribution of latent states from a sequence of observations \cite{pml1Book,koller2009probabilistic}.
 
 \par For the \ac{DBN} shown in \autoref{fig:dbn}, the latent variable $Z_t$ may represent hidden quantities such as driver style or maneuver state. 
 These variables are not directly observable and must therefore be inferred from measurable quantities such as vehicle motion and the surrounding traffic context. 
@@ -293,7 +293,7 @@ This posterior transition probability is useful in parameter learning, especiall
 
 
 
-\section{Parameter Learning using Maximum Likelihood Estimation}
+\section{Parameter Learning in Latent-State Models}
 
 A probabilistic model contains several unknown parameters that must be learned from data. For a chain-structured temporal model such as the one shown in \autoref{fig:dbn}, 
 these parameters can be collectively written as

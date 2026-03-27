@@ -1,0 +1,20 @@
+\begin{tikzpicture}[
+    node distance=1.6cm and 1.8cm,
+    >=Stealth,
+    latent/.style={draw, circle, minimum size=9mm, inner sep=0pt, align=center},
+    block/.style={draw, rounded corners=2pt, minimum width=2.9cm, minimum height=0.95cm, align=center},
+    obs/.style={draw, rectangle, minimum width=11mm, minimum height=8mm, align=center}
+]
+
+\node[latent] (S) {$S_t$};
+\node[latent, right=2.6cm of S] (A) {$A_t$};
+
+\node[block, below=1.6cm of $(S)!0.5!(A)$] (E) {Joint emission\\$\theta_{s_t,a_t}$};
+
+\node[obs, below=1.6cm of E] (O) {$O_t$};
+
+\draw[->] (S) -- (E);
+\draw[->] (A) -- (E);
+\draw[->] (E) -- (O);
+
+\end{tikzpicture}
