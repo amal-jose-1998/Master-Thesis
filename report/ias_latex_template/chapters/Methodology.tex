@@ -168,6 +168,7 @@ indicating that most frames correspond to near-steady motion, while stronger acc
 The longitudinal velocity distribution in \autoref{fig:data_analysis_vx_global} spans a broad range of values and exhibits a multimodal structure.
 This is mainly caused by differences between vehicle classes, with trucks concentrated at lower speeds and cars occupying a wider and generally higher-speed range. 
 These class-dependent differences show that raw continuous features can have different natural ranges depending on the vehicle type.  
+Class-wise kinematic distributions for cars and trucks are provided in Appendix~\ref{appendix:classwise_plots}. 
 For this reason, continuous variables are standardized before training, as described later in the training subsection.
 
 \begin{figure}[!t]
@@ -227,6 +228,7 @@ indicating that some vehicles undergo substantial longitudinal speed and acceler
 In contrast, \autoref{fig:std_ay_global} shows that $\mathrm{std}(a_y)$ remains concentrated at low values, which is consistent with lateral acceleration being 
 close to zero except during lane changes.
 A similar pattern appears in \autoref{fig:std_vy_global}, although the visible tail suggests that some trajectories contain stronger lateral motion. 
+Class-wise trajectory-level variability distributions are provided in Appendix~\ref{appendix:classwise_plots}. 
 These results support the use of variability-related window features, since instantaneous values alone do not capture whether a trajectory is stable or dynamically changing over time.
 
 
@@ -370,24 +372,6 @@ Both use the same latent transition structure and differ only in how the observa
 In both cases, the observation vector is split into continuous and binary components. 
 The continuous part is modeled with diagonal Gaussian distributions, while the binary part is modeled with Bernoulli distributions.
 
-\begin{figure}[htbp]
-    \centering
-    \begin{subfigure}[t]{0.48\textwidth}
-        \centering
-        \input{figures/poeEmission}
-        \caption{Product-of-experts emission.}
-        \label{fig:poe_emission}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}[t]{0.48\textwidth}
-        \centering
-        \input{figures/hierarchicalEmission}
-        \caption{Hierarchical emission.}
-        \label{fig:hierarchical_emission}
-    \end{subfigure}
-    \caption{Emission model variants considered in the proposed DBN.}
-    \label{fig:emission_variants}
-\end{figure}
 
 \subsubsection{Product-of-Experts Emission}
 In the \ac{PoE} formulation, the observation likelihood is decomposed into two experts: one conditioned only on the style state and one 
@@ -418,6 +402,26 @@ evaluated for all combinations of style and action states at each time step.
 These values are then used together with the structured transition model during forward--backward inference and EM training. 
 Thus, the proposed framework keeps the latent dynamics fixed at the DBN level, while allowing different observation models to be 
 compared within the same inference and training pipeline.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \input{figures/poeEmission}
+        \caption{Product-of-experts emission.}
+        \label{fig:poe_emission}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \input{figures/hierarchicalEmission}
+        \caption{Hierarchical emission.}
+        \label{fig:hierarchical_emission}
+    \end{subfigure}
+    \caption{Emission model variants considered in the proposed DBN.}
+    \label{fig:emission_variants}
+\end{figure}
+
 
 \section{Training and Inference}
 \subsection{Prediction Explanation}

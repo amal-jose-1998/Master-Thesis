@@ -1,15 +1,15 @@
 [0] Config.pm:328> INFO - This is Biber 2.21
 [1] Config.pm:331> INFO - Logfile is 'Name_Thema.blg'
-[313] biber-MSWIN64:342> INFO - === 
-[411] Biber.pm:421> INFO - Reading 'Name_Thema.bcf'
-[714] Biber.pm:1002> INFO - Found 19 citekeys in bib section 0
-[751] Biber.pm:4487> INFO - Processing section 0
-[783] Biber.pm:4678> INFO - Looking for bibtex file 'bibliography.bib' for section 0
-[967] bibtex.pm:1713> INFO - LaTeX decoding ...
-[1031] bibtex.pm:1519> INFO - Found BibTeX data source 'bibliography.bib'
-[1490] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
-[1491] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
-[1491] Biber.pm:4307> INFO - Sorting list 'none/global//global/global/global' of type 'entry' with template 'none' and locale 'en-US'
-[1491] Biber.pm:4313> INFO - No sort tailoring available for locale 'en-US'
-[1549] bbl.pm:676> INFO - Writing 'Name_Thema.bbl' with encoding 'UTF-8'
-[1586] bbl.pm:779> INFO - Output to Name_Thema.bbl
+[168] biber-MSWIN64:342> INFO - === 
+[222] Biber.pm:421> INFO - Reading 'Name_Thema.bcf'
+[405] Biber.pm:1002> INFO - Found 64 citekeys in bib section 0
+[428] Biber.pm:4487> INFO - Processing section 0
+[443] Biber.pm:4678> INFO - Looking for bibtex file 'bibliography.bib' for section 0
+[521] bibtex.pm:1713> INFO - LaTeX decoding ...
+[659] bibtex.pm:1519> INFO - Found BibTeX data source 'bibliography.bib'
+[1403] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[1403] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[1403] Biber.pm:4307> INFO - Sorting list 'none/global//global/global/global' of type 'entry' with template 'none' and locale 'en-US'
+[1404] Biber.pm:4313> INFO - No sort tailoring available for locale 'en-US'
+[1479] bbl.pm:676> INFO - Writing 'Name_Thema.bbl' with encoding 'UTF-8'
+[1672] bbl.pm:779> INFO - Output to Name_Thema.bbl
