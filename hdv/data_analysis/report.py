@@ -270,13 +270,13 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
         pbar.update(1)
 
         # ---- Step 6: Window feasibility (lane-change) ----
-        cfg_w = WindowFeasibilityConfig(window_len=150, stride=10, min_gap_frames=10, lc_key="lc", lane_key="lane_id",)
+        cfg_w = WindowFeasibilityConfig(window_len=50, stride=10, min_gap_frames=10, lc_key="lc", lane_key="lane_id",)
         save_window_feasibility_report(out_dir=out_dir / "window_feasibility_lc", trajs=trajs, cfg=cfg_w)
         pbar.update(1)
 
         # ---- Step 7: Window feasibility (longitudinal) ----
         thr = compute_longitudinal_thresholds_from_df(df)
-        W = 150
+        W = 50
         min_frames = int(math.ceil(0.05 * W))
         cfg_long = LongitudinalFeasibilityConfig(
             window_len=W,

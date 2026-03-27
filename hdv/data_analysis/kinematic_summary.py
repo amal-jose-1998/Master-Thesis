@@ -26,6 +26,43 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
+_KINEMATIC_SIGNAL_UNITS = {
+   "vx": "m/s",
+   "vy": "m/s",
+   "ax": "m/s²",
+   "ay": "m/s²",
+}
+
+_CLASS_HIST_COLORS = {
+    "car": "#b7e4c7",   # light green
+    "truck": "#f4a3a3", # light red
+}
+
+_DEFAULT_HIST_COLOR = "#8ecae6"
+
+
+def _signal_label_with_unit(signal):
+    """
+    Return a display label for a signal with unit in square brackets when known.
+
+    Examples
+    --------
+    vx -> "vx [m/s]"
+    ax -> "ax [m/s²]"
+    unknown -> "unknown"
+    """
+    unit = _KINEMATIC_SIGNAL_UNITS.get(str(signal))
+    return f"{signal} [{unit}]" if unit else str(signal)
+
+
+def _std_signal_label_with_unit(signal):
+    """
+    Return a display label for std(signal) with the base signal unit.
+    """
+    unit = _KINEMATIC_SIGNAL_UNITS.get(str(signal))
+    return f"std({signal}) [{unit}]" if unit else f"std({signal})"
+
+
 # =========================================================
 # Basic validation utilities
 # =========================================================
@@ -153,6 +190,7 @@ def save_hist_1d(
     xlim_quantiles=(0.01, 0.99),
     show_markers=True,
     show_stats_box=True,
+    hist_color=None,
 ):
     """
     Save a 1D histogram plot with summary markers and an annotation box.
@@ -179,6 +217,8 @@ def save_hist_1d(
         If True, draws mean/median/p10/p90 vertical lines and adds legend.
     show_stats_box : bool
         If True, shows a stats textbox in the upper-right corner.
+    hist_color : str or None
+        Histogram fill color. Uses a default if None.
     """
     x = pd.to_numeric(pd.Series(x), errors="coerce").dropna()
     if x.empty:
@@ -195,6 +235,7 @@ def save_hist_1d(
         bins=bins,
         density=True,
         alpha=0.80,
+        color=(hist_color or _DEFAULT_HIST_COLOR),
         edgecolor="black",
         linewidth=0.3,
     )
@@ -423,36 +464,39 @@ def run_kinematics_analysis(
 
     # ---- Histograms ----
     for sig in signals:
+        sig_label = _signal_label_with_unit(sig)
         save_hist_1d(
             dfk[sig],
-            f"{sig} (vehicle-centric) - global",
-            sig,
+            f"{sig_label} (vehicle-centric) - global",
+            sig_label,
             hist_dir / f"{sig}__global.png",
         )
 
         for dd in (1, 2):
             save_hist_1d(
                 subset_dir(dd)[sig],
-                f"{sig} (vehicle-centric) - direction={dd}",
-                sig,
+                f"{sig_label} (vehicle-centric) - direction={dd}",
+                sig_label,
                 hist_dir / f"{sig}__dir{dd}.png",
             )
 
         for cls in ("car", "truck"):
             save_hist_1d(
                 subset_class(cls)[sig],
-                f"{sig} (vehicle-centric) - class={cls}",
-                sig,
+                f"{sig_label} (vehicle-centric) - class={cls}",
+                sig_label,
                 hist_dir / f"{sig}__class_{cls}.png",
+                hist_color=_CLASS_HIST_COLORS[cls],
             )
 
         for dd in (1, 2):
             for cls in ("car", "truck"):
                 save_hist_1d(
                     subset_dir_class(dd, cls)[sig],
-                    f"{sig} (vehicle-centric) - dir={dd}, class={cls}",
-                    sig,
+                    f"{sig_label} (vehicle-centric) - dir={dd}, class={cls}",
+                    sig_label,
                     hist_dir / f"{sig}__dir{dd}__class_{cls}.png",
+                    hist_color=_CLASS_HIST_COLORS[cls],
                 )
 
     # ---- Variability (per-vehicle std) ----
@@ -462,11 +506,19 @@ def run_kinematics_analysis(
         vals = per_vehicle_std(df_sub, sig, id_cols, min_T_std)
         if vals.size == 0:
             return
+        cls = None
+        if tag.startswith("class_"):
+            cls = tag.replace("class_", "", 1)
+        elif "__class_" in tag:
+            cls = tag.split("__class_", 1)[1]
+
+        sig_std_label = _std_signal_label_with_unit(sig)
         save_hist_1d(
             vals,
-            f"std({sig}) (vehicle-centric) - {tag}",
-            f"std({sig})",
+            f"{sig_std_label} (vehicle-centric) - {tag}",
+            sig_std_label,
             var_dir / f"std__{sig}__{tag}.png",
+            hist_color=_CLASS_HIST_COLORS.get(cls),
         )
 
     for sig in signals:
@@ -555,19 +607,21 @@ def run_kinematics_analysis_motion_centric(
 
     # ---- Histograms ----
     for sig in signals:
+        sig_label = _signal_label_with_unit(sig)
         save_hist_1d(
             dfk[sig],
-            f"{sig} (motion-centric) - global",
-            sig,
+            f"{sig_label} (motion-centric) - global",
+            sig_label,
             hist_dir / f"{sig}__global.png",
         )
 
         for cls in ("car", "truck"):
             save_hist_1d(
                 subset_class(cls)[sig],
-                f"{sig} (motion-centric) - class={cls}",
-                sig,
+                f"{sig_label} (motion-centric) - class={cls}",
+                sig_label,
                 hist_dir / f"{sig}__class_{cls}.png",
+                hist_color=_CLASS_HIST_COLORS[cls],
             )
 
     # ---- Variability (per-vehicle std) ----
@@ -577,11 +631,15 @@ def run_kinematics_analysis_motion_centric(
         vals = per_vehicle_std(df_sub, sig, id_cols, min_T_std)
         if vals.size == 0:
             return
+        cls = tag.replace("class_", "", 1) if tag.startswith("class_") else None
+
+        sig_std_label = _std_signal_label_with_unit(sig)
         save_hist_1d(
             vals,
-            f"std({sig}) (motion-centric) - {tag}",
-            f"std({sig})",
+            f"{sig_std_label} (motion-centric) - {tag}",
+            sig_std_label,
             var_dir / f"std__{sig}__{tag}.png",
+            hist_color=_CLASS_HIST_COLORS.get(cls),
         )
 
     for sig in signals:

@@ -1,6 +1,6 @@
 {
   "config": {
-    "window_len": 150,
+    "window_len": 50,
     "stride": 10,
     "min_gap_frames": 10,
     "lc_key": "lc",
@@ -8,8 +8,8 @@
   },
   "trajectories": {
     "num_total": 50543,
-    "num_usable_T_ge_W": 50110,
-    "num_shorter_than_W": 433,
+    "num_usable_T_ge_W": 50455,
+    "num_shorter_than_W": 88,
     "length_stats": {
       "count": 50543,
       "min": 8,
@@ -20,21 +20,21 @@
     }
   },
   "lane_change_events": {
-    "num_events_total": 6420,
-    "num_events_valid_centered": 3614,
-    "num_events_dropped_boundary": 2806,
-    "valid_centered_rate": 0.5629283489096574,
+    "num_events_total": 6436,
+    "num_events_valid_centered": 5501,
+    "num_events_dropped_boundary": 935,
+    "valid_centered_rate": 0.8547234307022996,
     "event_pos_norm_stats": {
-      "count": 3614,
-      "p10": 0.28142045454545456,
-      "median": 0.5,
-      "p90": 0.7196177407498163
+      "count": 5501,
+      "p10": 0.1590909090909091,
+      "median": 0.49201277955271566,
+      "p90": 0.8300492610837439
     }
   },
   "windows": {
-    "total_sliding_windows": 1214514,
-    "total_lc_windows": 54354,
-    "total_kl_windows": 1160160,
-    "lc_window_fraction": 0.04475370395071609
+    "total_sliding_windows": 1717548,
+    "total_lc_windows": 27966,
+    "total_kl_windows": 1689582,
+    "lc_window_fraction": 0.0162825143751441
   }
 }
