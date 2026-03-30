@@ -1,22 +1,30 @@
 \chapter{Methodology}
+\label{chap:methodology}
 
 This chapter presents the methodology used to model and predict short-horizon \ac{HDV} maneuvers in highway traffic. 
-Starting from raw vehicle trajectories in the highD dataset, the proposed pipeline constructs a vehicle-centric representation, 
+Starting from raw vehicle trajectories in the highD dataset, the proposed pipeline builds a vehicle-centric representation, 
 derives interaction and risk-related features, aggregates them over short temporal windows, and uses the resulting observation sequences 
-to train and evaluate a hierarchical \ac{DBN}.
+to train and evaluate the proposed \ac{DBN}.
+
+\par In highway traffic, driver behavior cannot be described deterministically, since the same traffic situation may permit several plausible responses.  
+For example, a driver approaching a slower vehicle may 
+choose to brake, maintain speed, or initiate a lane change. 
+The proposed methodology therefore adopts a probabilistic formulation that can represent uncertainty over possible maneuvers rather than predicting only a single deterministic outcome.
 
 \par The target of prediction is a discrete maneuver class rather than an exact continuous future trajectory. 
 The model therefore focuses on high-level action categories such as acceleration, braking, lane changes, and stable following.
 To support this prediction task, the observation space combines ego-motion variables with contextual information from 
 surrounding vehicles and safety-related quantities that describe the current traffic situation.
 
-\par The remainder of this chapter describes the overall framework, the dataset used in this work, the preprocessing and 
-feature-engineering pipeline, the window-based observation representation, the proposed \ac{DBN} structure, 
-and the training and inference procedure. It also introduces the prediction-explanation procedure used to provide a local 
-interpretation of the inferred latent state and maneuver prediction.
+\par The remainder of this chapter describes the overall framework in \autoref{sec:proposed_framework}, 
+the dataset in \autoref{sec:dataset}, the preprocessing and feature-engineering pipeline in \autoref{sec:data_preparation}, 
+the proposed \ac{DBN} model in \autoref{sec:proposed_dbn_model}, the training procedure in \autoref{sec:training_validation},  
+the inference and evaluation procedure in \autoref{sec:inference_evaluation}, 
+and the semantic interpretation of latent states in \autoref{sec:semantic_interpretation_latent_states}.
 
 
 \section{Proposed Framework}
+\label{sec:proposed_framework}
 
 The proposed framework converts raw highD trajectory data into structured temporal observations for maneuver prediction.
 Its main stages are data preparation, feature extraction, temporal window aggregation, \ac{DBN} training, and inference.
@@ -26,17 +34,22 @@ Based on the ego vehicle and its local traffic environment, additional features 
 lane-related information, and risk-related properties such as \ac{THW} and \ac{TTC}.
 These steps provide a compact description of the current driving situation beyond the ego vehicle alone.
 
-\par Since maneuver prediction depends on recent temporal context, the frame-level signals are not used directly as isolated observations.
+\par Since maneuver prediction depends on the current traffic context and its recent evolution, the framework must represent both 
+uncertainty and temporal behavior.
+For this reason, the frame-level signals are not used directly as isolated observations.
 Instead, they are aggregated over short sliding windows to form a window-based sequence representation. 
 Each window summarizes recent motion and interaction patterns and serves as one observation for the probabilistic model.
 
-\par The prediction model is formulated as a hierarchical \ac{DBN} with two discrete latent variables: a driving-style state and an action state. 
+\par The prediction model is formulated as a \ac{DBN} with two discrete latent variables: a driving-style state and an action state. 
 This structure enables the model to represent both broader traffic-regime differences and maneuver-specific behavioral variation. 
 The engineered window features are linked to the latent states through the emission model, while the temporal evolution of behavior is modeled through the state transitions.
 
 \par Model parameters are estimated from the training data using an \ac{EM}-based learning procedure. 
-To avoid information leakage, the windowized sequences are split at vehicle level into training, validation, and test sets before model fitting. 
-After training, the learned model is used to infer the posterior distribution over latent states for new observation sequences and to predict the current maneuver distribution.
+To avoid information leakage, the windowized sequences are divided at the vehicle-sequence level into 70\% training, 10\% validation, and 20\% test data before model fitting. 
+All windows derived from the same vehicle trajectory, identified by $(\texttt{recording\_id}, \texttt{vehicle\_id})$, are kept in the same split.
+The training set is used for parameter estimation, the validation set is used to monitor validation log-likelihood and to apply early stopping during \ac{EM} training, 
+and the test set is reserved for the final evaluation. 
+After training, the learned model is used to infer the posterior distribution over latent states for new observation sequences and to predict the future maneuver distribution.
 
 \par An overview of the complete framework is shown in Figure~\ref{fig:proposed_framework}. 
 The individual stages are described in detail in the following sections.
@@ -48,8 +61,9 @@ The individual stages are described in detail in the following sections.
     \label{fig:proposed_framework}
 \end{figure}
 
-\section{Dataset}
 
+\section{Dataset}
+\label{sec:dataset}
 This thesis uses the highD dataset \cite{krajewski2018highddatasetdronedataset}, a naturalistic highway-traffic dataset recorded from drone videos on German highways.
 Its aerial perspective provides frame-level trajectories together with surrounding-vehicle information, making it well suited for the analysis of human driving behavior in highway scenarios.
 
@@ -68,7 +82,7 @@ context available for each target vehicle.
 \par For each vehicle, highD provides frame-level trajectory variables such as longitudinal and lateral position, velocity, and acceleration.
 It also includes lane-related information, driving-direction labels, and identifiers for neighboring vehicles in relevant surrounding positions.
 In addition, the dataset provides traffic-safety indicators such as \ac{TTC} and \ac{THW}, which support the construction of interaction and risk-related features. 
-These signals form the basis for the preprocessing and feature-engineering pipeline described in the next sections.
+These signals form the basis for the preprocessing and feature-engineering pipeline described in \autoref{sec:data_preparation}.
 
 \par For the selected subset, 50,543 vehicle trajectories are available after loading the chosen recordings. 
 With a window length of \(W=50\) frames, 50,455 trajectories satisfy \(T \geq W\), while only 88 are shorter than the required window length.  
@@ -76,12 +90,13 @@ The trajectory lengths are well suited for temporal modeling, with a 10th percen
 This indicates that the selected subset is sufficiently large and temporally rich for constructing window-based observation sequences.
 
 \section{Data Preparation and Preprocessing}
+\label{sec:data_preparation}
 
 \subsection{Preprocessing Pipeline}
-
+\label{subsec:preprocessing_pipeline}
 The raw highD files are first merged into a unified per-frame representation that combines trajectory data with vehicle-level and recording-level metadata. 
-Since the dataset contains multiple recordings, each trajectory is uniquely identified by the pair (recording\_id, vehicle\_id). In addition, 
-vehicle-center coordinates are computed from the original bounding-box positions in order to provide a consistent geometric reference for the subsequent 
+Since the dataset contains multiple recordings, each trajectory is uniquely identified by the pair (recording\_id, vehicle\_id). Also, 
+vehicle-center coordinates are computed from the original bounding-box positions to provide a consistent geometric reference for the subsequent 
 construction of context features. 
 
 \par As the selected recordings contain traffic moving in two opposite roadway directions, the raw image-based coordinates cannot be used directly 
@@ -91,7 +106,7 @@ This transformation adjusts the sign convention of the longitudinal and lateral 
 As a result, the learned model receives a unified representation in which the same maneuver follows the same sign convention regardless of the original roadway direction.
 
 
-\par At preprocessing stage, the available neighboring positions include the front, rear, left-front, left-side, left-rear, right-front, right-side, and right-rear slots. 
+\par At the preprocessing stage, the available neighboring positions include the front, rear, left-front, left-side, left-rear, right-front, right-side, and right-rear slots. 
 For each available neighbor, binary existence flags are created and relative kinematic quantities are derived in the form of relative longitudinal distance, relative lateral distance, relative longitudinal velocity, and relative lateral velocity. 
 Missing neighbors remain explicitly marked through the corresponding existence indicators, while the relative features remain undefined when no matching neighbor state is available. 
 
@@ -110,7 +125,7 @@ but they are excluded here as a simplifying design choice to limit feature dimen
 \par In addition to interaction features, the preprocessing step derives lane-related and risk-related quantities. 
 Distances to the left and right lane boundaries are computed from the recording metadata and the ego-vehicle center position.
 The lane-change indicator is obtained from changes in lane ID and represented as a ternary variable corresponding to lane change to left, no lane change, and lane change to right. 
-The front-interaction safety signals provided by highD are mapped to the standardized variables \texttt{front\_thw} and \texttt{front\_ttc}. 
+The front-interaction safety signals provided by highD are mapped to the variables \texttt{front\_thw} and \texttt{front\_ttc}. 
 Furthermore, ego-vehicle jerk is computed from the frame-to-frame change in longitudinal and lateral acceleration.
 
 
@@ -119,13 +134,39 @@ This produces a consistent per-frame representation that serves as the basis for
 
 
 \subsection{Data Analysis for Feature Design}
-
-Before defining the final observation vector, an exploratory analysis of the highD varables was carried out to understand the statistical behaviour of the available signals 
+\label{subsec:data_analysis_feature_design}
+Before defining the final observation vector, an exploratory analysis of the highD variables was carried out to understand the statistical behaviour of the available signals 
 and to identify features that are informative. The analysis focused mainly on kinematic variables, namely longitudinal and lateral acceleration 
 $(a_x, a_y)$, longitudinal and lateral velocity $(v_x, v_y)$, and simple lane-change indicators. 
 
 
-\begin{figure}[htbp]
+
+\par As shown in \autoref{fig:data_analysis_ax_global}, the distribution of $a_x$ is centred near zero but has visible tails on both sides, 
+indicating that most frames correspond to near-steady motion, while stronger acceleration and braking occur less often. 
+The longitudinal velocity distribution in \autoref{fig:data_analysis_vx_global} spans a broad range of values and exhibits a multimodal structure.
+This is mainly caused by differences between vehicle classes, with trucks concentrated at lower speeds and cars occupying a wider and generally higher-speed range. 
+These class-dependent differences show that raw continuous features can have different natural ranges depending on the vehicle type.  
+Class-wise kinematic distributions for cars and trucks are provided in Appendix~\ref{appendix:classwise_plots}. 
+For this reason, continuous variables are normalized before training, as described in \autoref{sec:training_validation}.
+
+
+
+On the other hand, the lateral variables are much more concentrated around zero.  
+In \autoref{fig:data_analysis_ay_global} and \autoref{fig:data_analysis_vy_global}, both $a_y$ and $v_y$ show sharp peaks near zero, 
+which is expected because most vehicles remain within their lane for most of the time.
+However, the non-zero tails still reflect lateral adjustments and lane-change-related motion. 
+Together, these observations support the inclusion of both longitudinal and lateral kinematic variables, 
+since the former describe speed adaptation and car-following behaviour, whereas the latter provide cues for lateral maneuvers.
+
+
+\par In addition to the raw frame-level signals, the variability of each kinematic variable was also analysed at trajectory level. 
+For each vehicle trajectory, the standard deviation of $a_x$, $a_y$, $v_x$, and $v_y$ was computed over time, producing one variability value per trajectory.  
+Unlike the raw kinematic distributions, these plots do not describe the absolute values of the signals, but rather how strongly they 
+fluctuate within individual trajectories.
+The resulting distributions are shown in \autoref{fig:std_ax_global} to \autoref{fig:std_vy_global}. 
+
+
+\begin{figure}[h]
     \centering
 
     \begin{subfigure}[t]{0.48\textwidth}
@@ -163,15 +204,17 @@ $(a_x, a_y)$, longitudinal and lateral velocity $(v_x, v_y)$, and simple lane-ch
 \end{figure}
 
 
-\par As shown in \autoref{fig:data_analysis_ax_global}, the distribution of $a_x$ is centred near zero but has visible tails on both sides, 
-indicating that most frames correspond to near-steady motion, while stronger acceleration and braking occur less often. 
-The longitudinal velocity distribution in \autoref{fig:data_analysis_vx_global} spans a broad range of values and exhibits a multimodal structure.
-This is mainly caused by differences between vehicle classes, with trucks concentrated at lower speeds and cars occupying a wider and generally higher-speed range. 
-These class-dependent differences show that raw continuous features can have different natural ranges depending on the vehicle type.  
-Class-wise kinematic distributions for cars and trucks are provided in Appendix~\ref{appendix:classwise_plots}. 
-For this reason, continuous variables are standardized before training, as described later in the training subsection.
 
-\begin{figure}[!t]
+\par The variability analysis shows that longitudinal motion is generally more dynamic than lateral motion.
+In \autoref{fig:std_ax_global} and \autoref{fig:std_vx_global}, both $\mathrm{std}(a_x)$ and $\mathrm{std}(v_x)$ exhibit broader distributions with long right tails, 
+indicating that some vehicles undergo substantial longitudinal speed and acceleration changes.
+In contrast, \autoref{fig:std_ay_global} shows that $\mathrm{std}(a_y)$ remains concentrated at low values, which is consistent with lateral acceleration being 
+close to zero except during lane changes.
+A similar pattern appears in \autoref{fig:std_vy_global}, although the visible tail suggests that some trajectories contain stronger lateral motion. 
+Class-wise trajectory-level variability distributions are provided in Appendix~\ref{appendix:classwise_plots}. 
+These results support the use of variability-related window features, since instantaneous values alone do not capture whether a trajectory is stable or dynamically changing over time.
+
+\begin{figure}[h]
     \centering
 
     \begin{subfigure}[t]{0.48\textwidth}
@@ -207,30 +250,6 @@ For this reason, continuous variables are standardized before training, as descr
     \caption{Global trajectory-level variability distributions of the main kinematic variables.}
     \label{fig:variability_global_kinematics}
 \end{figure}
-
-On the other hand, the lateral variables are much more concentrated around zero.  
-In \autoref{fig:data_analysis_ay_global} and \autoref{fig:data_analysis_vy_global}, both $a_y$ and $v_y$ show sharp peaks near zero, 
-which is expected because most vehicles remain within their lane for most of the time.
-However, the non-zero tails still reflect lateral adjustments and lane-change-related motion. 
-Together, these observations support the inclusion of both longitudinal and lateral kinematic variables, 
-since the former describe speed adaptation and car-following behaviour, whereas the latter provide cues for lateral maneuvers.
-
-
-\par In addition to the raw frame-level signals, the variability of each kinematic variable was also analysed at trajectory level. 
-For each vehicle trajectory, the standard deviation of $a_x$, $a_y$, $v_x$, and $v_y$ was computed over time, producing one variability value per trajectory.  
-Unlike the raw kinematic distributions, these plots do not describe the absolute values of the signals, but rather how strongly they 
-fluctuate within individual trajectories.
-The resulting distributions are shown in \autoref{fig:std_ax_global} to \autoref{fig:std_vy_global}. 
-
-\par The variability analysis shows that longitudinal motion is generally more dynamic than lateral motion.
-In \autoref{fig:std_ax_global} and \autoref{fig:std_vx_global}, both $\mathrm{std}(a_x)$ and $\mathrm{std}(v_x)$ exhibit broader distributions with long right tails, 
-indicating that some vehicles undergo substantial longitudinal speed and acceleration changes.
-In contrast, \autoref{fig:std_ay_global} shows that $\mathrm{std}(a_y)$ remains concentrated at low values, which is consistent with lateral acceleration being 
-close to zero except during lane changes.
-A similar pattern appears in \autoref{fig:std_vy_global}, although the visible tail suggests that some trajectories contain stronger lateral motion. 
-Class-wise trajectory-level variability distributions are provided in Appendix~\ref{appendix:classwise_plots}. 
-These results support the use of variability-related window features, since instantaneous values alone do not capture whether a trajectory is stable or dynamically changing over time.
-
 
 \par The lane-change analysis further highlights an important property of the dataset.
 As shown in \autoref{fig:lc_frame_distribution}, almost all frames belong to the lane-keeping class, while left and right lane changes occur only rarely. 
@@ -276,6 +295,7 @@ into the final observation features for the proposed \ac{DBN} model.
 
 
 \subsection{Feature Engineering}
+\label{subsec:feature_engineering}
 Based on the preprocessing steps described above, the final frame-level observation was defined as the compact feature set listed in Table~\ref{tab:frame_features}. 
 The selected variables describe ego motion, lane-change evidence, lane geometry, local interaction context, and front-interaction risk. 
 This frame-level representation serves as the basis for the subsequent window-based observation model.
@@ -302,7 +322,7 @@ This frame-level representation serves as the basis for the subsequent window-ba
 
 
 \subsection{Window-Based Representation}
-
+\label{subsec:window_based_representation}
 The proposed \ac{DBN} operates on short temporal windows rather than on individual frames. 
 Each vehicle trajectory is therefore converted into a sequence of overlapping windows, as illustrated in \autoref{fig:window_based_representation}.
 This allows the model to use recent motion history and interaction context instead of relying only on instantaneous frame values.
@@ -330,15 +350,18 @@ The resulting sequence of window-level observations forms the input to the propo
 
 
 \section{Proposed DBN Model}
+\label{sec:proposed_dbn_model}
 The proposed model represents driver behavior through two discrete latent variables: a style state $S_t$ and an action state $A_t$. 
 The style state captures a broader driving regime, while the action state represents the maneuver at the current time step. 
-The observation vector $O_t$ corresponds to the window-level features described in the previous section.
+The observation vector $O_t$ corresponds to the window-level features. 
+Notation follows the convention introduced in \autoref{par:notation_convention}.
+
 
 \subsection{Latent State Structure}
+\label{subsec:latent_state_structure}
 Rather than using a single latent variable, the model uses a factorized latent representation. 
-As shown in \autoref{fig:proposed_dbn_structure}, the style state evolves over time as its own Markov chain, whereas the action state depends on both 
-the previous action and the current style state. 
-This structure allows the model to separate slower regime-level dynamics from faster maneuver-level changes.
+As shown in \autoref{fig:proposed_dbn_structure}, the style state evolves as its own Markov chain, while the action state 
+depends on both the previous action and the current style state.
 \begin{figure}[htbp]
     \centering
     \input{figures/sharedDBN}
@@ -347,61 +370,43 @@ This structure allows the model to separate slower regime-level dynamics from fa
 \end{figure}
 
 \subsection{Transition Model}
-Let $S_t$ denote the latent style state and $A_t$ the latent action state at time step $t$. 
-The initial distribution is modeled as
+\label{subsec:transition_model}
+The initial distribution is modeled as:
 \begin{align}
-p(S_0) &= \pi_{s_0}, \\
-p(A_0 \mid S_0) &= \pi_{a_0 \mid s_0}.
+p(S_0 = s_0) &= \bm{\pi}^{(s)}_{s_0} \\
+p(A_0 = a_0 \mid S_0 = s_0) &= \bm{\Pi}^{(a)}_{s_0, a_0}
 \end{align}
 
-For later time steps, the transition model is factorized as
+For later time steps, the transition model is factorized as:
 \begin{align}
-p(S_t \mid S_{t-1}) &= A_s[S_{t-1}, S_t],\\
-p(A_t \mid A_{t-1}, S_t) &= A_a[S_t, A_{t-1}, A_t].
+p(S_t = s_t \mid S_{t-1} = s_{t-1}) &= \bm{A}^{(s)}_{s_{t-1}, s_t}\\
+p(A_t = a_t \mid A_{t-1} = a_{t-1}, S_t = s_t) &= \mathcal{A}^{(a)}_{s_t, a_{t-1}, a_t}
 \end{align}
+
+Here, $\bm{\pi}^{(s)}$ is the initial style-probability vector, $\bm{\Pi}^{(a)}$ is the conditional initial action matrix, $\bm{A}^{(s)}$ is the style transition matrix, and $\mathcal{A}^{(a)}$ is the action transition tensor.
 
 This factorization reflects the assumption that the style state evolves more gradually, 
 while the current maneuver depends on both the recent maneuver history and the current driving regime. 
 
 
 \subsection{Emission Model Variants}
-
-At each time step, the latent pair $(S_t, A_t)$ generates the window-level observation vector $O_t$. 
+\label{subsec:emission_model_variants}
+At each time step, the emission model specifies the conditional probability of the window-level observation vector given the latent state pair \((S_t, A_t)\).  
 Two alternative emission formulations are considered in this work, as illustrated in \autoref{fig:emission_variants}. 
-Both use the same latent transition structure and differ only in how the observation likelihood is parameterized. 
-In both cases, the observation vector is split into continuous and binary components. 
-The continuous part is modeled with diagonal Gaussian distributions, while the binary part is modeled with Bernoulli distributions.
+Both share the same latent transition structure and differ only in how the observation model is parameterized.   
+In both cases, the observation vector is split into continuous and binary components, modeled by diagonal Gaussian and Bernoulli distributions, respectively.
 
 
 \subsubsection{Product-of-Experts Emission}
-In the \ac{PoE} formulation, the observation likelihood is decomposed into two experts: one conditioned only on the style state and one 
-conditioned only on the action state. 
+\label{subsubsec:poe_emission}
+In the \ac{PoE} formulation, the observation likelihood is decomposed into two experts: one conditioned on the style state and one conditioned on the action state. 
 Their contributions are combined multiplicatively and then normalized:
 \begin{equation}
-p(o_t \mid s_t, a_t) = \frac{p_s(o_t \mid s_t)\, p_a(o_t \mid a_t)}{Z_{s_t,a_t}},
+p(o_t \mid s_t, a_t) = \frac{p_s(o_t \mid s_t; \theta^{(s)}_{s_t})\,p_a(o_t \mid a_t; \theta^{(a)}_{a_t})}{Z_{s_t,a_t}}
 \end{equation}
-where $Z_{s_t,a_t}$ is the normalization term. 
-This formulation allows the style state and the action state to contribute separately to the same observation vector.
-
-\subsubsection{Hierarchical Emission}
-In the hierarchical formulation, a single emission distribution is learned directly for each joint latent-state pair:
-\begin{equation}
-p(o_t \mid s_t, a_t)
-=
-\mathrm{Emission}(o_t; \theta_{s_t,a_t}).
-\end{equation}
-Here, the observation is modeled jointly for each combination of style and action. 
-This gives the model more direct flexibility at the level of the joint latent state, at the cost of a larger number of emission parameters.
-
-
-\par For both emission variants, the final output of the observation model is the log-likelihood tensor
-\begin{equation}
-\log p(O_t \mid S_t, A_t),
-\end{equation}
-evaluated for all combinations of style and action states at each time step. 
-These values are then used together with the structured transition model during forward--backward inference and EM training. 
-Thus, the proposed framework keeps the latent dynamics fixed at the DBN level, while allowing different observation models to be 
-compared within the same inference and training pipeline.
+Here, $\theta^{(s)}_{s_t}$ denotes the parameters of the style expert associated with style state $s_t$, and $\theta^{(a)}_{a_t}$ denotes the parameters of the action expert associated with action state $a_t$. 
+Each parameter set contains the Gaussian parameters for the continuous features and the Bernoulli parameters for the binary features. 
+The term $Z_{s_t,a_t}$ is the normalization constant that ensures the resulting distribution is valid.
 
 \begin{figure}[htbp]
     \centering
@@ -422,8 +427,384 @@ compared within the same inference and training pipeline.
     \label{fig:emission_variants}
 \end{figure}
 
+\subsubsection{Hierarchical Emission}
+\label{subsubsec:hierarchical_emission}
+In the hierarchical formulation, a single emission distribution is learned directly for each joint latent-state pair:
+\begin{equation}
+p(o_t \mid s_t, a_t) = p(o_t \mid s_t, a_t; \theta_{s_t,a_t})
+\end{equation}
+Here, $\theta_{s_t,a_t}$ denotes the parameters of the emission distribution associated with the joint state pair $(s_t, a_t)$. 
+As in the \ac{PoE} case, these parameters include the Gaussian terms for the continuous features and the Bernoulli terms for the binary features.
+This formulation gives the model greater flexibility for each joint latent-state pair, at the cost of a larger number of emission parameters.
 
-\section{Training and Inference}
-\subsection{Prediction Explanation}
+
+
+\subsection{Modeling Assumptions}
+\label{subsec:modeling_assumptions}
+
+The proposed \ac{DBN} model is based on the following modeling assumptions:
+\begin{itemize}
+    \item \textbf{First-order temporal dependence:}  
+    The style state \(S_t\) depends only on the previous style state \(S_{t-1}\).  
+    The action state \(A_t\) depends only on the previous action state \(A_{t-1}\) and the current style state \(S_t\).  
+    This gives a first-order Markov structure for the latent process.
+    \item \textbf{Observation dependence on the current latent state only:}  
+    The observation vector \(O_t\) depends only on the latent variables at the same time step.  
+    Once \(S_t\) and \(A_t\) are known, the current observation is assumed to be conditionally independent of past observations and past latent states.
+    \item \textbf{Window-level observation representation:}  
+    Each model time step corresponds to one windowed observation vector rather than one raw frame from the dataset. 
+    Therefore, the model predicts behavior from short temporal summaries of recent motion, interaction, and risk-related features.
+    \item \textbf{Split into continuous and binary features:}  
+    The observation vector is divided into continuous and binary components.  
+    Among the window features, the lane-change indicator variables are binary, while the remaining features are treated as continuous.
+    \item \textbf{Diagonal Gaussian assumption for continuous features:}  
+    Continuous features are modeled using diagonal Gaussian distributions.  
+    This means that, conditioned on the relevant latent state, the continuous feature dimensions are treated as independent. 
+    \item \textbf{Bernoulli assumption for binary features:}  
+    Binary features are modeled using Bernoulli distributions.  
+    The binary dimensions are treated as conditionally independent given the relevant latent state.
+    \item \textbf{Missing-feature handling:}  
+    Some features may be undefined at certain time steps, especially interaction-related quantities when neighboring vehicles are absent.  
+    Such values are treated as missing and are excluded from the corresponding likelihood terms through masking, rather than being interpreted as informative values.
+\end{itemize}
+
+
+
+
+
+\section{Model Training}
+\label{sec:training_validation}
+As described in \autoref{sec:proposed_framework}, the windowized vehicle sequences are divided into training, validation, and test sets. 
+This section describes how the observation sequences are prepared, how the model parameters are initialized, 
+and how the proposed \ac{DBN} is trained and monitored during learning.
+
+\subsection{Feature Scaling}
+Before training, the continuous window-level features are normalized to make them comparable in scale. 
+This is necessary because the observation vector contains different physical quantities, such as velocity, 
+acceleration, lane-relative distances, and interaction-related measures, which naturally have different numerical ranges. 
+Without scaling, features with larger magnitudes could dominate the likelihood computation and make parameter estimation less stable.
+
+\par In the implemented pipeline, z-score scaling statistics, namely the mean and standard deviation, are computed from the training set and then applied 
+unchanged to the validation and test sets. 
+The same transformation is reused during inference when the learned model is applied to new observation sequences.  
+Only continuous features are normalized in this way. The binary lane-change indicators, namely \texttt{lc\_left\_present} and \texttt{lc\_right\_present}, 
+are kept in their original form.
+Thus, the final observation vector contains both continuous variables, modeled by Gaussian distributions, and binary variables, modeled by Bernoulli distributions.
+
+\par These scaling values are fixed preprocessing quantities and are not part of the learned emission model. 
+They are shared across all latent states and are applied uniformly to the input data.
+
+\subsection{Parameter Initialization}
+After feature scaling, the model parameters are initialized before iterative learning begins. 
+This includes both the temporal parameters of the \ac{DBN} and the parameters of the emission model. 
+A suitable initialization is important because the \ac{EM} algorithm is sensitive to the starting point and may otherwise converge to a poor local optimum.
+
+\par In the implemented framework, the emission parameters are initialized from the scaled training observations using K-means clustering. 
+For the continuous part of the observation vector, the cluster centers and cluster variances are used as the initial Gaussian emission parameters. 
+For the binary part, the initial Bernoulli probabilities are derived from the clustered observations. 
+This provides a more informative starting point than a purely random initialization.
+
+\par The initial latent-state distribution and the transition probabilities are also initialized before the first \ac{EM} iteration. 
+Depending on the experiment, different initialization schemes can be used, such as uniform, random, or sticky initialization. 
+Here, sticky initialization means that remaining in the same latent state is given a higher initial probability than switching to a different state.
+
+
+\subsection{EM-Based Training}
+After initialization, the \ac{DBN} is trained iteratively on the windowized observation sequences. 
+At each iteration, the current model is applied to all training sequences to compute the posterior state probabilities and expected transition counts.  
+These quantities are accumulated over all sequences and then used to update the model parameters. 
+The procedure is repeated until the stopping criterion is met.
+
+\begin{algorithm}[htbp]
+\caption{EM-based training procedure}
+\label{alg:em_training}
+\begin{algorithmic}[1]
+\Require scaled training and validation sequences, initialized model parameters
+\Repeat
+    \For{each training sequence}
+        \State compute emission log-likelihoods
+        \State run forward-backward inference
+        \State accumulate posterior state probabilities and expected transition counts
+    \EndFor
+    \State update initial-state, transition, and emission parameters
+    \State evaluate the current model on the validation set
+\Until{stopping criterion is satisfied}
+\end{algorithmic}
+\end{algorithm}
+
+\par The re-estimation of the initial-state and transition parameters follows the \ac{EM} update equations introduced in \autoref{sec:parameter_learning}. 
+The emission-parameter updates for the hierarchical and \ac{PoE} variants are described in \autoref{subsubsec:emission_update_variants}, 
+while the theoretical derivations are given in Appendix~\ref{appendix:emission_updates}.
+
+\par Lane-change-related events are much rarer than lane-keeping behavior, as shown in \autoref{fig:lane_change_analysis}. 
+For this reason, additional weighting was investigated during training so that rare observations could have a stronger influence on learning. 
+This follows the general idea of cost-sensitive weighting for imbalanced data \cite{He2021WeightingRareEvents}.
+In this case, lane-change-active time steps are upweighted using an inverse-frequency rule 
+computed from the training data, with an upper clipping threshold to avoid excessively large weights.
+
+\par Two weighting variants were considered. 
+In the first variant, the weights are applied directly to the emission log-likelihood before forward-backward inference. 
+Since multiplying a log-likelihood term by a positive weight is equivalent to raising the corresponding likelihood term to a power, 
+this variant can be interpreted as a power-likelihood or tempered-likelihood formulation \cite{holmes2017assigningvaluepowerlikelihood}. 
+As a result, this variant modifies the posterior inference itself.
+
+\par In the second variant, forward-backward inference is first carried out under the original model, and the weights are applied afterward to 
+the posterior quantities used in the parameter update. 
+This is closer to weighted-data \ac{EM}, in which observations contribute to parameter estimation with different strengths 
+through weighted responsibilities and weighted update equations \cite{Gebru_2016}. 
+When weighting is enabled, the inference step remains unchanged, and only the parameter update is weighted.
+
+\par After each iteration, the model is evaluated on the validation set using the average validation log-likelihood per observation. 
+Training stops when this value no longer improves meaningfully over several successive iterations. 
+
+
+\subsubsection{Emission-Parameter Update}
+\label{subsubsec:emission_update_variants}
+The emission-parameter update depends on the chosen observation model.
+
+\par In the hierarchical emission model, one emission distribution is learned directly for each joint latent-state pair \((S_t,A_t)\). 
+After the E-step, the posterior probabilities of the joint states are used as weights for re-estimating the emission parameters. 
+For the continuous features, posterior-weighted means and diagonal variances are computed. 
+For the binary features, posterior-weighted Bernoulli probabilities are computed. 
+Thus, the hierarchical emission parameters can be updated in closed form.  
+
+\par In the \ac{PoE} emission model, because of the normalization term, the style and action emission parameters are coupled during learning. 
+As a result, the M-step does not reduce to a closed-form update as in the hierarchical case. 
+Instead, the \ac{PoE} emission parameters are updated by an inner gradient-based optimization loop within each EM iteration. 
+
 
 \section{Semantic Interpretation of Latent States}
+\label{sec:semantic_interpretation_latent_states}
+
+After training, an additional analysis is performed to interpret the learned latent states. 
+The purpose of this step is to relate the latent style and action states to characteristic traffic patterns observed in the data. 
+For this purpose, the trained model is applied again to the test split.  
+For each windowized observation sequence, posterior inference is carried out to obtain the joint posterior probabilities $\gamma_t(s,a)$.
+
+
+\par The semantic interpretation is based on posterior-weighted feature statistics computed from the original observation features \cite{Dempster1977,pml1Book}. 
+For a selected feature $x_t^{(f)}$ and a joint latent state pair $(s,a)$, the posterior-weighted mean is computed as:
+\begin{equation}
+\mu_{s,a,f}
+=
+\frac{\sum_n \sum_t \gamma_t^{(n)}(s,a)\,x_t^{(n,f)}}
+{\sum_n \sum_t \gamma_t^{(n)}(s,a)}
+\end{equation}
+where $n$ indexes the analysed vehicle trajectories. 
+Posterior-weighted standard deviations are computed in the same way to describe the variability of each feature within the corresponding latent state pair. 
+This produces a semantic feature profile for every joint state $(s,a)$, showing which motion, interaction, or risk-related properties are typically associated with that state.
+
+\par In addition to the feature means and standard deviations, the analysis also computes the total posterior mass of each joint state:
+\begin{equation}
+m_{s,a} = \sum_n \sum_t \gamma_t^{(n)}(s,a)
+\end{equation}
+This indicates how frequently each joint latent state is used across the analysed dataset. 
+
+\par The resulting semantic labels are therefore obtained from interpretation after training rather than being imposed during training. 
+For this reason, these interpretations should be understood as model-specific and experiment-specific. 
+They help explain what the trained latent states capture in the analysed split.
+
+
+
+\section{Inference and Evaluation}
+\label{sec:inference_evaluation}
+After training, the learned model is applied to unseen observation sequences from the test dataset.
+Two inference settings are used during evaluation.
+First, full-sequence posterior inference is applied on the held-out test split to assess generative fit and to analyse the latent-state structure. 
+This uses the complete observation sequence and is therefore not a causal prediction setting.
+Second, causal online inference is used for maneuver prediction, where the model updates its belief from observations up to 
+time $t$ and predicts the latent maneuver state at time $t+1$. The first setting evaluates how well the trained model explains unseen data, 
+while the second evaluates how well it predicts future behavior in an online setting.
+
+\subsection{Inference Procedure}
+\label{subsec:inference_procedure}
+
+Let $O_{1:T} = (O_1,\dots,O_T)$ denote a windowized observation sequence. 
+Given the learned initial-state, transition, and emission parameters, 
+inference combines the transition dynamics with the emission likelihoods to estimate the latent state sequence over time.
+
+\par Two inference settings are used during evaluation.
+For full-sequence analysis, inference is performed over the complete observation sequence in order to obtain the joint posterior distribution
+\begin{equation}
+p(S_t, A_t \mid O_{1:T}),
+\end{equation}
+for each time step $t$. 
+This posterior is used for sequence-level diagnostics such as log-likelihood, posterior entropy, and semantic interpretation of the learned latent states.
+
+\par For predictive evaluation, inference is carried out in a causal online manner. 
+At time step $t$, the current observation $O_t$ is used to update the filtered belief
+\begin{equation}
+p(S_t, A_t \mid O_{1:t}),
+\end{equation}
+and the transition model is then used to obtain the one-step-ahead predictive distribution
+\begin{equation}
+p(S_{t+1}, A_{t+1} \mid O_{1:t}).
+\end{equation}
+The predicted maneuver at time $t+1$ is taken as the \ac{MAP} joint latent state under this predictive distribution. 
+To avoid unstable predictions at the beginning of a sequence, the first few windows are treated as a warmup period and are not scored during predictive evaluation.
+
+\subsection{Evaluation Protocol}
+\label{subsec:evaluation_protocol}
+
+All evaluation results are computed on the held-out test split obtained from the vehicle-level partitioning described in \autoref{sec:proposed_framework}. 
+Thus, all windows derived from a given vehicle trajectory remain in the same split, and the test set contains only trajectories that were not used during training or validation.
+
+\par The learned model is evaluated from two complementary perspectives. 
+The first perspective is \emph{generative evaluation}, which measures how well the trained \ac{DBN} explains unseen observation sequences under the learned probabilistic model. 
+The second perspective is \emph{predictive evaluation}, which measures how well the model predicts future latent maneuver states in an online setting.
+
+\par For predictive evaluation, each test trajectory is processed sequentially. 
+After the warmup period, the model outputs a one-step-ahead prediction at every valid time step. 
+These predictions are compared with rule-based latent ground-truth labels derived from the raw observation features. 
+This makes it possible to evaluate not only the probabilistic fit of the model to the data, but also its usefulness as a maneuver predictor.
+
+
+\subsection{Generative Evaluation Metrics}
+\label{subsec:generative_evaluation_metrics}
+
+\subsubsection{Average Log-Likelihood per Time Step}
+
+A first measure of model quality is the average log-likelihood per time step on the test split. 
+For a set of test sequences indexed by $i$, this quantity is computed as
+\begin{equation}
+\frac{1}{\sum_i T_i}
+\sum_i \log p\!\left(O^{(i)}_{1:T_i}\right),
+\end{equation}
+where $T_i$ is the length of sequence $i$. 
+This metric measures how well the learned model explains the unseen observations on average. 
+Higher values indicate a better fit.
+
+\par In addition to the global average, per-trajectory average log-likelihood values are also summarized through percentile statistics. 
+These statistics make it possible to distinguish whether the model performs consistently across many vehicles or whether performance is dominated by only a subset of trajectories.
+
+\subsubsection{Bayesian Information Criterion}
+
+To compare model variants with different numbers of free parameters, the \ac{BIC} is also computed:
+\begin{equation}
+\mathrm{BIC} = k \log N - 2 \log L,
+\end{equation}
+where $k$ is the number of free model parameters, $N$ is the total number of evaluated time steps, and $L$ is the likelihood of the test data under the trained model. 
+A lower \ac{BIC} indicates a better trade-off between goodness of fit and model complexity.
+
+\subsubsection{Posterior Entropy}
+
+The certainty of the inferred latent-state assignments is analyzed through normalized posterior entropy. 
+From the joint posterior $p(S_t, A_t \mid O_{1:T})$, normalized entropy values are computed for the joint latent state, for the style marginal, and for the action marginal. 
+These entropy values lie in the range $[0,1]$, where lower values indicate a more confident latent-state assignment and higher values indicate greater ambiguity.
+
+\par To summarize uncertainty at trajectory level, vehicle-wise entropy statistics are computed and then aggregated across the test split. 
+This provides an additional diagnostic beyond likelihood alone, since two models may achieve similar likelihood values but differ in how sharply or diffusely they assign latent states.
+
+\subsubsection{State Occupancy}
+
+The posterior state occupancies are also analysed in order to determine how strongly the learned latent states are used on the test split. 
+For this purpose, posterior probabilities are accumulated over time to obtain the effective usage of each joint state, style state, and action state. 
+These quantities help reveal whether the learned state space is used in a balanced way or whether inference collapses onto only a small subset of states.
+
+\subsection{Predictive Evaluation Metrics}
+\label{subsec:predictive_evaluation_metrics}
+
+\subsubsection{Exact One-Step Prediction Accuracy}
+
+For online prediction, the model produces a one-step-ahead prediction of the joint latent state $(S_{t+1}, A_{t+1})$ after observing $O_{1:t}$. 
+The exact one-step prediction accuracy is defined as the fraction of time steps for which the predicted joint state matches the ground-truth joint state exactly:
+\begin{equation}
+\mathrm{Accuracy}
+=
+\frac{1}{N}
+\sum_{n=1}^{N}
+\mathbf{1}\!\left[
+\hat{z}_{t+1}^{(n)} = z_{t+1}^{(n)}
+\right],
+\end{equation}
+where $\hat{z}_{t+1}^{(n)}$ is the predicted joint state and $z_{t+1}^{(n)}$ is the corresponding ground-truth joint state.
+
+\par Since the joint state space is multi-class and class frequencies are imbalanced, macro-averaged precision, recall, and F1-score are also computed from the resulting confusion matrix. 
+These metrics complement accuracy by giving equal importance to all joint-state classes.
+
+\subsubsection{Hit Rate Within a Prediction Horizon}
+
+Exact one-step accuracy is a strict metric, since a prediction is counted as correct only if the exact target state occurs at the next step. 
+However, in behavior prediction, a predicted maneuver may still be useful if it occurs shortly afterward. 
+For this reason, a hit-based horizon metric is also used.
+
+\par Let $\hat{z}_{t+1}$ denote the one-step-ahead predicted joint state. 
+For a horizon of $H$ future steps, the prediction is counted as a hit if the predicted maneuver appears at least once within the interval from $t+1$ to $t+H$. 
+This can be written as
+\begin{equation}
+\mathrm{Hit@H}(t)
+=
+\mathbf{1}\!\left[
+\exists h \in \{1,\dots,H\}
+:
+z_{t+h} = \hat{z}_{t+1}
+\right].
+\end{equation}
+The hit rate is then obtained by averaging this indicator over all scored prediction times.
+
+\par In the implemented validator, the hit-based evaluation can also credit semantically equivalent latent-state pairs when they correspond to the same higher-level maneuver group. 
+This makes the horizon-based metric less brittle than exact joint-state matching and better aligned with practical maneuver prediction.
+
+\subsubsection{Time-to-Event}
+
+To measure how early a correct prediction occurs within the horizon, the time-to-event (\ac{TTE}) is also computed. 
+For a prediction at time $t$, let $h^\ast$ be the first future step at which the predicted maneuver appears:
+\begin{equation}
+h^\ast(t)
+=
+\min
+\left\{
+h \in \{1,\dots,H\}
+:
+z_{t+h} = \hat{z}_{t+1}
+\right\}.
+\end{equation}
+If no hit occurs within the horizon, the prediction is treated as a miss. 
+For hits, the time-to-event in seconds is obtained as
+\begin{equation}
+\mathrm{TTE}_{\mathrm{sec}}(t)
+=
+h^\ast(t)\,\Delta t,
+\end{equation}
+where $\Delta t$ is the duration of one window step. 
+In this work,
+\begin{equation}
+\Delta t = \frac{\text{stride}}{\text{frame rate}}.
+\end{equation}
+Mean, median, and percentile \ac{TTE} values are reported over successful hits only.
+
+\subsubsection{Strictly-Causal Predictive Log-Likelihood}
+
+In addition to discrete maneuver metrics, the model is also evaluated in terms of strictly-causal predictive likelihood. 
+At each time step, the current observation is scored under the predictive distribution conditioned only on past observations:
+\begin{equation}
+\log p(O_t \mid O_{1:t-1}).
+\end{equation}
+Aggregating these terms over the test split yields an online predictive negative log-likelihood, which measures how well the model predicts the next observation before it is seen.
+
+\par A related anticipatory evaluation is also carried out for longer horizons. 
+After observing the sequence up to time $t$, the model predicts future latent-state beliefs without incorporating new observations and evaluates the future observation likelihoods
+\begin{equation}
+\log p(O_{t+h} \mid O_{1:t}),
+\qquad h=1,\dots,H.
+\end{equation}
+This produces a horizon-wise predictive negative log-likelihood curve and reveals how predictive performance degrades as the forecast horizon increases.
+
+\subsection{Posterior-Based Interpretation of Individual Predictions}
+\label{subsec:posterior_based_interpretation}
+
+To interpret selected predictions locally, the model output can be decomposed into prior belief, observation likelihood, posterior belief, and one-step forecast. 
+At a chosen time step $t$, the prior belief describes the latent-state distribution before the current observation is incorporated, the emission likelihood measures how compatible the current observation is with each latent-state pair, and the posterior belief represents the updated latent-state distribution after observing the current traffic context.
+
+\par This decomposition makes it possible to analyse whether a prediction is driven mainly by the transition dynamics, by strong support from the current observation, or by a combination of both. 
+In addition, feature-group contribution scores can be computed for the winning posterior state in order to identify which groups of observation features contribute most strongly to the local explanation.
+
+\subsection{Computational Efficiency}
+\label{subsec:computational_efficiency}
+
+Since the intended application is online behavior prediction, runtime performance is also relevant. 
+For this reason, the trained model can be benchmarked in terms of inference latency under several execution settings, including single-vehicle prediction, multi-vehicle sequential prediction, and batched prediction. 
+In addition to model-only latency, an end-to-end benchmark can also be measured for the complete pipeline from frame-level input through windowization, scaling, filtering, and prediction.
+
+\par The benchmark reports the latency of the first prediction after warmup and the distribution of steady-state subsequent prediction times, including mean, median, and upper-percentile values. 
+These measurements are used to assess whether the proposed model is suitable for short-horizon online prediction in an \ac{AGV} setting.

@@ -2,18 +2,18 @@
     node distance=1.5cm and 1.8cm,
     >=Stealth,
     latent/.style={draw, circle, minimum size=9mm, inner sep=0pt, align=center},
-    block/.style={draw, rounded corners=2pt, minimum width=2.7cm, minimum height=0.95cm, align=center},
-    combine/.style={draw, rounded corners=2pt, minimum width=2.4cm, minimum height=0.95cm, align=center},
+    block/.style={draw, rounded corners=2pt, text width=3.3cm, minimum height=1.05cm, align=center},
+    combine/.style={draw, rounded corners=2pt, text width=3.6cm, minimum height=1.05cm, align=center},
     obs/.style={draw, rectangle, minimum width=11mm, minimum height=8mm, align=center}
 ]
 
 \node[latent] (S) {$S_t$};
-\node[latent, right=3.2cm of S] (A) {$A_t$};
+\node[latent, right=3.4cm of S] (A) {$A_t$};
 
-\node[block, below=1.5cm of S] (Es) {Style expert\\$p_s(o_t\mid s_t)$};
-\node[block, below=1.5cm of A] (Ea) {Action expert\\$p_a(o_t\mid a_t)$};
+\node[block, below=1.5cm of S] (Es) {Style expert\\$p_s(o_t \mid s_t;\,\theta^{(s)}_{s_t})$};
+\node[block, below=1.5cm of A] (Ea) {Action expert\\$p_a(o_t \mid a_t;\,\theta^{(a)}_{a_t})$};
 
-\node[combine, below=1.7cm of $(Es)!0.5!(Ea)$] (C) {PoE combine\\$-\log Z_{s_t,a_t}$};
+\node[combine, below=1.8cm of $(Es)!0.5!(Ea)$] (C) {PoE combine\\$\big/ Z_{s_t,a_t}$};
 
 \node[obs, below=1.5cm of C] (O) {$O_t$};
 

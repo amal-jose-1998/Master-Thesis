@@ -1,0 +1,741 @@
+\chapter{Emission Model Derivations}
+\label{appendix:emission_updates}
+
+This appendix presents the theoretical derivations of the emission-model updates used in the proposed \ac{DBN}. 
+The derivation follows the standard \ac{EM} formulation for latent-variable models
+\cite{Dempster1977,pml1Book}. Exact implementation details and training-specific choices are described in the methodology chapter.
+
+Let \(O_{1:T}=(O_1,\dots,O_T)\) denote the observed sequence, and let
+\(S_{1:T}\) and \(A_{1:T}\) denote the corresponding latent style and action
+state sequences. The model parameters are collected in \(\theta\).
+Each observation at time step \(t\) is decomposed into a continuous part and a binary part:
+\begin{equation}
+O_t = (x_t, b_t)
+\end{equation}
+with
+\begin{align}
+x_t &\in \mathbb{R}^{D_c}, \\
+b_t &\in \{0,1\}^{B}
+\end{align}
+
+
+In the E-step of the \ac{EM} algorithm, the current parameter estimate
+\(\theta^{\mathrm{old}}\) is used to compute posterior probabilities over the latent variables \cite{rabiner1989tutorial,murphy2002dynamic,pml1Book}.
+
+The main posterior marginal used in the emission updates is:
+\begin{equation}
+\gamma_t(s,a)
+=
+p(S_t=s,A_t=a \mid O_{1:T},\theta^{\mathrm{old}})
+\label{eq:gamma_joint_appendix}
+\end{equation}
+This quantity is the posterior responsibility assigned to the latent pair \((s,a)\) at time step \(t\). 
+For each fixed \(t\), the values \(\{\gamma_t(s,a)\}_{s,a}\) form a normalized joint posterior distribution:
+\begin{equation}
+\sum_{s,a}\gamma_t(s,a)=1.
+\end{equation}
+
+The transition-update derivations also use the posterior transition marginals
+\begin{align}
+\xi_t^{S}(s',s)
+&=
+p(S_{t-1}=s',S_t=s \mid O_{1:T},\theta^{\mathrm{old}}),
+\qquad t=2,\dots,T,
+\label{eq:xi_style_appendix}
+\\
+\xi_t^{A}(s,a',a)
+&=
+p(S_t=s,A_{t-1}=a',A_t=a \mid O_{1:T},\theta^{\mathrm{old}}),
+\qquad t=2,\dots,T
+\label{eq:xi_action_appendix}
+\end{align}
+
+
+\subsection{EM Objective}
+
+The goal of learning is to maximize the observed-data log-likelihood:
+\begin{equation}
+\log p(O_{1:T}\mid \theta)
+=
+\log \sum_{S_{1:T},A_{1:T}}
+p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)
+\label{eq:obs_loglik}
+\end{equation}
+Direct maximization of \eqref{eq:obs_loglik} is difficult because the latent state
+trajectories are not observed and must be summed out \cite{Dempster1977,pml1Book}.
+
+In the \ac{EM} algorithm, this difficulty is addressed by introducing an auxiliary distribution \(q(S_{1:T},A_{1:T})\) over the latent trajectories, with:
+\begin{equation}
+q(S_{1:T},A_{1:T}) \ge 0,
+\qquad
+\sum_{S_{1:T},A_{1:T}} q(S_{1:T},A_{1:T}) = 1
+\end{equation}
+Using this distribution, the log-likelihood can be rewritten as:
+\begin{align}
+\log p(O_{1:T}\mid \theta)
+&=
+\log \sum_{S_{1:T},A_{1:T}}
+q(S_{1:T},A_{1:T})
+\frac{p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)}
+{q(S_{1:T},A_{1:T})}
+\label{eq:em_rewrite}
+\end{align}
+
+Jensen's inequality states that for a convex function \(f\),
+\begin{equation}
+f\!\left(\sum_i q_i x_i\right)
+\le
+\sum_i q_i f(x_i),
+\qquad
+q_i \ge 0,
+\quad
+\sum_i q_i = 1.
+\label{eq:jensen_convex}
+\end{equation}
+Equivalently, if \(f\) is concave, the inequality direction is reversed. Since
+\(\log(\cdot)\) is concave, applying Jensen's inequality to \eqref{eq:em_rewrite} gives:
+\begin{align}
+\log p(O_{1:T}\mid \theta)
+&\ge
+\sum_{S_{1:T},A_{1:T}}
+q(S_{1:T},A_{1:T})
+\log
+\frac{p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)}
+{q(S_{1:T},A_{1:T})}
+\label{eq:em_lower_bound}
+\end{align}
+
+Expanding the logarithm yields:
+\begin{align}
+\log p(O_{1:T}\mid \theta)
+&\ge
+\sum_{S_{1:T},A_{1:T}}
+q(S_{1:T},A_{1:T})
+\log p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)
+\nonumber\\
+&\quad-
+\sum_{S_{1:T},A_{1:T}}
+q(S_{1:T},A_{1:T})\log q(S_{1:T},A_{1:T})
+\label{eq:em_bound_expanded}
+\end{align}
+The second term is the entropy of \(q\). For fixed \(q\), it does not depend on
+\(\theta\). Therefore, in the M-step it is sufficient to maximize only the first term \cite{Dempster1977,pml1Book}.
+
+
+In \ac{EM}, the auxiliary distribution is chosen as the posterior under the current
+parameter estimate:
+\begin{equation}
+q(S_{1:T},A_{1:T})
+=
+p(S_{1:T},A_{1:T}\mid O_{1:T},\theta^{\mathrm{old}})
+\label{eq:q_posterior_choice}
+\end{equation}
+Substituting this choice into the lower bound gives the auxiliary function:
+\begin{equation}
+Q(\theta,\theta^{\mathrm{old}})
+=
+\mathbb{E}_{p(S_{1:T},A_{1:T}\mid O_{1:T},\theta^{\mathrm{old}})}
+\left[
+\log p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)
+\right]
+\label{eq:q_function_def}
+\end{equation}
+
+Thus, the E-step computes the posterior over the latent trajectories under
+\(\theta^{\mathrm{old}}\), and the M-step updates \(\theta\) by maximizing the
+expected complete-data log-likelihood \(Q(\theta,\theta^{\mathrm{old}})\)
+\cite{Dempster1977,rabiner1989tutorial,murphy2002dynamic,pml1Book}.
+
+
+
+
+Using the factorization of the proposed \ac{DBN}, the complete-data distribution can be written as:
+\begin{align}
+p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)
+&=
+p(S_1\mid \theta)\,
+p(A_1\mid S_1;\theta)\,
+\prod_{t=2}^{T} p(S_t\mid S_{t-1};\theta)
+\nonumber\\
+&\quad\times
+\prod_{t=2}^{T} p(A_t\mid A_{t-1},S_t;\theta)\,
+\prod_{t=1}^{T} p(O_t\mid S_t,A_t;\theta)
+\label{eq:complete_data_factorization}
+\end{align}
+
+
+Taking the logarithm converts the product into a sum:
+\begin{align}
+\log p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)
+&=
+\log p(S_1\mid \theta)
++
+\log p(A_1\mid S_1;\theta)
+\nonumber\\
+&\quad+
+\sum_{t=2}^{T}\log p(S_t\mid S_{t-1};\theta)
++
+\sum_{t=2}^{T}\log p(A_t\mid A_{t-1},S_t;\theta)
+\nonumber\\
+&\quad+
+\sum_{t=1}^{T}\log p(O_t\mid S_t,A_t;\theta)
+\label{eq:complete_data_loglik}
+\end{align}
+
+Substituting \eqref{eq:complete_data_loglik} into the auxiliary function
+\eqref{eq:q_function_def} gives:
+\begin{align}
+Q(\theta,\theta^{\mathrm{old}})
+&=
+\mathbb{E}_{p(S_{1:T},A_{1:T}\mid O_{1:T},\theta^{\mathrm{old}})}
+\left[
+\log p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)
+\right]
+\nonumber\\
+&=
+\mathbb{E}_{p(S_{1:T},A_{1:T}\mid O_{1:T},\theta^{\mathrm{old}})}
+\Biggl[
+\log p(S_1\mid \theta)
++
+\log p(A_1\mid S_1;\theta)
+\nonumber\\
+&\qquad\qquad\qquad\qquad
++
+\sum_{t=2}^{T}\log p(S_t\mid S_{t-1};\theta)
++
+\sum_{t=2}^{T}\log p(A_t\mid A_{t-1},S_t;\theta)
+\nonumber\\
+&\qquad\qquad\qquad\qquad
++
+\sum_{t=1}^{T}\log p(O_t\mid S_t,A_t;\theta)
+\Biggr]
+\label{eq:q_expanded_inside_expectation}
+\end{align}
+
+By linearity of expectation, this becomes
+\begin{align}
+Q(\theta,\theta^{\mathrm{old}})
+&=
+\mathbb{E}\!\left[\log p(S_1\mid \theta)\right]
++
+\mathbb{E}\!\left[\log p(A_1\mid S_1;\theta)\right]
+\nonumber\\
+&\quad+
+\sum_{t=2}^{T}
+\mathbb{E}\!\left[\log p(S_t\mid S_{t-1};\theta)\right]
++
+\sum_{t=2}^{T}
+\mathbb{E}\!\left[\log p(A_t\mid A_{t-1},S_t;\theta)\right]
+\nonumber\\
+&\quad+
+\sum_{t=1}^{T}
+\mathbb{E}\!\left[\log p(O_t\mid S_t,A_t;\theta)\right],
+\label{eq:q_linearity}
+\end{align}
+where all expectations are taken with respect to
+\(p(S_{1:T},A_{1:T}\mid O_{1:T},\theta^{\mathrm{old}})\) \cite{Dempster1977,pml1Book}.
+
+These expectations can be written in terms of the posterior marginals from the E-step. 
+For the initial style term, define:
+\begin{equation}
+\gamma_1^{S}(s)
+=
+p(S_1=s\mid O_{1:T},\theta^{\mathrm{old}})
+=
+\sum_a \gamma_1(s,a)
+\label{eq:gamma_style_init}
+\end{equation}
+Using \eqref{eq:gamma_joint_appendix}, \eqref{eq:xi_style_appendix}, and
+\eqref{eq:xi_action_appendix}, the auxiliary function becomes:
+\begin{align}
+Q(\theta,\theta^{\mathrm{old}})
+&=
+\sum_s \gamma_1^{S}(s)\,\log p(S_1=s\mid \theta)
++
+\sum_{s,a}\gamma_1(s,a)\,\log p(A_1=a\mid S_1=s;\theta)
+\nonumber\\
+&\quad+
+\sum_{t=2}^{T}\sum_{s',s}
+\xi_t^{S}(s',s)\,
+\log p(S_t=s\mid S_{t-1}=s';\theta)
+\nonumber\\
+&\quad+
+\sum_{t=2}^{T}\sum_{s,a',a}
+\xi_t^{A}(s,a',a)\,
+\log p(A_t=a\mid A_{t-1}=a',S_t=s;\theta)
+\nonumber\\
+&\quad+
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)\,
+\log p(O_t\mid S_t=s,A_t=a;\theta)
+\label{eq:q_fully_expanded}
+\end{align}
+This is the expected complete-data log-likelihood written explicitly in terms of the posterior quantities computed in the E-step \cite{Dempster1977,rabiner1989tutorial,murphy2002dynamic}.
+
+For the emission-parameter derivations in this appendix, only the last term in
+\eqref{eq:q_fully_expanded} is required. Therefore, the emission contribution is:
+\begin{equation}
+Q_{\mathrm{emit}}(\theta,\theta^{\mathrm{old}})
+=
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)\,
+\log p(O_t\mid S_t=s,A_t=a;\theta)
+\label{eq:q_emit_only}
+\end{equation}
+The following sections specialize \eqref{eq:q_emit_only} to the hierarchical and \ac{PoE} emission formulations considered in this work.
+
+
+
+
+
+\section{Hierarchical Emission Model}
+\label{app:hierarchical_emission}
+
+For the hierarchical emission formulation introduced in \autoref{sec:proposed_dbn_model}, 
+the emission model is parameterized directly for each joint latent-state pair \((s,a)\). 
+The corresponding M-step therefore follows the standard \ac{EM} pattern for latent-variable 
+models, where each parameter block is updated using posterior weights \cite{Dempster1977,Bilmes1998}.
+
+Using the decomposition $O_t=(x_t,b_t)$, the emission factorizes as:
+\begin{equation}
+p(O_t \mid s,a;\theta_{s,a})
+=
+p(x_t \mid s,a;\theta^{(x)}_{s,a})\,
+p(b_t \mid s,a;\theta^{(b)}_{s,a}),
+\end{equation}
+with
+\begin{equation}
+\theta^{(x)}_{s,a} = (\mu_{s,a}, \Sigma_{s,a}),
+\qquad
+\theta^{(b)}_{s,a} = \{p_{s,a,j}\}_{j=1}^{B}
+\end{equation}
+
+
+For the continuous features, a Gaussian distribution with diagonal covariance is used:
+\begin{equation}
+p(x_t \mid s,a)
+=
+\mathcal{N}(x_t \mid \mu_{s,a},\Sigma_{s,a}),
+\qquad
+\Sigma_{s,a}
+=
+\mathrm{diag}\!\left(\sigma^2_{s,a,1},\dots,\sigma^2_{s,a,D_c}\right)
+\end{equation}
+
+For the binary features, a factorized Bernoulli distribution is used:
+\begin{equation}
+p(b_t \mid s,a)
+=
+\prod_{j=1}^{B}
+(p_{s,a,j})^{b_t^{(j)}}(1-p_{s,a,j})^{1-b_t^{(j)}}
+\end{equation}
+
+
+Hence, for a fixed joint state pair \((s,a)\), the log-emission probability becomes:
+\begin{align}
+\log p(O_t \mid s,a;\theta_{s,a})
+&=
+\log p(x_t \mid s,a)
++
+\log p(b_t \mid s,a)
+\nonumber\\
+&=
+\log \mathcal{N}(x_t \mid \mu_{s,a},\Sigma_{s,a})
++
+\sum_{j=1}^{B}
+\left[
+b_t^{(j)}\log p_{s,a,j}
++
+(1-b_t^{(j)})\log(1-p_{s,a,j})
+\right]
+\label{eq:hier_log_emission}
+\end{align}
+
+Substituting \eqref{eq:hier_log_emission} into the emission contribution of the auxiliary function,
+defined in \eqref{eq:q_emit_only}, gives:
+\begin{align}
+Q_{\mathrm{emit}}(\theta,\theta^{\mathrm{old}})
+&=
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)\,
+\log \mathcal{N}(x_t \mid \mu_{s,a},\Sigma_{s,a})
+\nonumber\\
+&\quad+
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)
+\sum_{j=1}^{B}
+\left[
+b_t^{(j)}\log p_{s,a,j}
++
+(1-b_t^{(j)})\log(1-p_{s,a,j})
+\right]
+\label{eq:hier_qemit_expanded}
+\end{align}
+
+
+For convenience, define the effective posterior count of the joint state pair \((s,a)\) as
+\begin{equation}
+N_{s,a}
+=
+\sum_{t=1}^{T}\gamma_t(s,a).
+\label{eq:hier_effective_count}
+\end{equation}
+
+
+\subsection{Parameter Updates}
+
+The emission parameters are obtained by maximizing \eqref{eq:hier_qemit_expanded} with respect to 
+the parameters of each joint state pair \((s,a)\). Because the parameters for one joint state do not 
+appear in the emission terms of any other joint state, the optimization separates across \((s,a)\) 
+and yields closed-form updates \cite{Dempster1977,Bilmes1998}.
+
+\paragraph{Gaussian mean.}
+For fixed covariance, the part of the objective that depends on \(\mu_{s,a}\) is:
+\begin{equation}
+-\frac{1}{2}
+\sum_{t=1}^{T}
+\gamma_t(s,a)
+(x_t-\mu_{s,a})^\top
+\Sigma_{s,a}^{-1}
+(x_t-\mu_{s,a})
+\end{equation}
+Differentiating with respect to \(\mu_{s,a}\) and setting the derivative to zero yields:
+\begin{equation}
+\mu_{s,a}
+=
+\frac{\sum_{t=1}^{T}\gamma_t(s,a)\,x_t}
+{\sum_{t=1}^{T}\gamma_t(s,a)}
+=
+\frac{1}{N_{s,a}}
+\sum_{t=1}^{T}\gamma_t(s,a)\,x_t
+\label{eq:hier_mean_update}
+\end{equation}
+
+
+\paragraph{Gaussian covariance.}
+Assuming a diagonal covariance matrix, each variance parameter can be optimized independently. 
+For dimension \(d\), the relevant term is
+\begin{equation}
+-\frac{1}{2}
+\sum_{t=1}^{T}
+\gamma_t(s,a)
+\left[
+\log \sigma^2_{s,a,d}
++
+\frac{\bigl(x_t^{(d)}-\mu_{s,a}^{(d)}\bigr)^2}{\sigma^2_{s,a,d}}
+\right].
+\end{equation}
+Differentiating with respect to \(\sigma^2_{s,a,d}\) and setting the result to zero gives:
+\begin{equation}
+\sigma^2_{s,a,d}
+=
+\frac{1}{N_{s,a}}
+\sum_{t=1}^{T}
+\gamma_t(s,a)\,
+\bigl(x_t^{(d)}-\mu_{s,a}^{(d)}\bigr)^2
+\label{eq:hier_var_update}
+\end{equation}
+Hence,
+\begin{equation}
+\Sigma_{s,a}
+=
+\mathrm{diag}\!\left(\sigma^2_{s,a,1},\dots,\sigma^2_{s,a,D_c}\right).
+\end{equation}
+
+\paragraph{Bernoulli parameters.}
+For each binary feature \(j\), the Bernoulli part of the objective is
+\begin{equation}
+\sum_{t=1}^{T}
+\gamma_t(s,a)
+\left[
+b_t^{(j)}\log p_{s,a,j}
++
+(1-b_t^{(j)})\log(1-p_{s,a,j})
+\right].
+\end{equation}
+Differentiating with respect to \(p_{s,a,j}\) and setting this derivative to zero gives:
+\begin{equation}
+p_{s,a,j}
+=
+\frac{\sum_{t=1}^{T}\gamma_t(s,a)\,b_t^{(j)}}
+{\sum_{t=1}^{T}\gamma_t(s,a)}
+=
+\frac{1}{N_{s,a}}
+\sum_{t=1}^{T}\gamma_t(s,a)\,b_t^{(j)}
+\label{eq:hier_bernoulli_update}
+\end{equation}
+
+Thus, the hierarchical emission model admits closed-form M-step updates, 
+where each parameter is estimated as a posterior-weighted maximum-likelihood quantity for the corresponding joint latent-state pair \cite{Dempster1977,Bilmes1998}.
+
+
+
+
+\section{Product-of-Experts Emission Model}
+\label{app:poe_emission}
+
+For the \ac{PoE} emission formulation introduced in \autoref{sec:proposed_dbn_model}, 
+the emission distribution for the joint latent-state pair \((s,a)\) is constructed by 
+multiplying a style-dependent expert and an action-dependent expert, followed by normalization:
+\begin{equation}
+p(O_t \mid S_t=s,A_t=a)
+=
+\frac{p_s(O_t \mid s)\,p_a(O_t \mid a)}{Z_{s,a}}
+\label{eq:poe_emission_def}
+\end{equation}
+This is the standard product-of-experts construction, in which several simpler expert models 
+are combined multiplicatively and then renormalized to obtain a valid probability distribution 
+\cite{Hinton2002}.
+
+Here, \(Z_{s,a}\) is the normalization constant that ensures that
+\eqref{eq:poe_emission_def} defines a valid probability distribution. Using the
+continuous-binary decomposition of the observation, it can be written more explicitly as
+\begin{equation}
+Z_{s,a}
+=
+\sum_{b \in \{0,1\}^{B}}
+\int
+p_s(x,b \mid s)\,p_a(x,b \mid a)\,dx.
+\end{equation}
+
+Using the decomposition \(O_t=(x_t,b_t)\), both experts factorize into continuous and binary parts:
+\begin{align}
+p_s(O_t \mid s)
+&=
+p_s(x_t \mid s)\,p_s(b_t \mid s),
+\\
+p_a(O_t \mid a)
+&=
+p_a(x_t \mid a)\,p_a(b_t \mid a).
+\end{align}
+
+The corresponding parameter sets are written as
+\begin{equation}
+\theta_s=(\mu_s,\Sigma_s,\{p_j^s\}_{j=1}^{B}),
+\qquad
+\theta_a=(\mu_a,\Sigma_a,\{p_j^a\}_{j=1}^{B}).
+\end{equation}
+
+For the continuous features, Gaussian experts with diagonal covariance are used:
+\begin{align}
+p_s(x_t \mid s)
+&=
+\mathcal{N}(x_t \mid \mu_s,\Sigma_s),
+\qquad
+\Sigma_s=\mathrm{diag}\!\left(\sigma^2_{s,1},\dots,\sigma^2_{s,D_c}\right),
+\\
+p_a(x_t \mid a)
+&=
+\mathcal{N}(x_t \mid \mu_a,\Sigma_a),
+\qquad
+\Sigma_a=\mathrm{diag}\!\left(\sigma^2_{a,1},\dots,\sigma^2_{a,D_c}\right).
+\end{align}
+
+For the binary features, factorized Bernoulli experts are used:
+\begin{align}
+p_s(b_t \mid s)
+&=
+\prod_{j=1}^{B}
+(p_j^s)^{b_t^{(j)}}(1-p_j^s)^{1-b_t^{(j)}},
+\\
+p_a(b_t \mid a)
+&=
+\prod_{j=1}^{B}
+(p_j^a)^{b_t^{(j)}}(1-p_j^a)^{1-b_t^{(j)}}.
+\end{align}
+
+Because the experts factorize into continuous and binary parts, the normalization constant also factorizes:
+\begin{align}
+Z_{s,a}
+&=
+\sum_{b \in \{0,1\}^{B}}
+\int
+p_s(x,b \mid s)\,p_a(x,b \mid a)\,dx
+\nonumber\\
+&=
+\left(
+\int p_s(x \mid s)\,p_a(x \mid a)\,dx
+\right)
+\left(
+\sum_{b \in \{0,1\}^{B}}
+p_s(b \mid s)\,p_a(b \mid a)
+\right)
+\nonumber\\
+&=
+Z_{s,a}^{(x)}\,Z_{s,a}^{(b)}.
+\end{align}
+
+The continuous normalization term is therefore
+\begin{equation}
+Z_{s,a}^{(x)}
+=
+\int
+\mathcal{N}(x \mid \mu_s,\Sigma_s)\,
+\mathcal{N}(x \mid \mu_a,\Sigma_a)\,dx.
+\end{equation}
+Using the standard Gaussian product identity, this becomes
+\begin{equation}
+Z_{s,a}^{(x)}
+=
+\mathcal{N}(\mu_s \mid \mu_a,\Sigma_s+\Sigma_a).
+\label{eq:poe_zx_closed}
+\end{equation}
+Hence,
+\begin{align}
+\log Z_{s,a}^{(x)}
+&=
+-\frac{D_c}{2}\log(2\pi)
+-\frac{1}{2}\log |\Sigma_s+\Sigma_a|
+\nonumber\\
+&\quad
+-\frac{1}{2}
+(\mu_s-\mu_a)^\top
+(\Sigma_s+\Sigma_a)^{-1}
+(\mu_s-\mu_a).
+\end{align}
+
+For the binary part,
+\begin{align}
+Z_{s,a}^{(b)}
+&=
+\sum_{b \in \{0,1\}^{B}}
+\prod_{j=1}^{B}
+(p_j^s)^{b^{(j)}}(1-p_j^s)^{1-b^{(j)}}
+(p_j^a)^{b^{(j)}}(1-p_j^a)^{1-b^{(j)}}.
+\end{align}
+Since the Bernoulli experts factorize across dimensions, the sum also factorizes:
+\begin{equation}
+Z_{s,a}^{(b)}
+=
+\prod_{j=1}^{B}
+\left[
+p_j^s p_j^a + (1-p_j^s)(1-p_j^a)
+\right].
+\label{eq:poe_zb_closed}
+\end{equation}
+Taking the logarithm yields
+\begin{equation}
+\log Z_{s,a}^{(b)}
+=
+\sum_{j=1}^{B}
+\log
+\left[
+p_j^s p_j^a + (1-p_j^s)(1-p_j^a)
+\right].
+\end{equation}
+
+Combining the two experts and the normalization term, the log-emission probability becomes
+\begin{align}
+\log p(O_t \mid s,a)
+&=
+\log p_s(x_t \mid s)
++
+\log p_a(x_t \mid a)
++
+\log p_s(b_t \mid s)
++
+\log p_a(b_t \mid a)
+\nonumber\\
+&\quad
+-
+\log Z_{s,a}^{(x)}
+-
+\log Z_{s,a}^{(b)}.
+\label{eq:poe_log_emission}
+\end{align}
+
+
+Substituting \eqref{eq:poe_log_emission} into the emission contribution of the auxiliary function,
+defined in \eqref{eq:q_emit_only}, gives
+\begin{align}
+Q_{\mathrm{emit}}(\theta,\theta^{\mathrm{old}})
+&=
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)\,
+\log \mathcal{N}(x_t \mid \mu_s,\Sigma_s)
+\nonumber\\
+&\quad+
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)\,
+\log \mathcal{N}(x_t \mid \mu_a,\Sigma_a)
+\nonumber\\
+&\quad+
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)
+\sum_{j=1}^{B}
+\left[
+b_t^{(j)}\log p_j^s + (1-b_t^{(j)})\log(1-p_j^s)
+\right]
+\nonumber\\
+&\quad+
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)
+\sum_{j=1}^{B}
+\left[
+b_t^{(j)}\log p_j^a + (1-b_t^{(j)})\log(1-p_j^a)
+\right]
+\nonumber\\
+&\quad-
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)\,\log Z_{s,a}^{(x)}
+-
+\sum_{t=1}^{T}\sum_{s,a}
+\gamma_t(s,a)\,\log Z_{s,a}^{(b)}.
+\label{eq:poe_qemit_expanded}
+\end{align}
+
+\subsection{Implication for the M-Step}
+
+In contrast to the hierarchical emission model, the \ac{PoE} objective does not separate into 
+independent parameter blocks for each joint state pair. The reason is that the normalization terms 
+\(\log Z_{s,a}^{(x)}\) and \(\log Z_{s,a}^{(b)}\) depend on the same expert parameters that also 
+appear in the data-fit terms. As a result, the style and action experts are coupled through the 
+partition function \cite{Hinton2002}.
+
+More specifically, any update of a style-expert parameter affects not only the style likelihood term, 
+but also all normalization terms involving that style state across the action experts. The same holds 
+symmetrically for the action-expert parameters. Therefore, the emission M-step no longer reduces to a 
+set of independent closed-form weighted maximum-likelihood updates.
+
+At the theoretical level, this means that the \ac{PoE} emission parameters are optimized by increasing
+\begin{equation}
+Q_{\mathrm{emit}}(\theta,\theta^{\mathrm{old}})
+\end{equation}
+with respect to the expert parameters using a generalized \ac{EM} step, rather than by solving 
+closed-form maximization equations for each parameter separately \cite{Dempster1977,Wu1983}.
+
+\subsection{Gradient Form}
+
+Let \(\vartheta_s\) denote a parameter of the style expert and \(\vartheta_a\) a parameter of the 
+action expert. Differentiating \eqref{eq:poe_qemit_expanded} gives the generic gradient structure
+\begin{equation}
+\frac{\partial Q_{\mathrm{emit}}}{\partial \vartheta_s}
+=
+\sum_{t=1}^{T}\sum_{a}
+\gamma_t(s,a)
+\left[
+\frac{\partial}{\partial \vartheta_s}\log p_s(O_t \mid s)
+-
+\frac{\partial}{\partial \vartheta_s}\log Z_{s,a}
+\right],
+\label{eq:poe_style_grad}
+\end{equation}
+and similarly
+\begin{equation}
+\frac{\partial Q_{\mathrm{emit}}}{\partial \vartheta_a}
+=
+\sum_{t=1}^{T}\sum_{s}
+\gamma_t(s,a)
+\left[
+\frac{\partial}{\partial \vartheta_a}\log p_a(O_t \mid a)
+-
+\frac{\partial}{\partial \vartheta_a}\log Z_{s,a}
+\right].
+\label{eq:poe_action_grad}
+\end{equation}
+
+These expressions show that each gradient contains two competing contributions:
+a data-fit term from the expert likelihood and a normalization term arising from the partition 
+function. The second term is specific to the \ac{PoE} formulation and is the reason why the 
+emission M-step does not admit the same closed-form updates as in the hierarchical case 
+\cite{Hinton2002}.

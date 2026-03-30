@@ -4,17 +4,17 @@
 This appendix provides class-wise versions of the main kinematic and trajectory-level variability distributions used in the exploratory data analysis. 
 The plots separate cars and trucks in order to make the class-dependent differences in scale and spread more explicit.
 
-\begin{figure}[h]
+\begin{figure}[!htbp]
     \centering
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/ax__class_car.png}
         \caption{Car: longitudinal acceleration.}
         \label{fig:appendix_ax_car}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/vx__class_car.png}
         \caption{Car: longitudinal velocity.}
@@ -23,35 +23,38 @@ The plots separate cars and trucks in order to make the class-dependent differen
 
     \vspace{0.6em}
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/ax__class_truck.png}
         \caption{Truck: longitudinal acceleration.}
         \label{fig:appendix_ax_truck}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/vx__class_truck.png}
         \caption{Truck: longitudinal velocity.}
         \label{fig:appendix_vx_truck}
     \end{subfigure}
 
-    \caption{Class-wise frame-level distributions of the longitudinal kinematic variables.}
-    \label{fig:appendix_classwise_longitudinal}
+    \caption{Class-wise frame-level distributions of the main kinematic variables.}
+    \label{fig:appendix_classwise_kinematics}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[!htbp]
+    \ContinuedFloat
+    \captionsetup{list=off}
+    \setcounter{subfigure}{4}
     \centering
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/ay__class_car.png}
         \caption{Car: lateral acceleration.}
         \label{fig:appendix_ay_car}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/vy__class_car.png}
         \caption{Car: lateral velocity.}
@@ -60,94 +63,95 @@ The plots separate cars and trucks in order to make the class-dependent differen
 
     \vspace{0.6em}
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/ay__class_truck.png}
         \caption{Truck: lateral acceleration.}
         \label{fig:appendix_ay_truck}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/vy__class_truck.png}
         \caption{Truck: lateral velocity.}
         \label{fig:appendix_vy_truck}
     \end{subfigure}
 
-    \caption{Class-wise frame-level distributions of the lateral kinematic variables.}
-    \label{fig:appendix_classwise_lateral}
+    \caption[]{Class-wise frame-level distributions of the main kinematic variables (continued).}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[!htbp]
     \centering
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__ax__class_car.png}
-        \caption{Car: longitudinal acceleration.}
+        \caption{Car: variability of longitudinal acceleration.}
         \label{fig:appendix_std_ax_car}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__vx__class_car.png}
-        \caption{Car: longitudinal velocity.}
+        \caption{Car: variability of longitudinal velocity.}
         \label{fig:appendix_std_vx_car}
     \end{subfigure}
 
     \vspace{0.6em}
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__ax__class_truck.png}
-        \caption{Truck: longitudinal acceleration.}
+        \caption{Truck: variability of longitudinal acceleration.}
         \label{fig:appendix_std_ax_truck}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__vx__class_truck.png}
-        \caption{Truck: longitudinal velocity.}
+        \caption{Truck: variability of longitudinal velocity.}
         \label{fig:appendix_std_vx_truck}
     \end{subfigure}
 
-    \caption{Class-wise trajectory-level variability distributions of the longitudinal kinematic variables.}
-    \label{fig:appendix_classwise_std_longitudinal}
+    \caption{Class-wise trajectory-level variability distributions of the main kinematic variables.}
+    \label{fig:appendix_classwise_std}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[!htbp]
+    \ContinuedFloat
+    \captionsetup{list=off}
+    \setcounter{subfigure}{4}
     \centering
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__ay__class_car.png}
-        \caption{Car: lateral acceleration.}
+        \caption{Car: variability of lateral acceleration.}
         \label{fig:appendix_std_ay_car}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__vy__class_car.png}
-        \caption{Car: lateral velocity.}
+        \caption{Car: variability of lateral velocity.}
         \label{fig:appendix_std_vy_car}
     \end{subfigure}
 
     \vspace{0.6em}
 
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__ay__class_truck.png}
-        \caption{Truck: lateral acceleration.}
+        \caption{Truck: variability of lateral acceleration.}
         \label{fig:appendix_std_ay_truck}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.42\textwidth}
+    \begin{subfigure}[t]{0.49\textwidth}
         \centering
         \includegraphics[width=\linewidth]{images/std__vy__class_truck.png}
-        \caption{Truck: lateral velocity.}
+        \caption{Truck: variability of lateral velocity.}
         \label{fig:appendix_std_vy_truck}
     \end{subfigure}
 
-    \caption{Class-wise trajectory-level variability distributions of the lateral kinematic variables.}
-    \label{fig:appendix_classwise_std_lateral}
+    \caption[]{Class-wise trajectory-level variability distributions of the main kinematic variables (continued).}
 \end{figure}
