@@ -106,6 +106,22 @@
 % You may want to use `clevceref` instead of using \autoref in the hyperref package, which has slightly more possibilities.
 \PassOptionsToPackage{pdfpagelabels}{hyperref}
 \usepackage{hyperref}  % backref linktocpage pagebackref
+% Keep section auto-reference names capitalized even when babel switches language.
+\addto\extrasenglish{%
+    \renewcommand{\sectionautorefname}{Section}%
+    \renewcommand{\subsectionautorefname}{Section}%
+    \renewcommand{\subsubsectionautorefname}{Section}%
+}
+\addto\extrasngerman{%
+    \renewcommand{\sectionautorefname}{Section}%
+    \renewcommand{\subsectionautorefname}{Section}%
+    \renewcommand{\subsubsectionautorefname}{Section}%
+}
+\AtBeginDocument{%
+    \renewcommand{\sectionautorefname}{Section}%
+    \renewcommand{\subsectionautorefname}{Section}%
+    \renewcommand{\subsubsectionautorefname}{Section}%
+}
 \pdfcompresslevel=9
 \pdfadjustspacing=1
 

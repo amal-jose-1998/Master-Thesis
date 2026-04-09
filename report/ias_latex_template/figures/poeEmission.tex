@@ -10,10 +10,10 @@
 \node[latent] (S) {$S_t$};
 \node[latent, right=3.4cm of S] (A) {$A_t$};
 
-\node[block, below=1.5cm of S] (Es) {Style expert\\$p_s(o_t \mid s_t;\,\theta^{(s)}_{s_t})$};
-\node[block, below=1.5cm of A] (Ea) {Action expert\\$p_a(o_t \mid a_t;\,\theta^{(a)}_{a_t})$};
+\node[block, below=1.5cm of S] (Es) {Style expert\\$p_s(O_t \mid S_t)$};
+\node[block, below=1.5cm of A] (Ea) {Action expert\\$p_a(O_t \mid A_t)$};
 
-\node[combine, below=1.8cm of $(Es)!0.5!(Ea)$] (C) {PoE combine\\$\big/ Z_{s_t,a_t}$};
+\node[combine, below=1.8cm of $(Es)!0.5!(Ea)$] (C) {PoE combine};
 
 \node[obs, below=1.5cm of C] (O) {$O_t$};
 

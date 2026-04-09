@@ -2,7 +2,7 @@
 \label{chap:theoretical_background}
 This chapter presents the theoretical background required for the methods used later in this thesis.
 \autoref{sec:probability_theory} introduces the main concepts from probability theory.
-\autoref{sec:pgm} describes probabilistic graphical models, including \acp{BN} and \acp{DBN}.
+\autoref{sec:pgm} then describes probabilistic graphical models, including \acp{BN} and \acp{DBN}.
 \autoref{sec:inference_chain_dbn} presents inference in chain-structured \acp{DBN}.
 \autoref{sec:parameter_learning} summarizes parameter learning using the \ac{EM} algorithm.
 
@@ -15,8 +15,8 @@ Bold lowercase symbols denote vectors, bold uppercase symbols denote matrices, a
 \section{Probability Theory}
 \label{sec:probability_theory}
 Probability theory provides a mathematical framework for representing and reasoning about uncertainty \cite{pml1Book}. 
-Instead of assigning a single deterministic outcome to an uncertain event, probabilistic models describe uncertainty using a probability distribution over possible outcomes.  
-In probability theory, each uncertain quantity is represented as a \ac{RV} \cite{pml1Book}. 
+Instead of assigning a single deterministic outcome to an uncertain event, probabilistic models provide a probability distribution over possible outcomes.  
+Each uncertain quantity is represented as a \ac{RV} \cite{pml1Book}. 
 
 
 \par Complex systems require modeling interactions between many \acp{RV}. When several \acp{RV} are considered together, their behavior can be described using a joint probability distribution \cite{pml1Book}. 
@@ -36,20 +36,20 @@ Conditional probability describes how the probability of one \ac{RV} changes whe
 \par Another important concept is marginal probability, which gives the probability of a subset of \acp{RV} irrespective of the values of the remaining variables \cite{pml1Book}. 
 For example, if the joint distribution $P(X,Y)$ is known, the marginal probability of $Y$ can be obtained by summing over all possible values of $X$:
 \[
-P(Y) = \sum_X P(X,Y).
+P(Y) = \sum_X P(X,Y)
 \]
 
-\par In addition to describing dependencies between \acp{RV}, it is also useful to identify situations where variables do not influence each other. 
-Two \acp{RV} are said to be independent if the value of one variable does not affect the probability of the other. Formally, two variables $X$ and $Y$ are independent 
-if their joint probability can be written as
+\par In addition to describing dependencies between \acp{RV}, it is also important to identify cases in which variables do not influence each other. 
+Two \acp{RV} are said to be independent if the value of one variable does not affect the probability of the other. For independent variables $X$ and $Y$, 
+the joint probability can be written as:
 \[
-P(X,Y) = P(X)P(Y).
+P(X,Y) = P(X)P(Y)
 \]
 
 \par In many practical problems, variables are not completely independent but may become independent when conditioned on another variable. This property is 
-known as conditional independence. Two variables $X$ and $Y$ are conditionally independent given a third variable $Z$ if the joint conditional distribution factorizes as
+known as conditional independence. Two variables $X$ and $Y$ are conditionally independent given a third variable $Z$ if the joint conditional distribution factorizes as:
 \[
-P(X,Y \mid Z) = P(X \mid Z)P(Y \mid Z).
+P(X,Y \mid Z) = P(X \mid Z)P(Y \mid Z)
 \]
 
 Conditional independence is a key concept in probabilistic graphical models because it allows complex joint probability distributions to be represented using simpler 
@@ -59,7 +59,7 @@ conditional relationships between variables \cite{koller2009probabilistic}.
 \label{sec:bayes_theorem}
 
 A fundamental principle in probabilistic reasoning is Bayes' theorem, which allows beliefs about uncertain events to be updated when new observations become available \cite{pml1Book}. 
-It relates conditional and marginal probabilities and is expressed as
+It relates conditional and marginal probabilities and is expressed as:
 
 \begin{equation}
 P(X \mid Y) = \frac{P(Y \mid X) P(X)}{P(Y)}
@@ -75,7 +75,7 @@ This principle forms the basis for probabilistic inference in many models, inclu
 \label{sec:pgm}
 
 Probabilistic graphical models provide an efficient way to represent complex joint probability distributions over many \acp{RV} \cite{pml1Book,koller2009probabilistic}. 
-As the number of variables increases, modeling the full joint distribution becomes difficult because the number of possible dependencies also grows.  
+As the number of variables increases, the full joint distribution becomes harder to model because possible dependencies also grows.  
 Probabilistic graphical models address this problem by representing \acp{RV} and their probabilistic relationships using a graph. 
 In this representation, nodes correspond to \acp{RV}, while edges describe dependencies between them. 
 The graph structure also encodes conditional independence assumptions. These assumptions allow the joint probability distribution to 
@@ -95,11 +95,11 @@ sequential processes over time.
 \label{sec:bayesian_networks}
 
 A \ac{BN} is a directed probabilistic graphical model that represents a set of \acp{RV} and their conditional dependencies using a \ac{DAG} \cite{koller2009probabilistic}. 
-Each variable in the network is associated with a \ac{CPD}, which describes how the variable depends on its parent variables. 
-These \acp{CPD} are often represented using \acp{CPT}. If a variable has no parents in the graph, its distribution is given by a prior probability distribution. 
+Each variable in the network has an associated \ac{CPD}, which describes how that variable depends on its parent variables. 
+If a variable has no parents in the graph, its distribution is given by a prior probability distribution. 
 
 \par In general, the joint probability distribution of all variables in a \ac{BN} can be factorized according to the graph structure. For a set of variables 
-$X_1, X_2, \dots, X_n$, the joint distribution can be written as
+$X_1, X_2, \dots, X_n$, the joint distribution can be written as:
 \begin{equation}
 P(X_1, X_2, \dots, X_n) = \prod_{i=1}^{n} P(X_i \mid \mathrm{Pa}(X_i))
 \label{eq:bn_factorization}
@@ -114,9 +114,9 @@ assumption embedded in the network structure.
     \caption{Example of a \ac{BN}.}
     \label{fig:bn}
 \end{figure}
-\noindent For the example network shown in \autoref{fig:bn}, the joint distribution can be written as
+\noindent For the example network shown in \autoref{fig:bn}, the joint distribution can be written as:
 \[
-P(S,A,O) = P(S)P(A \mid S)P(O \mid S,A).
+P(S,A,O) = P(S)P(A \mid S)P(O \mid S,A)
 \]
 
 \par Standard \acp{BN} describe relationships between variables within a single time step. However, in many real-world problems, the system evolves over time. 
@@ -129,7 +129,8 @@ is used.
 In a \ac{DBN}, the system is represented as a sequence of time-indexed \acp{RV} that describe how the system evolves over time. 
 A common representation of a \ac{DBN} uses a two-slice temporal model that captures dependencies both within a single time step 
 and across consecutive time steps. This representation typically relies on the first-order Markov assumption, which states that the current state depends 
-only on the previous state and not on earlier states.
+only on the previous state and not on earlier states. Unlike an \ac{HMM}, which can be viewed as a special case of a \ac{DBN} with a single latent state per time step, 
+a general \ac{DBN} may contain multiple latent states with structured dependencies between them.
 
 \begin{figure}[htbp]
     \centering
@@ -139,13 +140,13 @@ only on the previous state and not on earlier states.
 \end{figure}
 
 \par In the example shown in \autoref{fig:dbn}, let $Z_t$ denote the latent state at time step $t$ and $O_t$ denote the corresponding observation. Under the Markov 
-assumption, the joint probability distribution over a sequence of states and observations can be written as
+assumption, the joint probability distribution over a sequence of states and observations can be written as:
 
 \begin{equation}
 P(Z_{1:T}, O_{1:T}) =
 P(Z_1)
 \prod_{t=2}^{T} P(Z_t \mid Z_{t-1})
-\prod_{t=1}^{T} P(O_t \mid Z_t).
+\prod_{t=1}^{T} P(O_t \mid Z_t)
 \label{eq:dbn_factorization}
 \end{equation}
 
@@ -159,11 +160,8 @@ while $P(O_t \mid Z_t)$ represents the emission model that relates the hidden st
 
 \section{Inference in Chain-Structured DBNs}
 \label{sec:inference_chain_dbn}
-Inference in probabilistic graphical models refers to computing the probability distribution of unknown variables given observed evidence. 
-In temporal models such as \acp{DBN}, this involves estimating the distribution of latent states from a sequence of observations \cite{pml1Book,koller2009probabilistic}.
-
-\par For the \ac{DBN} shown in \autoref{fig:dbn}, the latent state is not directly observed and must therefore be inferred from the observation sequence.  
-Inference is required because only the observations $O_{1:T}$ are available, while the state sequence $Z_{1:T}$ remains hidden.
+Inference in probabilistic graphical models refers to estimating the probability distribution of unknown variables conditioned on observed evidence. 
+In temporal models like the \ac{DBN} shown in \autoref{fig:dbn}, inference involves estimating the distribution of latent states from a sequence of observations, since only the observations $O_{1:T}$ are available while the state sequence $Z_{1:T}$ remains hidden \cite{pml1Book,koller2009probabilistic}.
 
 \par In temporal probabilistic models, three common inference tasks arise \cite{Murphy2012MachineL}:
 \begin{enumerate}
@@ -199,7 +197,7 @@ The forward variable \(\alpha_t(z_t)\) represents the joint probability of obser
 \label{eq:forward_def}
 \end{equation}
 
-It can be computed recursively as
+It can be computed recursively as:
 \begin{equation}
 \alpha_t(z_t) =
 P(O_t \mid Z_t = z_t)
@@ -209,7 +207,7 @@ P(Z_t = z_t \mid Z_{t-1} = z_{t-1})
 \label{eq:forward_recursion}
 \end{equation}
 
-with initialization
+with initialization:
 \[
 \alpha_1(z_1) = P(Z_1 = z_1)\, P(O_1 \mid Z_1 = z_1)
 \]
@@ -227,7 +225,7 @@ The backward variable \(\beta_t(z_t)\) represents the probability of observing t
 \label{eq:backward_def}
 \end{equation}
 
-It is computed recursively in the reverse direction as
+It is computed recursively in the reverse direction as:
 \begin{equation}
 \beta_t(z_t) =
 \sum_{z_{t+1}}
@@ -237,7 +235,7 @@ P(O_{t+1} \mid Z_{t+1} = z_{t+1})
 \label{eq:backward_recursion}
 \end{equation}
 
-with initialization
+with initialization:
 \[
 \beta_T(z_T) = 1
 \]
@@ -252,25 +250,25 @@ This quantity is commonly denoted as $\gamma_t(z_t)$ and represents the probabil
 \gamma_t(z_t) = P(Z_t = z_t \mid O_{1:T})
 \]
 
-Using the forward and backward variables, this can be written as
+Using the forward and backward variables, this can be written as:
 \begin{equation}
 \gamma_t(z_t) = 
 \frac{\alpha_t(z_t)\beta_t(z_t)}{P(O_{1:T})}
 \label{eq:gamma_posterior}
 \end{equation}
 
-where \(P(O_{1:T})\) is the likelihood of the full observation sequence. Using the forward and backward variables, it can be written as
+where \(P(O_{1:T})\) is the likelihood of the full observation sequence. Using the forward and backward variables, for any time step $t$, it can be written as:
 \[
-P(O_{1:T}) = \sum_{z_t} \alpha_t(z_t)\beta_t(z_t).
+P(O_{1:T}) = \sum_{z_t} \alpha_t(z_t)\beta_t(z_t)
 \]
-for any time step $t$.
+
 
 \par The forward-backward algorithm therefore combines information from earlier observations through the forward pass and from later observations through the backward pass.
 
 
 \subsubsection{Posterior Transition Probability}
 
-In addition to the posterior probability of individual states, it is often useful to compute the joint posterior probability of two consecutive states. 
+In addition to the posterior probability of individual states, it is also useful to compute the joint posterior probability of two consecutive states. 
 This quantity gives the posterior probability of a transition from state $z_t$ to state $z_{t+1}$ given the full observation sequence:
 
 \[
@@ -278,7 +276,7 @@ This quantity gives the posterior probability of a transition from state $z_t$ t
 P(Z_t = z_t, Z_{t+1} = z_{t+1} \mid O_{1:T})
 \]
 
-Using the forward and backward variables, this can be written as
+Using the forward and backward variables, this can be written as:
 \begin{equation}
 \xi_t(z_t, z_{t+1}) =
 \frac{\alpha_t(z_t)\,
@@ -296,19 +294,19 @@ This posterior transition probability is useful in parameter learning, especiall
 \section{Parameter Learning in Latent-State Models}
 \label{sec:parameter_learning}
 A probabilistic model contains several unknown parameters that must be learned from data. For a chain-structured temporal model such as the one shown in \autoref{fig:dbn}, 
-these parameters can be collectively written as
+these parameters can be collectively written as:
 \[
-\theta = \{\bm{\pi}, \bm{A}, \Theta\},
+\theta = \{\bm{\pi}, \bm{A}, \Theta\}
 \]
 where $\bm{\pi}$ denotes the initial-state probability vector, $\bm{A}$ is the state transition matrix, and $\Theta$ denotes the set of emission parameters.
 
-\par If both the observation sequence $O_{1:T}$ and the latent state sequence $Z_{1:T}$ were known, parameter learning could be performed by maximizing the complete-data likelihood
+\par If both the observation sequence $O_{1:T}$ and the latent state sequence $Z_{1:T}$ were known, parameter learning could be performed by maximizing the complete-data likelihood:
 \begin{equation}
 \theta^* = \arg\max_{\theta} P(O_{1:T}, Z_{1:T} \mid \theta)
 \label{eq:complete_data_mle}
 \end{equation}
 
-However, in latent-variable models the state sequence $Z_{1:T}$ is not observed. Therefore, learning must be based only on the observed data, which gives the \ac{MLE} objective
+However, in latent-variable models the state sequence $Z_{1:T}$ is not observed. Therefore, learning must be based only on the observed data, which gives the \ac{MLE} objective:
 \begin{equation}
 \theta^{*} = \arg\max_{\theta} P(O_{1:T} \mid \theta)
 \label{eq:observed_data_mle}
@@ -320,10 +318,9 @@ P(O_{1:T} \mid \theta) = \sum_{Z_{1:T}} P(O_{1:T}, Z_{1:T} \mid \theta)
 \label{eq:observed_likelihood_marginalized}
 \end{equation}
 
-\par As shown in \eqref{eq:observed_likelihood_marginalized}, the observed-data likelihood is obtained by summing the joint probability over all possible latent state sequences. 
-Because this summation involves many possible latent state sequences, direct maximization of the observed-data likelihood in \eqref{eq:observed_data_mle} is difficult. 
+\par Since this summation involves many possible latent state sequences, direct maximization of the observed-data likelihood in \eqref{eq:observed_data_mle} is difficult. 
 To address this problem, the \ac{EM} algorithm is commonly used \cite{Murphy2012MachineL}. 
-For chain-structured models such as \acp{HMM}, this learning procedure is known as the Baum–Welch algorithm \cite{rabiner1989tutorial}.
+For \acp{HMM}, this learning procedure is known as the Baum–Welch algorithm \cite{rabiner1989tutorial}.
 
 
 
@@ -339,13 +336,13 @@ It addresses the difficulty of maximizing the observed-data likelihood by altern
 
 In the expectation step (E-step), the current parameter estimate is used to compute the posterior distribution of the latent states given the observations. 
 For the chain-structured model considered here, this is done using the forward-backward algorithm described by \eqref{eq:forward_recursion} and \eqref{eq:backward_recursion}. 
-The E-step provides the posterior state probabilities
+This step provides the posterior state probabilities and the posterior transition probabilities:
 \[
 \gamma_t(i) = P(Z_t = i \mid O_{1:T})
 \]
-and the posterior transition probabilities
+
 \[
-\xi_t(i,j) = P(Z_t = i, Z_{t+1} = j \mid O_{1:T}).
+\xi_t(i,j) = P(Z_t = i, Z_{t+1} = j \mid O_{1:T})
 \]
 
 
@@ -356,13 +353,13 @@ conditioned on the full observation sequence.
 
 In the maximization step (M-step), the model parameters are updated using the posterior quantities computed in the E-step. 
 
-\par For discrete-state chain-structured models, the initial state distribution is updated as
+\par For discrete-state chain-structured models, the initial state distribution is updated as:
 \begin{equation}
 \pi_i = \gamma_1(i)
 \label{eq:em_initial_update}
 \end{equation}
 
-\par The transition probabilities can be re-estimated as
+\par The transition probabilities can be re-estimated as:
 \begin{equation}
 A_{ij}
 =
