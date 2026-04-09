@@ -1,0 +1,13 @@
+{
+  "exact_accuracy": 0.43941231904399086,
+  "macro_precision": 0.44117715796191465,
+  "macro_recall": 0.4801751481074604,
+  "macro_f1": 0.4204783220436108,
+  "hit_rate": 0.737212776196014,
+  "mean_tte_sec": 0.6829708100169307,
+  "median_tte_sec": 0.4,
+  "p25_tte_sec": 0.4,
+  "p75_tte_sec": 0.4,
+  "num_hits": 147071,
+  "num_total": 199496
+}

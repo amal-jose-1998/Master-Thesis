@@ -148,7 +148,7 @@ class ValidationStep:
             # Define maneuver groups
             MANEUVER_GROUPS = {
                 (0, 1): 'brake',
-                (1, 4): 'brake',
+                (1, 3): 'brake',
                 (0, 2): 'acceleration',
                 (1, 0): 'acceleration',
                 (0, 3): 'following',

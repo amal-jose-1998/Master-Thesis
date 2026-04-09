@@ -44,17 +44,25 @@ from longitudinal_window_feasibility import (
 # =========================================================
 # Feather-first loading
 # =========================================================
-def load_highd_cached_or_build(tracks_dir, max_recordings=None, force_rebuild=False):
+def load_highd_cached_or_build(
+    tracks_dir,
+    max_recordings=None,
+    force_rebuild=False,
+    apply_vehicle_centric=True,
+    flip_lateral=True,
+    flip_positions=False,
+):
     """
     Priority:
       1) Use Feather cache if present
       2) Else build via load_highd_folder (which also writes the Feather)
     """
     tracks_dir = Path(tracks_dir)
+    mode_suffix = "vehicle_centric" if apply_vehicle_centric else "raw"
     feather_path = (
-        tracks_dir / "highd_all_with_meta.feather"
+        tracks_dir / f"highd_all_with_meta_{mode_suffix}.feather"
         if max_recordings is None
-        else tracks_dir / f"highd_first_{int(max_recordings)}_with_meta.feather"
+        else tracks_dir / f"highd_first_{int(max_recordings)}_with_meta_{mode_suffix}.feather"
     )
 
     if (not force_rebuild) and feather_path.exists():
@@ -66,9 +74,9 @@ def load_highd_cached_or_build(tracks_dir, max_recordings=None, force_rebuild=Fa
         tracks_dir,
         force_rebuild=force_rebuild,
         max_recordings=max_recordings,
-        apply_vehicle_centric=True,   
-        flip_lateral=True,            
-        flip_positions=False,
+        apply_vehicle_centric=apply_vehicle_centric,
+        flip_lateral=flip_lateral,
+        flip_positions=flip_positions,
     )
     return df
 
@@ -192,12 +200,30 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
 
     try:
         # ---- Step 1: Load ----
-        df = load_highd_cached_or_build(tracks_dir=tracks_dir, max_recordings=max_recordings, force_rebuild=False)
+        # Raw dataframe for unnormalized kinematics plots.
+        df_raw = load_highd_cached_or_build(
+            tracks_dir=tracks_dir,
+            max_recordings=max_recordings,
+            force_rebuild=False,
+            apply_vehicle_centric=False,
+            flip_lateral=False,
+            flip_positions=False,
+        )
+
+        # Vehicle-centric dataframe for existing downstream analyses.
+        df = load_highd_cached_or_build(
+            tracks_dir=tracks_dir,
+            max_recordings=max_recordings,
+            force_rebuild=False,
+            apply_vehicle_centric=True,
+            flip_lateral=True,
+            flip_positions=False,
+        )
         pbar.update(1)
 
         # ---- Step 2: Kinematics (global/original) ----
         run_kinematics_analysis(
-            df=df,
+            df=df_raw,
             out_dir=out_dir / "kinematics",
             signals=("vx", "ax", "vy", "ay"),
             direction_col="meta_drivingDirection",
@@ -216,7 +242,7 @@ def run_report(tracks_dir, out_dir, max_recordings=None, show_progress=True):
             from hdv_dbn.datasets.highd.normalise import normalize_vehicle_centric
 
         # Make a copy to avoid modifying the original df
-        df_motion = df.copy()
+        df_motion = df_raw.copy()
         # Use the correct direction column name as in the rest of the code
         df_motion = normalize_vehicle_centric(
             df_motion,

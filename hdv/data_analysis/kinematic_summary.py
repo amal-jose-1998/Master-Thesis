@@ -191,6 +191,7 @@ def save_hist_1d(
     show_markers=True,
     show_stats_box=True,
     hist_color=None,
+    show_title=True,
 ):
     """
     Save a 1D histogram plot with summary markers and an annotation box.
@@ -219,6 +220,8 @@ def save_hist_1d(
         If True, shows a stats textbox in the upper-right corner.
     hist_color : str or None
         Histogram fill color. Uses a default if None.
+    show_title : bool
+        If True, draw the plot title. Set False to omit the heading text.
     """
     x = pd.to_numeric(pd.Series(x), errors="coerce").dropna()
     if x.empty:
@@ -279,7 +282,8 @@ def save_hist_1d(
             bbox=dict(boxstyle="round,pad=0.45", facecolor="white", edgecolor="black", alpha=0.95),
         )
 
-    ax.set_title(title, fontsize=18)
+    if show_title:
+        ax.set_title(title, fontsize=18)
     ax.set_xlabel(xlabel, fontsize=14)
     ax.set_ylabel("Probability density", fontsize=14)
 
@@ -610,18 +614,20 @@ def run_kinematics_analysis_motion_centric(
         sig_label = _signal_label_with_unit(sig)
         save_hist_1d(
             dfk[sig],
-            f"{sig_label} (motion-centric) - global",
+            "",
             sig_label,
             hist_dir / f"{sig}__global.png",
+            show_title=False,
         )
 
         for cls in ("car", "truck"):
             save_hist_1d(
                 subset_class(cls)[sig],
-                f"{sig_label} (motion-centric) - class={cls}",
+                "",
                 sig_label,
                 hist_dir / f"{sig}__class_{cls}.png",
                 hist_color=_CLASS_HIST_COLORS[cls],
+                show_title=False,
             )
 
     # ---- Variability (per-vehicle std) ----
@@ -636,10 +642,11 @@ def run_kinematics_analysis_motion_centric(
         sig_std_label = _std_signal_label_with_unit(sig)
         save_hist_1d(
             vals,
-            f"{sig_std_label} (motion-centric) - {tag}",
+            "",
             sig_std_label,
             var_dir / f"std__{sig}__{tag}.png",
             hist_color=_CLASS_HIST_COLORS.get(cls),
+            show_title=False,
         )
 
     for sig in signals:

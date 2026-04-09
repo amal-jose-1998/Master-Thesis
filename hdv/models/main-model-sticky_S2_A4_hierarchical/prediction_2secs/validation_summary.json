@@ -3,11 +3,11 @@
   "macro_precision": 0.44349877348276734,
   "macro_recall": 0.4817695962879246,
   "macro_f1": 0.4224957488625847,
-  "hit_rate": 0.6803415961428507,
-  "mean_tte_sec": 0.4961800485167812,
+  "hit_rate": 0.702048198145227,
+  "mean_tte_sec": 0.495738462427078,
   "median_tte_sec": 0.4,
   "p25_tte_sec": 0.4,
   "p75_tte_sec": 0.4,
-  "num_hits": 167777,
+  "num_hits": 173130,
   "num_total": 246607
 }
