@@ -161,7 +161,7 @@ The longitudinal velocity distribution in \autoref{fig:data_analysis_vx_global} 
 This is mainly caused by differences between vehicle classes, with trucks concentrated at lower speeds and cars occupying a wider and generally higher-speed range. 
 These class-dependent differences show that raw continuous features can have different natural ranges depending on the vehicle type.  
 Class-wise kinematic distributions for cars and trucks are provided in Appendix~\ref{appendix:classwise_plots}. 
-For this reason, continuous variables are normalized before training, as described in \autoref{sec:training_validation}.
+For this reason, continuous variables are normalized class-wise before training, as described in \autoref{sec:training_validation}.
 
 
 
@@ -175,8 +175,7 @@ since the former describe speed adaptation and car-following behavior, whereas t
 
 \par In addition to the raw frame-level signals, the variability of each kinematic variable was also analyzed at trajectory level. 
 For each vehicle trajectory, the standard deviation of $a_x$, $a_y$, $v_x$, and $v_y$ was computed over time, producing one variability value per trajectory.  
-Unlike the raw kinematic distributions, these plots do not describe the absolute values of the signals, but rather how strongly they 
-fluctuate within individual trajectories.
+Unlike the raw kinematic distributions, these plots do not describe the absolute signal values, but rather how strongly the kinematic signals fluctuate within individual trajectories.
 The resulting distributions are shown in \autoref{fig:std_ax_global} to \autoref{fig:std_vy_global}. 
 
 
@@ -191,7 +190,7 @@ The resulting distributions are shown in \autoref{fig:std_ax_global} to \autoref
         \label{fig:lc_frame_distribution}
     \end{subfigure}
     \hfill
-    \begin{subfigure}[t]{0.47\textwidth}
+    \begin{subfigure}[t]{0.46\textwidth}
         \centering
         \includegraphics[height=4.75cm]{images/lane_changes_per_trajectory.png}
         \caption{Number of lane changes observed per trajectory.}
@@ -209,7 +208,7 @@ In contrast, \autoref{fig:std_ay_global} shows that $\mathrm{std}(a_y)$ remains 
 close to zero except during lane changes.
 A similar pattern appears in \autoref{fig:std_vy_global}, although the visible tail suggests that some trajectories contain stronger lateral motion. 
 Class-wise trajectory-level variability distributions are provided in Appendix~\ref{appendix:classwise_plots}. 
-These results support the use of variability-related window features, since instantaneous values alone do not capture whether a trajectory is stable or dynamically changing over time.
+These results support the use of variability-related features, since instantaneous values alone do not capture whether a trajectory is stable or dynamically changing over time.
 
 
 \begin{figure}[h]
@@ -322,15 +321,15 @@ This frame-level representation serves as the basis for the subsequent window-ba
 
 \subsection{Window-Based Representation}
 \label{subsec:window_based_representation}
-The proposed \ac{DBN} operates on short temporal windows rather than on individual frames. 
+The proposed model operates on short temporal windows rather than on individual frames. 
 Each vehicle trajectory is therefore converted into a sequence of overlapping windows, as illustrated in \autoref{fig:window_based_representation}.
-This allows the model to use recent motion history and interaction context instead of relying only on instantaneous frame values.
+This allows the model to capture short-term temporal dynamics and local interaction context instead of relying only on instantaneous frame values.
 
 \par Let $W$ denote the window length and $S$ the stride between consecutive windows. 
 In this work, $W=50$ frames and $S=10$ frames are used. 
 Since highD is recorded at 25\,Hz, each window covers approximately 2\,s of history, while consecutive windows start 0.4\,s apart. 
-Thus, for a trajectory of length $T$ frames, overlapping windows are extracted every $S$ frames as long as $T \geq W$. 
-Each resulting observation summarizes the selected features over one interval of $W$ consecutive frames.
+A 2\,s observation horizon is also consistent with prior highway maneuver prediction work on highD \cite{3161785}. 
+For a trajectory of length $T$ frames, overlapping windows are extracted every $S$ frames as long as $T \geq W$. 
 
 \begin{figure}[htbp]
     \centering
@@ -339,7 +338,7 @@ Each resulting observation summarizes the selected features over one interval of
     \label{fig:window_based_representation}
 \end{figure}
 
-\par Each window is converted into a single observation vector by aggregating the frame-level signals over the corresponding interval. 
+\par Each window is then aggregated into one observation vector.  
 Depending on the variable, the aggregation uses the most recent value, a minimum over the window, a temporal slope, sign-based fractions, percentile-based summaries, 
 binary event indicators, or fractions of valid or available frames. For neighbor-dependent variables, the summaries are computed only when the corresponding neighbor is present.
 The complete list of window-level features used in the final observation vector is provided in Appendix~\ref{appendix:window_features}.
@@ -353,14 +352,13 @@ The complete list of window-level features used in the final observation vector 
 The proposed model represents driver behavior through two discrete latent variables: a style state $S_t$ and an action state $A_t$. 
 The style state captures a broader driving regime, while the action state represents the maneuver at the current time step. 
 The observation vector $O_t$ corresponds to the window-level features. 
-Notation follows the convention introduced in \autoref{par:notation_convention}.
 
 
 \subsection{Latent State Structure}
 \label{subsec:latent_state_structure}
-Rather than using a single latent variable, the model uses a factorized latent representation. 
+The model uses a factorized latent representation. 
 As shown in \autoref{fig:proposed_dbn_structure}, the style state evolves as its own Markov chain, while the action state 
-depends on both the previous action and the current style state.
+depends on both the previous action state and the current style state.
 \begin{figure}[htbp]
     \centering
     \input{figures/sharedDBN}
@@ -370,13 +368,14 @@ depends on both the previous action and the current style state.
 
 \subsection{Transition Model}
 \label{subsec:transition_model}
+The transition model specifies how the latent states evolve from one time step to the next.
 The initial distribution is modeled as:
 \begin{align}
-p(S_0 = s_0) &= \bm{\pi}^{(s)}_{s_0} \\
-p(A_0 = a_0 \mid S_0 = s_0) &= \bm{\Pi}^{(a)}_{s_0, a_0}
+p(S_1 = s_1) &= \bm{\pi}^{(s)}_{s_1} \\
+p(A_1 = a_1 \mid S_1 = s_1) &= \bm{\Pi}^{(a)}_{s_1, a_1}
 \end{align}
 
-For later time steps, the transition model is factorized as:
+For later time steps, with t=2, \dots, T, the transition model is factorized as:
 \begin{align}
 p(S_t = s_t \mid S_{t-1} = s_{t-1}) &= \bm{A}^{(s)}_{s_{t-1}, s_t}\\
 p(A_t = a_t \mid A_{t-1} = a_{t-1}, S_t = s_t) &= \mathcal{A}^{(a)}_{s_t, a_{t-1}, a_t}
@@ -405,7 +404,8 @@ p(O_t \mid S_t=s_t, A_t=a_t) = \frac{p_s(O_t \mid S_t=s_t; \theta_{s_t})\,p_a(O_
 \end{equation}
 Here, $\theta_{s_t}$ denotes the parameters of the style expert associated with style state $s_t$, and $\theta_{a_t}$ denotes the parameters of the action expert associated with action state $a_t$. 
 Each parameter set contains the Gaussian parameters for the continuous features and the Bernoulli parameters for the binary features. 
-The term $Z_{s_t,a_t}$ is the normalization constant that ensures the resulting distribution is valid.
+The term $Z_{s_t,a_t}$ is the partition function that normalizes the product of experts for state pair $(s_t,a_t)$, 
+ensuring a valid probability distribution, as in standard \ac{PoE} formulations \cite{Hinton2002}.
 
 \begin{figure}[htbp]
     \centering
@@ -447,9 +447,9 @@ This formulation gives the model greater flexibility for each joint latent-state
 \subsection{Modeling Assumptions}
 \label{subsec:modeling_assumptions}
 
-The proposed \ac{DBN} model is based on the following modeling assumptions:
+The proposed \ac{DBN} is modeled based on the following assumptions:
 \begin{itemize}
-    \item \textbf{First-order temporal dependence:}  
+    \item \textbf{First-order temporal dependency:}  
     The style state \(S_t\) depends only on the previous style state \(S_{t-1}\).  
     The action state \(A_t\) depends only on the previous action state \(A_{t-1}\) and the current style state \(S_t\).  
     This gives a first-order Markov structure for the latent process.
@@ -458,16 +458,17 @@ The proposed \ac{DBN} model is based on the following modeling assumptions:
     Once \(S_t\) and \(A_t\) are known, the current observation is assumed to be conditionally independent of past observations and past latent states.
     \item \textbf{Window-level observation representation:}  
     Each model time step corresponds to one windowed observation vector rather than one raw frame from the dataset. 
-    Therefore, the model predicts behavior from short temporal summaries of recent motion, interaction, and risk-related features.
     \item \textbf{Split into continuous and binary features:}  
     The observation vector is divided into continuous and binary components.  
     Among the window features, the lane-change indicator variables are binary, while the remaining features are treated as continuous.
+    \item \textbf{Naive Bayes-style conditional independence:}  
+    Given the relevant latent state pair, features are assumed conditionally independent within each observation.
     \item \textbf{Diagonal Gaussian assumption for continuous features:}  
     Continuous features are modeled using diagonal Gaussian distributions.  
-    This means that, conditioned on the relevant latent state, the continuous feature dimensions are treated as independent. 
+    This corresponds to conditionally independent continuous feature dimensions given the latent states.
     \item \textbf{Bernoulli assumption for binary features:}  
     Binary features are modeled using Bernoulli distributions.  
-    The binary dimensions are treated as conditionally independent given the relevant latent state.
+    The binary dimensions are treated as conditionally independent given the latent states.
     \item \textbf{Missing-feature handling:}  
     Some features may be undefined at certain time steps, especially interaction-related quantities when neighboring vehicles are absent.  
     Such values are treated as missing and are excluded from the corresponding likelihood terms through masking, rather than being interpreted as informative values.
@@ -489,9 +490,10 @@ This is necessary because the observation vector contains different physical qua
 acceleration, lane-relative distances, and interaction-related measures, which naturally have different numerical ranges. 
 Without scaling, features with larger magnitudes could dominate the likelihood computation and make parameter estimation less stable.
 
-\par In the implemented pipeline, z-score scaling statistics, namely the mean and standard deviation, are computed from the training set and then applied 
-unchanged to the validation and test sets. 
-The same transformation is reused during inference when the learned model is applied to new observation sequences.  
+\par In the implemented pipeline, z-score scaling statistics, namely the mean and standard deviation, are computed from the training observations and then reused unchanged 
+for the training, validation, and test splits. 
+The same transformation is also
+applied during inference to any new observation sequence.   
 Only continuous features are normalized in this way. The binary lane-change indicators, namely \texttt{lc\_left\_present} and \texttt{lc\_right\_present}, 
 are kept in their original form.
 These scaling values are fixed preprocessing quantities and are not part of the learned emission model. 
@@ -500,18 +502,18 @@ These scaling values are fixed preprocessing quantities and are not part of the 
 
 
 \subsection{Parameter Initialization}
-After feature scaling, the model parameters are initialized before iterative learning begins. 
-This includes both the temporal parameters of the \ac{DBN} and the parameters of the emission model. 
-A suitable initialization is important because the \ac{EM} algorithm is sensitive to the starting point and may otherwise converge to a poor local optimum.
+Before iterative learning begins, the model parameters must be assigned initial values. 
+These include the initial-state and transition probabilities of the \ac{DBN}, as well as the parameters of the emission model. 
+This step is important because the \ac{EM} algorithm is sensitive to its starting point and may otherwise converge to a poor local optimum. 
 
-\par In the implemented framework, the emission parameters are initialized from the scaled training observations using K-means clustering. 
+\par In the implemented framework, the emission model is initialized from the scaled training observations using K-means clustering. 
 For the continuous part of the observation vector, the cluster centers and cluster variances are used as the initial Gaussian emission parameters. 
 For the binary part, the initial Bernoulli probabilities are derived from the clustered observations. 
-This provides a more informative starting point than a purely random initialization.
+This provides a more informative starting point than a purely random assignment.
 
-\par The initial latent-state distribution and the transition probabilities are also initialized before the first \ac{EM} iteration. 
-Depending on the experiment, different initialization schemes can be used, such as uniform, random, or sticky initialization. 
-Here, sticky initialization means that remaining in the same latent state is given a higher initial probability than switching to a different state.
+\par The initial latent-state distribution and the transition probabilities are set separately.  
+Depending on the experiment, different schemes can be used, including uniform, random, or sticky initialization. 
+In the sticky case, self-transitions are assigned higher initial probability than transitions to different latent states.
 
 
 \subsection{EM-Based Training}
@@ -560,14 +562,14 @@ computed from the training data, with an upper clipping threshold to avoid exces
 \par Two weighting variants were considered. 
 In the first variant, the weights are applied directly to the emission log-likelihood before forward-backward inference. 
 Since multiplying a log-likelihood term by a positive weight is equivalent to raising the corresponding likelihood term to a power, 
-this variant can be interpreted as a power-likelihood or tempered-likelihood formulation \cite{holmes2017assigningvaluepowerlikelihood}. 
+this variant can be interpreted as a power-likelihood formulation \cite{holmes2017assigningvaluepowerlikelihood}. 
 As a result, this variant modifies the posterior inference itself.
 
-\par In the second variant, forward-backward inference is first carried out under the original model, and the weights are applied afterward to 
+\par In the second variant, forward-backward pass is first carried out under the original model, and the weights are applied afterward to 
 the posterior quantities used in the parameter update. 
 This is closer to weighted-data \ac{EM}, in which observations contribute to parameter estimation with different strengths 
 through weighted responsibilities and weighted update equations \cite{Gebru_2016}. 
-When weighting is enabled, the inference step remains unchanged, and only the parameter update is weighted.
+In this case, the pass itself remains unweighted, and only the parameter update is weighted.
 
 \par After each iteration, the model is evaluated on the validation set using the average validation log-likelihood per observation. 
 Training stops when this value no longer improves meaningfully over several successive iterations. 
@@ -585,13 +587,12 @@ Based on this comparison, a smaller set of candidate models is then selected for
 
 
 \par For full-sequence analysis, inference is performed over the complete observation sequence to obtain the smoothed joint posterior distribution
-\begin{equation}
-p(S_t, A_t \mid O_{1:T}),
-\end{equation} 
+$
+p(S_t, A_t \mid O_{1:T})$, 
 for each time step \(t\).    
 Since this posterior is conditioned on the full sequence, including future observations relative to time \(t\), it is not a causal prediction setting. 
 Instead, it is used to evaluate how well the model explains unseen data under the learned probabilistic structure.   
-A better generative fit indicates that the model captures the temporal and contextual structure of driver behavior more faithfully, not just the next-step prediction. 
+A better generative fit indicates that the model captures the temporal and contextual structure of driver behavior more faithfully. 
   
 In this work, generative fit is assessed using likelihood-based measures such as average log-likelihood per time step and \ac{BIC}, 
 together with posterior-based diagnostics such as entropy and state occupancy.
@@ -600,26 +601,27 @@ together with posterior-based diagnostics such as entropy and state occupancy.
 At time step \(t\), the current observation \(O_t\) is used to update the filtered belief \(p(S_t, A_t \mid O_{1:t})\), 
 and the transition model is then used to compute the one-step-ahead predictive distribution.
 Using the transition factorization from \autoref{subsec:transition_model}, this is given by:
-\begin{equation}
+\begin{align}
 p(S_{t+1}=s', A_{t+1}=a' \mid O_{1:t})
-=
-\sum_{s_t} \sum_{a_t}
-p(S_{t+1}=s' \mid S_t=s_t)\,
-p(A_{t+1}=a' \mid A_t=a_t, S_{t+1}=s')\,
-p(S_t=s_t, A_t=a_t \mid O_{1:t}).
-\end{equation}
+&= \sum_{s_t} \sum_{a_t}
+ p(S_t=s_t, A_t=a_t \mid O_{1:t})\, p(S_{t+1}=s' \mid S_t=s_t)\, 
+\nonumber\\
+&\quad\quad
+p(A_{t+1}=a' \mid A_t=a_t, S_{t+1}=s')
+\label{eq:predictive_dist}
+\end{align}
 The one-step prediction is then taken as the \ac{MAP} estimate of the joint latent state:
 \begin{equation}
 (\hat{S}_{t+1}, \hat{A}_{t+1})
 =
 \arg\max_{s,a}
-p(S_{t+1}=s, A_{t+1}=a \mid O_{1:t}).
+p(S_{t+1}=s, A_{t+1}=a \mid O_{1:t})
 \end{equation}
 
 \par During online evaluation, each test trajectory is processed sequentially. 
-The first few windows are treated as a warmup period and are not scored, so that the predictor first accumulates sufficient recent context. 
+The first few window-based observations are excluded from scoring so that the model can update its initial belief state based on the recent context of the current vehicle. 
 After this warmup period, the model outputs a one-step-ahead prediction at each valid time step. 
-These predictions are compared with rule-based reference labels derived from observable features. 
+These predictions are compared with rule-based reference labels obtained manually during semantic analysis and described in \autoref{sec:semantic_interpretation_latent_states}. 
 Figure~\ref{fig:predictive_evaluation_pipeline} illustrates the causal prediction and evaluation procedure used in this work. 
 \begin{figure}[htbp]
     \centering
@@ -633,14 +635,14 @@ Figure~\ref{fig:predictive_evaluation_pipeline} illustrates the causal predictio
 \label{subsec:generative_evaluation_metrics}
 \subsubsection{Average Log-Likelihood per Time Step}
 
-For a set of test sequences indexed by $i$, the average log-likelihood per time step is defined as:
+For a set of test vehicles indexed by $i$, the average log-likelihood per time step is defined as:
 \begin{equation}
 \bar{\ell}_{\mathrm{step}}
 =
 \frac{1}{\sum_i T_i}
 \sum_i \log p\!\left(O^{(i)}_{1:T_i}\right)
 \end{equation}
-where $T_i$ is the length of sequence $i$.
+where $T_i$ is the length of the trajectory sequence $i$.
 
 This metric measures how well the trained model explains unseen observation
 sequences on average. Since total log-likelihood scales with sequence length,
@@ -652,7 +654,7 @@ marginalizing over all latent style and action sequences:
 p\!\left(O^{(i)}_{1:T_i}\right)
 =
 \sum_{s_{1:T_i}} \sum_{a_{1:T_i}}
-p\!\left(O^{(i)}_{1:T_i}, S_{1:T_i}=s_{1:T_i}, A_{1:T_i}=a_{1:T_i}\right).
+p\!\left(O^{(i)}_{1:T_i}, S_{1:T_i}=s_{1:T_i}, A_{1:T_i}=a_{1:T_i}\right)
 \end{equation}
 
 In practice, this quantity is evaluated with the forward algorithm rather than
@@ -664,7 +666,7 @@ computed for each vehicle trajectory:
 \ell_i
 =
 \frac{1}{T_i}
-\log p\!\left(O^{(i)}_{1:T_i}\right).
+\log p\!\left(O^{(i)}_{1:T_i}\right)
 \end{equation}
 The distribution of $\ell_i$ over the test split is then summarized using
 percentiles such as the 5th, 50th, and 95th percentiles.
@@ -676,7 +678,7 @@ across vehicles or is dominated by only a subset of trajectories.
 
 To compare model variants with different numbers of free parameters, a complexity-penalized score based on the \ac{BIC} is also computed on the training set:
 \begin{equation}
-\mathrm{BIC} = k \log N - 2 \log \hat{L},
+\mathrm{BIC} = k \log N - 2 \log \hat{L}
 \end{equation}
 where $k$ is the number of free model parameters, $N=\sum_i T_i$ is the total
 number of training time steps, and \(\hat{L}\) denotes the fitted likelihood on the training set used for model comparison. 
@@ -685,25 +687,25 @@ between goodness of fit and model complexity \cite{Schwarz1978EstimatingTD}.
 
 For the proposed model,
 \begin{equation}
-k = k_{\pi} + k_{\mathrm{trans}} + k_{\mathrm{em}}.
+k = k_{\pi} + k_{\mathrm{trans}} + k_{\mathrm{em}}
 \end{equation}
-With \(K_S\) style states, \(K_A\) action states, \(D_c\) continuous features, and \(D_b\) binary features, the number of free parameters is
+With \(K_S\) style states, \(K_A\) action states, \(D_c\) continuous features, and \(D_b\) binary features, the number of free parameters is:
 \begin{align}
 k_{\pi} &= (K_S-1) + K_S(K_A-1), \\
-k_{\mathrm{trans}} &= K_S(K_S-1) + K_S K_A (K_A-1).
+k_{\mathrm{trans}} &= K_S(K_S-1) + K_S K_A (K_A-1)
 \end{align}
-For the hierarchical emission model,
+For the hierarchical emission model:
 \begin{equation}
 k_{\mathrm{em}}^{\mathrm{hier}}
 =
 K_S K_A (2D_c + D_b),
 \end{equation}
 assuming diagonal Gaussian parameters for the continuous part and Bernoulli parameters for the binary part. 
-For the \ac{PoE} emission model,
+For the \ac{PoE} emission model:
 \begin{equation}
 k_{\mathrm{em}}^{\mathrm{PoE}}
 =
-(K_S + K_A)(2D_c + D_b).
+(K_S + K_A)(2D_c + D_b)
 \end{equation}
 
 
@@ -721,10 +723,8 @@ H_{\mathrm{joint}}^{(i)}(t)
 \gamma_t^{(i)}(s,a)\log \gamma_t^{(i)}(s,a),
 \end{equation}
 with the convention that $0\log 0 = 0$.
-This normalization ensures that
-\begin{equation}
-0 \le H_{\mathrm{joint}}^{(i)}(t) \le 1.
-\end{equation}
+This normalization ensures that $
+0 \le H_{\mathrm{joint}}^{(i)}(t) \le 1$.
 
 The corresponding marginal style and action entropies are:
 \begin{align}
@@ -737,7 +737,7 @@ H_{\mathrm{action}}^{(i)}(t)
 &=
 -\frac{1}{\log K_A}
 \sum_{a=1}^{K_A}
-\gamma_t^{(i)}(a)\log \gamma_t^{(i)}(a).
+\gamma_t^{(i)}(a)\log \gamma_t^{(i)}(a)
 \end{align}
 
 Lower entropy indicates a more confident latent-state assignment, while higher
@@ -750,23 +750,20 @@ latent states are used on the test split. The joint occupancy is defined as:
 \begin{equation}
 C_{\mathrm{joint}}(s,a)
 =
-\sum_i \sum_{t=1}^{T_i} \gamma_t^{(i)}(s,a),
-\end{equation}
-and the normalized occupancy distribution is
-\begin{equation}
-p_{\mathrm{joint}}(s,a)
-=
-\frac{C_{\mathrm{joint}}(s,a)}
-{\sum_{s',a'} C_{\mathrm{joint}}(s',a')}.
+\sum_i \sum_{t=1}^{T_i} \gamma_t^{(i)}(s,a)
 \end{equation}
 
-Analogously, the marginal occupancies for style and action are:
+The marginal occupancies for style and action can be written directly from the joint posterior as:
 \begin{align}
-C_{\mathrm{style}}(s) &= \sum_i \sum_{t=1}^{T_i} \gamma_t^{(i)}(s) \\
-C_{\mathrm{action}}(a) &= \sum_i \sum_{t=1}^{T_i} \gamma_t^{(i)}(a)
+C_{\mathrm{style}}(s) &= \sum_i \sum_{t=1}^{T_i} \sum_{a=1}^{K_A} \gamma_t^{(i)}(s,a), \\
+C_{\mathrm{action}}(a) &= \sum_i \sum_{t=1}^{T_i} \sum_{s=1}^{K_S} \gamma_t^{(i)}(s,a)
 \end{align}
-with normalized versions:
+The corresponding normalized occupancy distributions are:
 \begin{align}
+p_{\mathrm{joint}}(s,a)
+&=
+\frac{C_{\mathrm{joint}}(s,a)}
+{\sum_{s',a'} C_{\mathrm{joint}}(s',a')}, \\
 p_{\mathrm{style}}(s)
 &=
 \frac{C_{\mathrm{style}}(s)}
@@ -774,7 +771,7 @@ p_{\mathrm{style}}(s)
 p_{\mathrm{action}}(a)
 &=
 \frac{C_{\mathrm{action}}(a)}
-{\sum_{a'} C_{\mathrm{action}}(a')}.
+{\sum_{a'} C_{\mathrm{action}}(a')}
 \end{align}
 A concentrated occupancy distribution indicates that posterior mass is dominated by a small subset of states, 
 whereas a flatter distribution indicates more balanced use of the state space.
@@ -786,7 +783,7 @@ N_{\mathrm{eff}}^{\mathrm{joint}}
 \exp\!\left(
 -\sum_{s=1}^{K_S}\sum_{a=1}^{K_A}
 p_{\mathrm{joint}}(s,a)\log p_{\mathrm{joint}}(s,a)
-\right).
+\right)
 \end{equation}
 Analogous definitions are used for style and action. Larger values indicate that
 posterior mass is spread across more latent states, while smaller values indicate that the model relies on only a few states \cite{Jost2006}.
@@ -795,7 +792,6 @@ posterior mass is spread across more latent states, while smaller values indicat
 \label{subsec:predictive_evaluation_metrics}
 For the selected candidate models, predictive evaluation is carried out in a strictly causal setting after an initial warmup period. 
 One-step-ahead predictions are assessed using exact next-step accuracy, horizon-based hit rate, and time-to-event. 
-Predictions whose rule-based reference labels are undefined are excluded from scoring.
 
 \subsubsection{Exact One-Step Prediction Accuracy}
 
@@ -837,12 +833,9 @@ For a future horizon of $H$ steps, the prediction is counted as a hit if the pre
 \exists h \in \{1,\dots,H\}
 :
 z_{t+h} = \hat{z}_{t+1}
-\right].
+\right]
 \end{equation}
 The hit rate is then obtained by averaging this indicator over all scored prediction times.
-
-\par In addition to exact matching, the implemented evaluation can also credit semantically equivalent latent-state pairs when they correspond to the same higher-level maneuver group. 
-This makes the horizon-based metric less brittle and better aligned with the intended behavior-prediction task.
 
 \subsubsection{Time-to-Event}
 
@@ -856,7 +849,7 @@ h^\ast(t)
 h \in \{1,\dots,H\}
 :
 z_{t+h} = \hat{z}_{t+1}
-\right\}.
+\right\}
 \end{equation}
 If no hit occurs within the horizon, the prediction is treated as a miss.
 
@@ -867,13 +860,12 @@ If no hit occurs within the horizon, the prediction is treated as a miss.
 h^\ast(t)\,\Delta t,
 \end{equation}
 where $\Delta t$ denotes the duration of one window step. 
-With window stride measured in frames and dataset frame rate measured in frames per second, this is
+With window stride measured in frames and dataset frame rate measured in frames per second, this is:
 \begin{equation}
 \Delta t
 =
-\frac{\text{stride}}{\text{frame rate}}.
+\frac{\text{stride}}{\text{frame rate}}
 \end{equation}
-Mean, median, and percentile \ac{TTE} values are reported over successful hits only.
 
 \subsection{Posterior-Based Interpretation of Individual Predictions}
 \label{subsec:posterior_based_interpretation}
@@ -884,19 +876,14 @@ The emission likelihood measures how compatible the current observation is with 
 The posterior belief then represents the updated latent-state distribution after observing the current traffic context, and the one-step forecast propagates this posterior one step forward.
 
 \par This decomposition makes it possible to analyse whether a prediction is driven mainly by the transition dynamics, by strong evidence from the current observation, or by a combination of both. 
-For the winning posterior state, additional feature-group contribution scores are also computed in order to show which groups of observation features contribute most strongly to the local explanation.
 
 \subsection{Computational Efficiency}
 \label{subsec:computational_efficiency}
 
-Since the intended application is online behavior prediction, computational efficiency is also evaluated. 
+Since the intended application is online action prediction, computational efficiency is also evaluated. 
 For this purpose, the trained model is benchmarked under several execution settings, including single-vehicle prediction, multi-vehicle sequential prediction, and batched prediction. 
 These benchmarks are carried out both in a model-only setting, where precomputed window observations are given directly to the predictor, and in an end-to-end setting, where the full pipeline from frame-level input through windowization, scaling, 
-belief update, and prediction is included.
-
-\par For each benchmark setting, the latency of obtaining the first valid prediction is measured separately from steady-state subsequent prediction times. 
-In the end-to-end setting, the warmup phase required to accumulate enough frames for the first valid window is also included. 
-The reported statistics include the first-prediction latency as well as summary measures of subsequent prediction times, such as mean, median, and upper percentiles. 
+belief update, and prediction is included. 
 These results are used to assess whether the proposed model is suitable for short-horizon online prediction in an \ac{AV} context.
 
 
@@ -907,7 +894,7 @@ These results are used to assess whether the proposed model is suitable for shor
 
 After training, an additional analysis is performed to interpret the learned latent states. 
 The goal of this step is to relate the latent style and action states to characteristic traffic patterns observed in the data. 
-For this purpose, the trained model is applied again to the test split.  
+For this purpose, the trained model is applied again to the training split.  
 For each windowized observation sequence, posterior inference is carried out to obtain the joint posterior probabilities $\gamma_t(s,a)$.
 
 
@@ -917,7 +904,7 @@ For a selected feature \(o_t^{(f)}\) and a joint latent state pair \((s,a)\), th
 \mu_{s,a,f}
 =
 \frac{\sum_n \sum_t \gamma_t^{(n)}(s,a)\,o_t^{(n,f)}}
-{\sum_n \sum_t \gamma_t^{(n)}(s,a)}.
+{\sum_n \sum_t \gamma_t^{(n)}(s,a)}
 \end{equation}
 where $n$ indexes the analyzed vehicle trajectories. 
 Posterior-weighted standard deviations are computed in the same way to describe the variability of each feature within the corresponding latent state pair. 
@@ -927,7 +914,7 @@ Posterior-weighted standard deviations are computed in the same way to describe 
 \left(
 \frac{\sum_n \sum_t \gamma_t^{(n)}(s,a)\left(o_t^{(n,f)}-\mu_{s,a,f}\right)^2}
 {\sum_n \sum_t \gamma_t^{(n)}(s,a)}
-\right)^{1/2}.
+\right)^{1/2}
 \end{equation}
 This produces a semantic feature profile for every joint state $(s,a)$, showing which motion, interaction, or risk-related properties are typically associated with that state.
 
