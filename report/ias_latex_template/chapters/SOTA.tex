@@ -18,7 +18,7 @@ However, as they rely on hand-crafted assumptions about driver decision-making, 
 
 \subsection{Car-Following Models}
 \subsubsection{Intelligent Driver Model}
-The \ac{IDM} is one of the most widely used car-following models \cite{zhou2025}. 
+The \ac{IDM} is one of the most popular car-following models \cite{zhou2025}. 
 It expresses a vehicle's acceleration as a continuous function of its current velocity, 
 desired velocity, spacing to the leading vehicle, and relative velocity \cite{PhysRevE.62.1805}. The formulation also includes parameters related to desired time headway and comfortable 
 braking, which make the model suitable for safety-oriented traffic simulation. 
@@ -71,7 +71,7 @@ complex contextual interactions \cite{chen2023datadriventrafficsimulationcompreh
 
 \subsection{Dynamic Bayesian Networks}
 \acp{DBN} extend static \acp{BN} to temporal settings and model dependencies among variables across successive time steps \cite{murphy2002dynamic,pearl1995bayesian}. 
-Compared with \acp{HMM}, \acp{DBN} provide a more flexible representation because the system state can be represented in factored form rather than as a single discrete variable.
+Compared with \acp{HMM}, \acp{DBN} provide a more flexible representation because, instead of using a single discrete variable, the system state can be described in factored form.
 This allows \acp{DBN} to represent multiple interacting hidden and observed variables, which makes them suitable for modeling the joint evolution of driver state, 
 vehicle behavior, and surrounding traffic context \cite{electronics8010040}. For instance, \citeauthor{młynarczyk2025bayesiannetworkapproachbuilding} (\citeyear{młynarczyk2025bayesiannetworkapproachbuilding}) 
 applied \acp{BN} to capture causal links between drivers’ affective states and behavioral responses \cite{młynarczyk2025bayesiannetworkapproachbuilding}, while
@@ -106,12 +106,12 @@ nonlinear relationships between driving context and human decisions with high ac
 \subsection{Classical Machine Learning Models}
 Classical machine learning methods formed the earliest data-driven foundation for maneuver prediction before the advent of modern \ac{DL}. Algorithms
 such as \acp{kNN}, \acp{SVM}, Decision Trees, and
-Random Forests were widely applied to predict driver intent, classify maneuvers, or recognize driving
+Random Forests were commonly utilized to predict driver intent, classify maneuvers, or recognize driving
 styles \cite{app112210562}. These approaches rely on manually designed features rather than automatically learned representations,
 as used in modern \ac{DL} approaches \cite{bengio2014representationlearningreviewnew}.
 
 \subsection{Recurrent Neural Network-Based Models}
-\acp{RNN} form a specialized class of \acp{NN} designed to model temporal relationships in
+\acp{RNN} form a specialized class of \acp{NN} developed to model temporal relationships in
 sequential data \cite{Goodfellow-et-al-2016}. They incorporate internal states and cyclic connections that enable them to process
 time-dependent information, making them suitable for driver intention recognition and trajectory prediction 
 in behavioral prediction tasks \cite{xin2019intentionawarelonghorizontrajectory,inproceedings}.
@@ -141,16 +141,16 @@ vehicles \cite{diehl2019graphneuralnetworksmodelling}. Recent research has explo
 as \acp{LSTM} and Transformers to jointly capture spatial and temporal dependencies. \citeauthor{abdelraouf2023} (\citeyear{abdelraouf2023}) 
 proposed a \ac{T-GNN} that combines \acp{GCN} with \ac{LSTM} layers to personalize trajectory prediction for different driving styles \cite{abdelraouf2023}.
 
-\par However, the performance of \acp{GNN} depends strongly on the design of the interaction graph, since graph construction determines which neighboring agents and relations are
+\par However, \acp{GNN} performance is highly dependent on the design of the interaction graph, since graph construction determines which neighboring agents and relations are
 modeled \cite{diehl2019graphneuralnetworksmodelling}.
 An overly sparse graph structure may lead to loss of critical interaction information, while overly dense
 connections can introduce noise and computational complexity. Moreover, most existing \ac{GNN}-based
 trajectory prediction models are highly data-driven and require large, diverse datasets for generalization.
 
 \subsection{Transformers}
-Transformers are a recent and powerful \ac{DL} architecture that are particularly effective at capturing
+Transformers are a recent and powerful \ac{DL} architecture that are very good at capturing
 long-range dependencies in sequential data. Unlike recurrent networks, they rely on self-attention
-mechanisms that directly model relationships between all elements in a sequence, regardless of their
+that explicitly model interactions between all elements in a sequence, regardless of their
 temporal distance. In addition, self-attention enables parallel processing of the entire input sequence,
 which improves computational efficiency \cite{vaswaniattention,winland_self_attention_ibm}. In the
 multi-head self-attention mechanism, different attention heads can focus on different aspects of the input,
@@ -165,7 +165,7 @@ future trajectories per agent \cite{shi2023motiontransformerglobalintention}. Bu
 introduces a multi-scale hierarchical attention structure designed to handle large numbers of
 interacting agents efficiently \cite{inproceedingshivt}. \ac{HiVT} first applies local attention to encode trajectory and map features
 for each agent, then applies a global attention layer to model interactions among all agents in the scene.
-Using these representations, the decoder predicts the future trajectories of all agents in a single forward
+The decoder uses these representations to forecast each agent's future trajectory in a single forward
 pass.
 
 \par However, despite their strong representation capacity, Transformer-based models generally require large datasets and careful
@@ -209,26 +209,25 @@ refining predictions through multiple \ac{CVAE} stages, where each stage predict
 subsequently extends or corrects it over longer horizons \cite{ZHOU2023109030}.
 
 \subsection{Diffusion Models}
-Diffusion models are generative models that learn a data distribution through a forward process that gradually adds noise to training samples and 
-a reverse process that learns to remove this noise \cite{ho2020denoisingdiffusionprobabilisticmodels}. 
-During inference, the model starts from random noise and iteratively denoises it into a future trajectory conditioned on the observed scene context. 
+Diffusion models are generative models that use a forward process to progressively introduce noise into training samples and a reverse process to 
+learn how to eliminate this noise in order to learn a data distribution \cite{ho2020denoisingdiffusionprobabilisticmodels}. 
+The model begins with random noise during inference and iteratively denoises it into a future trajectory conditioned on the observed scene context. 
 In trajectory prediction, this allows the model to generate multiple plausible future motions instead of a single deterministic output, which is useful 
 because vehicle behavior is inherently uncertain and often multimodal \cite{peng2025diffusionmodelsintelligenttransportation,AdvancedDiffusion}. 
 
 \par TrajDiffuse is a recent development in trajectory prediction that applies diffusion modeling. It generates
 accurate and diverse single-agent trajectory predictions while maintaining consistency with environmental
-constraints \cite{10.1007/978-3-031-78110-0_25}. MotionDiffuser extends this concept to multi-agent interaction scenarios \cite{jiang2023motiondiffusercontrollablemultiagentmotion}. It
-employs a conditional diffusion process to generate permutation-invariant joint trajectories for multiple
-interacting agents and integrates a \ac{PCA} based dimensionality reduction
-technique to improve computational efficiency.
+constraints \cite{10.1007/978-3-031-78110-0_25}. MotionDiffuser extends this concept to multi-agent interaction scenarios \cite{jiang2023motiondiffusercontrollablemultiagentmotion}. 
+For several interacting agents, it uses a conditional diffusion process to produce permutation-invariant joint trajectories.
+To increase computational efficiency, it incorporates a dimensionality reduction method based on \ac{PCA}.
 
 \subsection{Other Learning-Based Behavior Modeling Approaches}
 Maximum Entropy \ac{IRL} is a learning-based behavior modeling approach that infers a latent reward 
 function from demonstrations and models behavior as a probabilistic distribution over trajectories \cite{ARORA2021103500,10.5555/1620270.1620297}.  
-Rather than directly mapping states to actions, \ac{IRL} aims to recover the latent reward or cost function
-that a human driver may implicitly optimize during driving. 
-Classical \ac{IRL} assumes that the expert follows an optimal policy for an unknown reward, without
-accounting for variations in actual human behavior \cite{10.5555/645529.657801}. However, this can lead to ambiguity, since multiple reward functions
+\ac{IRL} aims to recover the latent reward or cost function
+that a human driver may implicitly optimize during driving, rather than directly mapping states to actions. 
+Without taking into consideration differences in real human behavior, classical \ac{IRL} assumes that the expert follows an optimal strategy for an uncertain 
+reward \cite{10.5555/645529.657801}. However, this can lead to ambiguity, since multiple reward functions
 may explain the same observed behavior. To address this, 
 \ac{MaxEnt IRL} introduces the principle of maximum entropy \cite{10.5555/1620270.1620297}. Instead of selecting a single deterministic explanation,
 it learns the maximum-entropy distribution over trajectories that remains consistent with the demonstrated feature statistics. 
@@ -291,8 +290,8 @@ explicitly balance risk and driving progress \cite{inproceedingsRisk-aware}.
 \section{Comparative Assessment of Approaches for HDV Behavior Modeling and Prediction}
 Rule-based models are simple, interpretable, and computationally efficient. Their parameters have a direct
 physical meaning, and they are widely used in microscopic traffic simulation and as baselines for evaluating
-more complex models. However, they typically treat driving as a largely deterministic process and do not account
-well for the uncertainty and variability inherent in human decision-making. As a result, they are limited in their
+more complex models. However, they usually ignore the uncertainty and unpredictability present in human decision-making 
+and portray driving as a mostly deterministic activity. As a result, they are limited in their
 ability to capture latent intent and behavioral adaptation in complex real-world scenarios.
 
 \par Probabilistic models address these limitations by treating driver behavior as a stochastic process.

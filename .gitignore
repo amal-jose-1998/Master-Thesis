@@ -51,3 +51,10 @@ Thumbs.db
 *.zip
 *.tar
 *.tar.gz
+
+# ---------------------------
+# LATEX REPORT ARTIFACTS
+# ---------------------------
+report/ias_latex_template/Name_Thema.*
+!report/ias_latex_template/Name_Thema.tex
+!report/ias_latex_template/Name_Thema.pdf

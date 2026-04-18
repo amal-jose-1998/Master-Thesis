@@ -41,7 +41,7 @@ The engineered window features are linked to these latent states through the emi
 Each windowized observation sequence corresponds to a single vehicle trajectory. 
 To prevent leakage across the training, validation, and test sets, the data are partitioned at the vehicle level into disjoint subsets. 
 Specifically, the split contains 35,318 training vehicles (70\%), 5,045 validation vehicles (10\%), and 10,092 test vehicles (20\%).
-The training set is used for parameter estimation, the validation set is used to monitor validation log-likelihood and to apply early stopping during \ac{EM} training, 
+The training set is used for estimating model parameters, the validation set is used to monitor validation log-likelihood and to apply early stopping during \ac{EM} training, 
 and the test set is reserved for the final evaluation. 
 After training, inference is performed on the held-out test set to estimate the posterior distribution over latent states and to predict the distribution over future maneuvers.
 
@@ -327,7 +327,7 @@ This allows the model to capture short-term temporal dynamics and local interact
 
 \par Let $W$ denote the window length and $S$ the stride between consecutive windows. 
 In this work, $W=50$ frames and $S=10$ frames are used. 
-Since highD is recorded at 25\,Hz, each window covers approximately 2\,s of history, while consecutive windows start 0.4\,s apart. 
+Since highD is recorded at 25\,Hz, each window covers exactly 2.0\,s of history, while consecutive windows start every 0.4\,s. 
 A 2\,s observation horizon is also consistent with prior highway maneuver prediction work on highD \cite{3161785}. 
 For a trajectory of length $T$ frames, overlapping windows are extracted every $S$ frames as long as $T \geq W$. 
 
@@ -349,8 +349,8 @@ The complete list of window-level features used in the final observation vector 
 
 \section{Proposed DBN Model}
 \label{sec:proposed_dbn_model}
-The proposed model represents driver behavior through two discrete latent variables: a style state $S_t$ and an action state $A_t$. 
-The style state captures a broader driving regime, while the action state represents the maneuver at the current time step. 
+This section formalizes the structure of the \ac{DBN}. 
+The style state $S_t$ captures a broader driving regime, while the action state $A_t$ represents the maneuver at the current time step. 
 The observation vector $O_t$ corresponds to the window-level features. 
 
 
@@ -502,6 +502,7 @@ These scaling values are fixed preprocessing quantities and are not part of the 
 
 
 \subsection{Parameter Initialization}
+\label{subsec:parin}
 Before iterative learning begins, the model parameters must be assigned initial values. 
 These include the initial-state and transition probabilities of the \ac{DBN}, as well as the parameters of the emission model. 
 This step is important because the \ac{EM} algorithm is sensitive to its starting point and may otherwise converge to a poor local optimum. 
@@ -512,11 +513,19 @@ For the binary part, the initial Bernoulli probabilities are derived from the cl
 This provides a more informative starting point than a purely random assignment.
 
 \par The initial latent-state distribution and the transition probabilities are set separately.  
-Depending on the experiment, different schemes can be used, including uniform, random, or sticky initialization. 
+Depending on the experiment, different schemes can be used, including uniform or sticky initialization. 
 In the sticky case, self-transitions are assigned higher initial probability than transitions to different latent states.
+
+\par For reproducibility, the transition CPD initializations used in this work are:
+\begin{align}
+\text{uniform:}\quad \bm{A}^{(s)}_{s,s'} &= \frac{1}{K_S} & \mathcal{A}^{(a)}_{s,a,a'} &= \frac{1}{K_A} \\
+\text{sticky (style CPD):}\quad \bm{A}^{(s)}_{s,s} &= \rho & \bm{A}^{(s)}_{s,s'} &= \frac{1-\rho}{K_S-1}\ \ (s'\neq s)
+\end{align}
+with \(\rho=0.8\) in the implemented configuration. In the sticky-vs-uniform CPD comparison, the action-transition CPD \(\mathcal{A}^{(a)}\) and the initial latent-state distribution are kept uniform so that only the style-transition initialization differs.
 
 
 \subsection{EM-Based Training}
+\label{subsec:em_training}
 After initialization, the \ac{DBN} is trained iteratively on the windowized observation sequences. 
 At each iteration, the current model is applied to all training sequences to compute the posterior state probabilities and expected transition counts.  
 These quantities are accumulated over all sequences and then used to update the model parameters. 
@@ -543,6 +552,30 @@ The procedure is repeated until the stopping criterion is met.
 The emission-parameter update depends on the chosen observation model.
 The theoretical derivations are given in Appendix~\ref{appendix:emission_updates}.
 
+For the initial latent-state distribution, two variants are used in this work:
+\begin{itemize}
+    \item Uniform (fixed) initial distribution:
+    \begin{align}
+    \bm{\pi}^{(s)}_s &= \frac{1}{K_S}, \\
+    \bm{\Pi}^{(a)}_{s,a} &= \frac{1}{K_A}
+    \end{align}
+    for all valid \(s\) and \(a\). These parameters are kept fixed during training.
+
+    \item Learned initial distribution:
+    using the first-step posterior of each sequence, the M-step update is
+    \begin{align}
+    \bm{\pi}^{(s)}_s
+    &=
+    \frac{\sum_i \sum_{a=1}^{K_A} \gamma_{1}^{(i)}(s,a) + \alpha_{\pi}}
+    {\sum_{s'=1}^{K_S} \sum_i \sum_{a=1}^{K_A} \gamma_{1}^{(i)}(s',a) + K_S\alpha_{\pi}}, \\
+    \bm{\Pi}^{(a)}_{s,a}
+    &=
+    \frac{\sum_i \gamma_{1}^{(i)}(s,a) + \alpha_{\pi}}
+    {\sum_{a'=1}^{K_A} \sum_i \gamma_{1}^{(i)}(s,a') + K_A\alpha_{\pi}}
+    \end{align}
+    where \(\gamma_{1}^{(i)}(s,a)=p(S_1=s,A_1=a\mid O_{1:T_i}^{(i)})\), and \(\alpha_{\pi}\ge 0\) is an optional Dirichlet pseudo-count \cite{rabiner1989tutorial,pml1Book}.
+\end{itemize}
+
 \par In the hierarchical emission model, one emission distribution is learned directly for each joint latent-state pair \((S_t,A_t)\). 
 After the E-step, the posterior probabilities of the joint states are used as weights for re-estimating the emission parameters. 
 For the continuous features, posterior-weighted means and diagonal variances are computed. 
@@ -552,6 +585,11 @@ Thus, the hierarchical emission parameters can be updated in closed form.
 \par In the \ac{PoE} emission model, because of the normalization term, the style and action emission parameters are coupled during learning. 
 As a result, the M-step does not reduce to a closed-form update as in the hierarchical case. 
 Instead, the \ac{PoE} emission parameters are updated by an inner gradient-based optimization loop within each EM iteration. 
+In the implementation,  the inner loop performs a fixed number of gradient-ascent steps on the exact PoE Q-function. 
+For the experiments, the inner-loop learning rate is set to \(3\times 10^{-3}\) and the number of steps is 20. 
+Gradient norms are clipped for stability, and early stopping is used inside the inner loop when the objective no longer improves. 
+Optional weak quadratic penalties on the Gaussian means, log-variances, and Bernoulli logits can also be enabled to stabilize training, 
+although the main experimental configuration keeps these penalties at zero. 
 
 \par Lane-change-related events are much rarer than lane-keeping behavior, as shown in \autoref{fig:lane_change_analysis}. 
 For this reason, additional weighting was investigated during training so that rare observations could have a stronger influence on learning. 
@@ -559,20 +597,122 @@ This follows the general idea of cost-sensitive weighting for imbalanced data \c
 In this case, lane-change-active time steps are upweighted using an inverse-frequency rule 
 computed from the training data, with an upper clipping threshold to avoid excessively large weights.
 
-\par Two weighting variants were considered. 
-In the first variant, the weights are applied directly to the emission log-likelihood before forward-backward inference. 
+\par Across the experimental study, three lane-change weighting settings are compared: a baseline without additional weighting (lc-none), and two weighted variants (lc-A and lc-B). Their operational difference is summarized in Table~\ref{tab:lc_weight_modes}.
+
+\begin{table}[htbp]
+\centering
+\caption{Lane-change weighting settings used in the experiments.}
+\label{tab:lc_weight_modes}
+\begin{tabular}{l p{9.5cm}}
+\toprule
+Setting & Definition \\
+\midrule
+lc-none & No additional lane-change weighting is applied. \\
+lc-A & Lane-change weights are applied directly to emission log-likelihood terms before forward-backward inference. \\
+lc-B & Forward-backward inference is run under the original model, then weights are applied only to posterior statistics used in the M-step. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\par  
 Since multiplying a log-likelihood term by a positive weight is equivalent to raising the corresponding likelihood term to a power, 
-this variant can be interpreted as a power-likelihood formulation \cite{holmes2017assigningvaluepowerlikelihood}. 
+the first variant, lc-A, can be interpreted as a power-likelihood formulation \cite{holmes2017assigningvaluepowerlikelihood}. 
 As a result, this variant modifies the posterior inference itself.
 
-\par In the second variant, forward-backward pass is first carried out under the original model, and the weights are applied afterward to 
-the posterior quantities used in the parameter update. 
-This is closer to weighted-data \ac{EM}, in which observations contribute to parameter estimation with different strengths 
+Let \(\mathcal{I}_{\mathrm{lc}}\) denote the set of lane-change indicator feature indices in the observation vector, 
+and define the lane-change activity indicator at time step \(t\) as:
+\begin{equation}
+c_t
+=
+\mathbf{1}\!\left[\exists j \in \mathcal{I}_{\mathrm{lc}}: O_{t,j} > 0.5\right]
+\end{equation}
+With lane-change weight \(w_{\mathrm{lc}} > 1\), the per-time-step training weight is:
+\begin{equation}
+w_t = 1 + (w_{\mathrm{lc}} - 1)c_t,
+\end{equation}
+so non-lane-change steps have weight 1 and lane-change-active steps have weight \(w_{\mathrm{lc}}\).
+
+In lc-A, this weight is applied before forward-backward by scaling emission log-likelihoods:
+\begin{equation}
+\widetilde{\log B}_t(s,a)
+=
+w_t\,\log p\!\left(O_t \mid S_t=s, A_t=a\right),
+\end{equation}
+which is equivalent to
+\begin{equation}
+\widetilde{B}_t(s,a) = B_t(s,a)^{w_t}
+\end{equation}
+
+\par The second variant, lc-B, is closer to weighted-data \ac{EM}, in which observations contribute to parameter estimation with different strengths 
 through weighted responsibilities and weighted update equations \cite{Gebru_2016}. 
 In this case, the pass itself remains unweighted, and only the parameter update is weighted.
 
+Here, forward-backward is run with the unweighted likelihood \(B_t(s,a)\), then the sufficient statistics are reweighted:
+\begin{equation}
+\widetilde{\gamma}_t(s,a) = w_t\,\gamma_t(s,a), \qquad t=1,\dots,T
+\end{equation}
+For transition statistics, let \(\xi_t^{(S)}(s,s')\) and \(\xi_t^{(A)}(s,a,a')\) be per-edge posteriors for edges \(t \to t+1\), \(t=1,\dots,T-1\). 
+The edge weight is:
+\begin{equation}
+w_t^{\mathrm{edge}} = \frac{w_t + w_{t+1}}{2}
+\end{equation}
+
+and the weighted transition counts become:
+\begin{align}
+\widetilde{\Xi}^{(S)}(s,s') &= \sum_{t=1}^{T-1} w_t^{\mathrm{edge}}\,\xi_t^{(S)}(s,s'), \\
+\widetilde{\Xi}^{(A)}(s,a,a') &= \sum_{t=1}^{T-1} w_t^{\mathrm{edge}}\,\xi_t^{(A)}(s,a,a')
+\end{align}
+
 \par After each iteration, the model is evaluated on the validation set using the average validation log-likelihood per observation. 
 Training stops when this value no longer improves meaningfully over several successive iterations. 
+
+
+
+
+\section{Semantic Interpretation of Latent States}
+\label{sec:semantic_interpretation_latent_states}
+
+Since the \ac{DBN} is trained in an unsupervised manner, the learned latent states do not initially correspond to named driver behaviors. 
+A post-hoc semantic analysis is therefore performed to assign interpretable labels to the learned joint states. 
+
+\subsection{Feature-Based Semantic Profiles}
+\label{subsec:feature_based_semantic_profiles}
+
+The semantic interpretation is based on posterior-weighted feature statistics computed from the original observation features. 
+For a selected feature \(o_t^{(f)}\) and a joint latent state pair \((s,a)\), the posterior-weighted mean and standard deviations are computed as:
+\begin{equation}
+\mu_{s,a,f}
+=
+\frac{\sum_n \sum_t \gamma_t^{(n)}(s,a)\,o_t^{(n,f)}}
+{\sum_n \sum_t \gamma_t^{(n)}(s,a)}
+\end{equation}
+\begin{equation}
+\sigma_{s,a,f}
+=
+\left(
+\frac{\sum_n \sum_t \gamma_t^{(n)}(s,a)\left(o_t^{(n,f)}-\mu_{s,a,f}\right)^2}
+{\sum_n \sum_t \gamma_t^{(n)}(s,a)}
+\right)^{1/2}
+\end{equation}
+where $n$ indexes the analyzed vehicle trajectories.
+These statistics define a feature profile for each joint state $(s,a)$ and indicate its typical motion, interaction, and risk characteristics.
+
+\subsection{Rule-Based Labeling Procedure}
+\label{subsec:rule_based_labeling}
+
+For the selected model, labeling rules are defined from the posterior-weighted feature profiles and domain knowledge.
+They map latent-state characteristics to interpretable behavior classes, including free flow, braking, acceleration, lane change, and following.
+
+\par For test-set evaluation, these rules are applied to window-level observations.
+If a window satisfies multiple conditions, the predefined priority order resolves ambiguities.
+
+The complete semantic mapping rules, thresholds, composite rule definitions, and the full priority order are provided in Appendix~\ref{appendix:semantic_labeling_rules}. 
+
+If no rule is satisfied, the window is labeled as unknown and encoded as $z=-1$.
+Unknown-labeled windows are excluded from predictive scoring; the remaining labels are used as reference targets for causal online prediction evaluation.
+
+
+
 
 
 \section{Inference and Evaluation}
@@ -595,7 +735,7 @@ Instead, it is used to evaluate how well the model explains unseen data under th
 A better generative fit indicates that the model captures the temporal and contextual structure of driver behavior more faithfully. 
   
 In this work, generative fit is assessed using likelihood-based measures such as average log-likelihood per time step and \ac{BIC}, 
-together with posterior-based diagnostics such as entropy and state occupancy.
+together with posterior-based diagnostics such as state occupancy.
 
 \par For predictive evaluation, inference is performed online. 
 At time step \(t\), the current observation \(O_t\) is used to update the filtered belief \(p(S_t, A_t \mid O_{1:t})\), 
@@ -619,17 +759,17 @@ p(S_{t+1}=s, A_{t+1}=a \mid O_{1:t})
 \end{equation}
 
 \par During online evaluation, each test trajectory is processed sequentially. 
-The first few window-based observations are excluded from scoring so that the model can update its initial belief state based on the recent context of the current vehicle. 
-After this warmup period, the model outputs a one-step-ahead prediction at each valid time step. 
-These predictions are compared with rule-based reference labels obtained manually during semantic analysis and described in \autoref{sec:semantic_interpretation_latent_states}. 
+The first five window-based observations are excluded from scoring so that the model can update its initial belief state based on the recent context of the current vehicle. 
+After this warmup period, the model outputs a one-step-ahead prediction at each valid time step, using only observations available up to that time step (strictly causal inference). 
+For horizon-based metrics, the forecast horizon is defined as the next five future observations (2.0\,s), and prediction times that do not provide this full horizon are excluded from scoring.
+These predictions are compared with rule-based reference labels, whose generation and relationship to model predictions are detailed in \autoref{subsec:predictive_evaluation_metrics}. 
 Figure~\ref{fig:predictive_evaluation_pipeline} illustrates the causal prediction and evaluation procedure used in this work. 
 \begin{figure}[htbp]
     \centering
-    \includegraphics[width=\textwidth]{images/prediction.png}
+    \makebox[\textwidth][c]{\includegraphics[width=1.0\textwidth]{images/prediction.png}}
     \caption{Causal online prediction and evaluation procedure.}
     \label{fig:predictive_evaluation_pipeline}
 \end{figure}
-
 
 \subsection{Generative Evaluation Metrics}
 \label{subsec:generative_evaluation_metrics}
@@ -682,8 +822,7 @@ To compare model variants with different numbers of free parameters, a complexit
 \end{equation}
 where $k$ is the number of free model parameters, $N=\sum_i T_i$ is the total
 number of training time steps, and \(\hat{L}\) denotes the fitted likelihood on the training set used for model comparison. 
-Lower \ac{BIC} values indicate a better trade-off
-between goodness of fit and model complexity \cite{Schwarz1978EstimatingTD}.
+A better balance between model complexity and goodness of fit is indicated by lower \ac{BIC} values \cite{Schwarz1978EstimatingTD}.
 
 For the proposed model,
 \begin{equation}
@@ -708,40 +847,6 @@ k_{\mathrm{em}}^{\mathrm{PoE}}
 (K_S + K_A)(2D_c + D_b)
 \end{equation}
 
-
-\subsubsection{Posterior Entropy}
-
-The certainty of the inferred latent-state assignments is analyzed through
-normalized posterior entropy. 
-
-The normalized joint entropy is defined as:
-\begin{equation}
-H_{\mathrm{joint}}^{(i)}(t)
-=
--\frac{1}{\log(K_S K_A)}
-\sum_{s=1}^{K_S}\sum_{a=1}^{K_A}
-\gamma_t^{(i)}(s,a)\log \gamma_t^{(i)}(s,a),
-\end{equation}
-with the convention that $0\log 0 = 0$.
-This normalization ensures that $
-0 \le H_{\mathrm{joint}}^{(i)}(t) \le 1$.
-
-The corresponding marginal style and action entropies are:
-\begin{align}
-H_{\mathrm{style}}^{(i)}(t)
-&=
--\frac{1}{\log K_S}
-\sum_{s=1}^{K_S}
-\gamma_t^{(i)}(s)\log \gamma_t^{(i)}(s), \\
-H_{\mathrm{action}}^{(i)}(t)
-&=
--\frac{1}{\log K_A}
-\sum_{a=1}^{K_A}
-\gamma_t^{(i)}(a)\log \gamma_t^{(i)}(a)
-\end{align}
-
-Lower entropy indicates a more confident latent-state assignment, while higher
-entropy indicates greater ambiguity \cite{CoverThomas2006}. 
 
 \subsubsection{State Occupancy and Effective Number of States}
 
@@ -773,6 +878,14 @@ p_{\mathrm{action}}(a)
 \frac{C_{\mathrm{action}}(a)}
 {\sum_{a'} C_{\mathrm{action}}(a')}
 \end{align}
+
+In addition, the maximum joint-state occupancy is defined as:
+\begin{equation}
+p_{\max}^{\mathrm{joint}}
+=
+\max_{s,a} \, p_{\mathrm{joint}}(s,a)
+\end{equation}
+
 A concentrated occupancy distribution indicates that posterior mass is dominated by a small subset of states, 
 whereas a flatter distribution indicates more balanced use of the state space.
 
@@ -790,8 +903,6 @@ posterior mass is spread across more latent states, while smaller values indicat
 
 \subsection{Predictive Evaluation Metrics}
 \label{subsec:predictive_evaluation_metrics}
-For the selected candidate models, predictive evaluation is carried out in a strictly causal setting after an initial warmup period. 
-One-step-ahead predictions are assessed using exact next-step accuracy, horizon-based hit rate, and time-to-event. 
 
 \subsubsection{Exact One-Step Prediction Accuracy}
 
@@ -800,7 +911,8 @@ For each valid prediction time, the model produces a one-step-ahead prediction o
 \hat{z}_{t+1} = (\hat{S}_{t+1}, \hat{A}_{t+1})
 \)
 after observing the sequence up to time $t$. 
-The exact one-step prediction accuracy is defined as the fraction of scored time steps for which the predicted joint state matches the corresponding 
+The exact one-step prediction accuracy is defined as the fraction of scored time steps for which the predicted joint state matches 
+the corresponding 
 rule-based reference label exactly:
 \begin{equation}
 \mathrm{Accuracy}
@@ -813,19 +925,42 @@ rule-based reference label exactly:
 \end{equation}
 where $N$ is the total scored prediction instances pooled over all trajectories.
 
-\par Since the joint latent space is multi-class and class frequencies can be imbalanced, macro-averaged precision, recall, and F1-score are also computed from 
-the joint-state confusion matrix. 
-These metrics complement accuracy by giving equal importance to all classes rather than being dominated by the most frequent states \cite{Sokolova2009}.
+\par Since the joint latent space is multi-class and class frequencies can be imbalanced, macro-averaged precision, recall, and F1-score 
+are also computed from the joint-state confusion matrix. 
+These metrics complement accuracy by giving equal importance to all classes rather than being dominated by the most frequent 
+states \cite{Sokolova2009}.
+
+Let $C_{ij}$ denote the confusion-matrix entry with reference class $i$ and predicted class $j$.
+For class $c$, the per-class counts are defined as:
+\begin{align}
+\mathrm{TP}_c &= C_{cc}, \\
+\mathrm{FP}_c &= \sum_{i \neq c} C_{ic}, \\
+\mathrm{FN}_c &= \sum_{j \neq c} C_{cj}
+\end{align}
+The class-wise precision, recall, and F1-score are then:
+\begin{align}
+\mathrm{Precision}_c &= \frac{\mathrm{TP}_c}{\mathrm{TP}_c + \mathrm{FP}_c}, \\
+\mathrm{Recall}_c &= \frac{\mathrm{TP}_c}{\mathrm{TP}_c + \mathrm{FN}_c}, \\
+\mathrm{F1}_c &= \frac{2\,\mathrm{Precision}_c\,\mathrm{Recall}_c}{\mathrm{Precision}_c + \mathrm{Recall}_c}.
+\end{align}
+With $K$ classes, the corresponding macro-averaged scores are:
+\begin{align}
+\mathrm{Precision}_{\mathrm{macro}} &= \frac{1}{K}\sum_{c=1}^{K} \mathrm{Precision}_c, \\
+\mathrm{Recall}_{\mathrm{macro}} &= \frac{1}{K}\sum_{c=1}^{K} \mathrm{Recall}_c, \\
+\mathrm{F1}_{\mathrm{macro}} &= \frac{1}{K}\sum_{c=1}^{K} \mathrm{F1}_c
+\end{align}
 
 
 \subsubsection{Hit Rate Within a Prediction Horizon}
 
-Exact next-step accuracy is intentionally strict, since it counts a prediction as correct only when the predicted latent state appears immediately at time $t+1$. 
+Exact next-step accuracy is intentionally strict, since it counts a prediction as correct only when the predicted latent state appears 
+immediately at time $t+1$. 
 In behavior prediction, however, a forecast may still be useful when the predicted maneuver occurs a short time later. 
 For this reason, a horizon-based hit metric is also used.
 
 \par Let $\hat{z}_{t+1}$ denote the one-step-ahead predicted joint state. 
-For a future horizon of $H$ steps, the prediction is counted as a hit if the predicted state appears at least once in the interval from $t+1$ to $t+H$:
+For a future horizon of $H$ steps, the prediction is counted as a hit if the predicted state appears at least once in the interval 
+from $t+1$ to $t+H$:
 \begin{equation}
 \mathrm{Hit@H}(t)
 =
@@ -882,41 +1017,8 @@ The posterior belief then represents the updated latent-state distribution after
 
 Since the intended application is online action prediction, computational efficiency is also evaluated. 
 For this purpose, the trained model is benchmarked under several execution settings, including single-vehicle prediction, multi-vehicle sequential prediction, and batched prediction. 
-These benchmarks are carried out both in a model-only setting, where precomputed window observations are given directly to the predictor, and in an end-to-end setting, where the full pipeline from frame-level input through windowization, scaling, 
+These benchmarks are carried out both in a model-only setting, where precomputed window observations are given directly to the predictor, 
+and in an end-to-end setting, where the full pipeline from the arrival of the final frame needed to complete a $W$-frame window through windowization, scaling, 
 belief update, and prediction is included. 
 These results are used to assess whether the proposed model is suitable for short-horizon online prediction in an \ac{AV} context.
-
-
-
-
-\section{Semantic Interpretation of Latent States}
-\label{sec:semantic_interpretation_latent_states}
-
-After training, an additional analysis is performed to interpret the learned latent states. 
-The goal of this step is to relate the latent style and action states to characteristic traffic patterns observed in the data. 
-For this purpose, the trained model is applied again to the training split.  
-For each windowized observation sequence, posterior inference is carried out to obtain the joint posterior probabilities $\gamma_t(s,a)$.
-
-
-\par The semantic interpretation is based on posterior-weighted feature statistics computed from the original observation features. 
-For a selected feature \(o_t^{(f)}\) and a joint latent state pair \((s,a)\), the posterior-weighted mean is computed as:
-\begin{equation}
-\mu_{s,a,f}
-=
-\frac{\sum_n \sum_t \gamma_t^{(n)}(s,a)\,o_t^{(n,f)}}
-{\sum_n \sum_t \gamma_t^{(n)}(s,a)}
-\end{equation}
-where $n$ indexes the analyzed vehicle trajectories. 
-Posterior-weighted standard deviations are computed in the same way to describe the variability of each feature within the corresponding latent state pair. 
-\begin{equation}
-\sigma_{s,a,f}
-=
-\left(
-\frac{\sum_n \sum_t \gamma_t^{(n)}(s,a)\left(o_t^{(n,f)}-\mu_{s,a,f}\right)^2}
-{\sum_n \sum_t \gamma_t^{(n)}(s,a)}
-\right)^{1/2}
-\end{equation}
-This produces a semantic feature profile for every joint state $(s,a)$, showing which motion, interaction, or risk-related properties are typically associated with that state.
-
-
 

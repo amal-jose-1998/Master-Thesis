@@ -1,0 +1,110 @@
+\chapter{Semantic Mapping Rules}
+\label{appendix:semantic_labeling_rules}
+
+This appendix documents the rule-based semantic mapping used to assign interpretable labels to the latent states of the selected S2A4 hierarchical model.
+
+\section{Threshold Values}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Threshold values used by the semantic mapping rules.}
+\label{tab:semantic_mapping_thresholds}
+\begin{tabular}{l l}
+\toprule
+Parameter & Value \\
+\midrule
+\texttt{lc\_flag\_thresh} & 0.5 \\
+\texttt{lateral\_velocity\_threshold} & 0.1 \\
+\texttt{lateral\_acceleration\_threshold} & 0.1 \\
+\texttt{lateral\_velocity\_slope\_threshold} & 0.003 \\
+\texttt{ay\_zero\_frac\_threshold} & 0.5 \\
+\texttt{brake\_ax\_neg\_frac} & 0.90 \\
+\texttt{brake\_ax\_last} & -0.15 \\
+\texttt{tactical\_brake\_ax\_last} & -0.25 \\
+\texttt{tactical\_brake\_vx\_slope} & -0.01 \\
+\texttt{tactical\_brake\_thw} & 2.0 \\
+\texttt{tactical\_brake\_ttc} & 70.0 \\
+\texttt{interaction\_thw\_tight} & 2.0 \\
+\texttt{interaction\_ttc\_tight} & 60.0 \\
+\texttt{strong\_acc\_front\_exists\_min} & 0.50 \\
+\texttt{strong\_acc\_ax\_pos\_frac} & 0.90 \\
+\texttt{strong\_acc\_ax\_last} & 0.15 \\
+\texttt{constrained\_acc\_ax\_pos\_frac} & 0.65 \\
+\texttt{constrained\_acc\_ax\_last} & 0.08 \\
+\texttt{constrained\_acc\_front\_exists} & 0.80 \\
+\texttt{free\_flow\_front\_exists\_max} & 0.50 \\
+\texttt{constrained\_follow\_front\_exists} & 0.80 \\
+\texttt{constrained\_follow\_vx\_last\_max} & 21.0 \\
+\texttt{constrained\_follow\_jerk\_min} & 0.75 \\
+\texttt{stable\_follow\_front\_exists} & 0.80 \\
+\texttt{stable\_follow\_vx\_slope\_abs\_max} & 0.008 \\
+\texttt{stable\_follow\_ax\_last\_abs\_max} & 0.20 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\section{Priority Order}
+
+When more than one rule condition is satisfied for the same window, the final semantic label is assigned according to the following precedence order:
+\begin{enumerate}
+    \item lane change,
+    \item braking, followed by the split into tactical brake versus mild brake,
+    \item strong acceleration,
+    \item constrained acceleration,
+    \item constrained following,
+    \item stable following,
+    \item free flow,
+    \item unknown.
+\end{enumerate}
+This priority order ensures that rarer or more distinctive maneuvers, such as lane changes and braking events, are not overridden by broader longitudinal behavior rules.
+ 
+\section{Composite Definitions}
+\par The condition \texttt{tactical\_brake} is true if at least one strong braking cue is present:\\
+\texttt{ax\_last <= tactical\_brake\_ax\_last},\\
+\texttt{vx\_slope <= tactical\_brake\_vx\_slope},\\
+\texttt{front\_thw\_last <= tactical\_brake\_thw} when the feature is available, or\\
+\texttt{front\_ttc\_min <= tactical\_brake\_ttc} when the feature is available.\\
+
+The condition \texttt{tight\_interaction} is true if\\
+\texttt{front\_exists\_frac >= stable\_follow\_front\_exists}\\
+and at least one interaction-risk cue is active:\\
+\texttt{front\_thw\_last <= interaction\_thw\_tight} when available, or\\
+\texttt{front\_ttc\_min <= interaction\_ttc\_tight} when available.\\
+
+\subsection*{Lane-change rule}
+
+The lane-change rule has the highest priority. 
+A window is labeled as \texttt{lane\_change} if either the left or right lane-change indicator exceeds the threshold. 
+It can also be triggered by a sustained lateral-motion pattern defined through lateral velocity, lateral acceleration, lateral velocity slope, and the fraction of near-zero lateral acceleration within the window.
+
+\subsection*{Braking rules}
+
+Braking is detected when negative longitudinal acceleration dominates most of the window, the final longitudinal acceleration is sufficiently negative, and a front vehicle is present for a large fraction of the window. 
+Once braking is detected, the window is split into either \texttt{mild\_brake} or \texttt{tactical\_brake}. 
+If any tactical braking cue is present, the label becomes \texttt{tactical\_brake}; otherwise it is assigned as \texttt{mild\_brake}.
+
+\subsection*{Acceleration rules}
+
+Two acceleration-related labels are defined. 
+A window is labeled \texttt{strong\_acceleration} when positive longitudinal acceleration dominates the window, the final acceleration is clearly positive, and either a front vehicle is present or the situation is already classified as a tight interaction. 
+A window is labeled \texttt{constrained\_acceleration} when positive acceleration is present under stronger leader presence, indicating that the maneuver is still shaped by traffic context.
+
+\subsection*{Following rules}
+
+Two following-related labels are defined. 
+A window is labeled \texttt{constrained\_following} when a front vehicle is present for most of the window and either the motion shows low-speed, high-jerk behavior or the interaction is tight. 
+This rule is intended to capture pressured or corrective following behavior. 
+A window is labeled \texttt{stable\_following} when a front vehicle is present, the speed slope and longitudinal acceleration remain close to zero, and the interaction is not tight. 
+This rule therefore represents smoother and more stable car-following behavior.
+
+\subsection*{Free-flow rule}
+
+If none of the higher-priority maneuver rules fires and the fraction of front-vehicle presence remains below the free-flow threshold, the window is labeled \texttt{free\_flow}. 
+This captures low-interaction motion with little direct leader influence.
+
+\subsection*{Fallback case}
+
+If none of the semantic rules is satisfied, the window is assigned the fallback label \texttt{unknown}. 
+This case corresponds to windows for which no lane-change, braking, acceleration, or following pattern is detected by the rule set.

@@ -1,0 +1,27 @@
+\chapter{Conclusions}
+ 
+This thesis proposed a \ac{DBN} framework for probabilistic short-horizon prediction of human driver maneuvers from window-based highway observations. 
+The results show that the proposed model can capture meaningful temporal behavior patterns and provide useful maneuver forecasts in a causal online setting.
+
+\par Among the compared configurations, the hierarchical emission model gave the best overall results and was selected as the final setup. 
+It consistently outperformed the \ac{PoE} alternative and provided the best final balance between model fit, latent-state usage, and interpretability. 
+The selected model achieved moderate performance in strict exact next-step prediction, which confirms that fine-grained maneuver discrimination is difficult. 
+At the same time, the short-horizon results were clearly stronger, especially when semantically similar maneuvers were grouped. 
+This shows that many errors are near-misses between related behaviors rather than completely wrong predictions. 
+The horizon-based evaluation further supported this finding, with a strong hit rate over the 2\,s prediction horizon.
+
+\par The latent-cardinality ablation study further supported the final design choice. 
+Using only three action states made the behavioral partition too coarse, while removing the style variable caused a much larger drop in model quality. 
+Although five action states improved the numerical fit, the resulting state space became less compact and harder to interpret. 
+Overall, the selected two-style, four-action structure provided the best trade-off between prediction quality, interpretability, and model complexity.
+
+\par Finally, the runtime benchmark showed that the framework is suitable for online use. 
+The measured end-to-end latency remained far below the available decision interval, which makes the proposed approach practical for real-time short-horizon maneuver prediction.
+
+\section{Future Work}
+
+Future work should focus on four main directions.  
+First, the observation design can be improved by investigating alternative feature sets and grouping strategies in order to achieve cleaner separation between latent states. 
+Second, richer driving datasets with more diverse maneuvers should be considered, since the selected highD dataset mainly contains lane-following highway behavior. 
+Third, alternative latent-state structures could be explored to represent driving style and maneuver dynamics more effectively. 
+Finally, the proposed predictor can be integrated into a larger \ac{AV} system, where its probabilistic maneuver forecasts may support planning and risk-assessment modules.

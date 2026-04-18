@@ -4,6 +4,17 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import seaborn as sns
 
+
+def _extract_exact_hit_fields(prediction):
+    """Extract (hit_h, tte_steps) for exact-match metrics from a prediction tuple.
+
+    Supports legacy 4-tuples `(pred_z, true_z, hit_h, tte_steps)` and
+    current 6-tuples `(pred_z, true_z, exact_hit_h, exact_tte_steps, grouped_hit_h, grouped_tte_steps)`.
+    """
+    if len(prediction) < 4:
+        raise ValueError(f"Prediction tuple must have at least 4 elements, got {len(prediction)}")
+    return prediction[2], prediction[3]
+
 def plot_confusion_matrix(cm, labels, title="Confusion Matrix", output_path=None, figsize=(12, 10)):
     """
     Plot a confusion matrix with semantic labels.
@@ -27,7 +38,6 @@ def plot_confusion_matrix(cm, labels, title="Confusion Matrix", output_path=None
                 xticklabels=labels, yticklabels=labels, ax=ax, cbar=True, linewidths=0.5)
     ax.set_xlabel('Predicted', fontsize=12)
     ax.set_ylabel('True', fontsize=12)
-    ax.set_title(title, fontsize=14, fontweight='bold')
     plt.xticks(rotation=45, ha='right', fontsize=10)
     plt.yticks(rotation=0, fontsize=10)
     plt.tight_layout()
@@ -37,13 +47,124 @@ def plot_confusion_matrix(cm, labels, title="Confusion Matrix", output_path=None
     return fig
 
 
+def _grouped_confusion_from_metrics(grouped_exact):
+    """Build grouped confusion matrix from ManeuverGroupMetrics labels."""
+    labels = sorted(set(grouped_exact.true_labels) | set(grouped_exact.pred_labels))
+    if not labels:
+        return None, []
+
+    label_to_idx = {lbl: i for i, lbl in enumerate(labels)}
+    cm = np.zeros((len(labels), len(labels)), dtype=np.int64)
+
+    for pred_lbl, true_lbl in zip(grouped_exact.pred_labels, grouped_exact.true_labels):
+        cm[label_to_idx[true_lbl], label_to_idx[pred_lbl]] += 1
+
+    return cm, labels
+
+
+def _normalize_confusion_matrix(cm, mode="row"):
+    """
+    Normalize a confusion matrix by row (true class) or column (predicted class).
+
+    Parameters
+    cm : np.ndarray
+        Confusion matrix of shape (N, N).
+    mode : str
+        "row" for row-normalized, "column" for column-normalized.
+
+    Returns
+    np.ndarray
+        Normalized confusion matrix with values in [0, 1].
+    """
+    cm = np.asarray(cm, dtype=np.float64)
+    if mode == "row":
+        denom = cm.sum(axis=1, keepdims=True)
+    elif mode == "column":
+        denom = cm.sum(axis=0, keepdims=True)
+    else:
+        raise ValueError(f"Unknown normalization mode '{mode}'. Use 'row' or 'column'.")
+
+    return np.divide(cm, denom, out=np.zeros_like(cm, dtype=np.float64), where=(denom != 0))
+
+
+def plot_normalized_confusion_matrix(
+    cm,
+    labels,
+    mode="row",
+    title=None,
+    output_path=None,
+    figsize=(12, 10),
+    fmt=".2f",
+):
+    """
+    Plot a normalized confusion matrix in the same style as the raw matrix.
+
+    Parameters
+    cm : np.ndarray
+        Confusion matrix of shape (N, N).
+    labels : list of str
+        Semantic labels for each class (length N).
+    mode : str
+        "row" for row-normalized (P(pred | true)),
+        "column" for column-normalized (P(true | pred)).
+    title : str, optional
+        Plot title. If None, a default title is used.
+    output_path : Path, optional
+        If provided, saves figure to this path.
+    figsize : tuple
+        Figure size.
+    fmt : str
+        Annotation format for normalized values.
+
+    Returns
+    fig : matplotlib.figure.Figure
+    """
+    norm_cm = _normalize_confusion_matrix(cm, mode=mode)
+
+    if title is None:
+        if mode == "row":
+            title = "Confusion Matrix (Row-Normalized)"
+        elif mode == "column":
+            title = "Confusion Matrix (Column-Normalized)"
+        else:
+            title = "Confusion Matrix (Normalized)"
+
+    fig, ax = plt.subplots(figsize=figsize)
+    sns.heatmap(
+        norm_cm,
+        annot=True,
+        fmt=fmt,
+        cmap='Blues',
+        vmin=0.0,
+        vmax=1.0,
+        xticklabels=labels,
+        yticklabels=labels,
+        ax=ax,
+        cbar=True,
+        linewidths=0.5,
+    )
+    ax.set_xlabel('Predicted', fontsize=12)
+    ax.set_ylabel('True', fontsize=12)
+    plt.xticks(rotation=45, ha='right', fontsize=10)
+    plt.yticks(rotation=0, fontsize=10)
+    plt.tight_layout()
+
+    if output_path:
+        fig.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"[visualize] Saved normalized confusion matrix ({mode}) to {output_path}")
+
+    return fig
+
+
 def plot_time_to_hit_histogram(predictions, fps=25.0, stride_frames=10, bins=10, output_path=None, figsize=(10, 6)):
     """
     Histogram of time-to-hit (TTE) for predictions that hit.
     
     Parameters
     predictions : list of tuples
-        Each tuple is (pred_z, true_z, hit_h, tte_steps) from ValidationStep.
+        Each tuple is either:
+        - (pred_z, true_z, hit_h, tte_steps), or
+        - (pred_z, true_z, exact_hit_h, exact_tte_steps, grouped_hit_h, grouped_tte_steps).
     fps : float
         Frame rate (Hz) for converting steps to seconds.
     stride_frames : int
@@ -62,7 +183,11 @@ def plot_time_to_hit_histogram(predictions, fps=25.0, stride_frames=10, bins=10,
     delta_t = stride_frames / fps  # step duration in seconds
     
     # Extract TTE in seconds for hits only
-    tte_seconds = [tte * delta_t for _, _, _, tte in predictions if tte is not None]
+    tte_seconds = []
+    for pred in predictions:
+        _, tte = _extract_exact_hit_fields(pred)
+        if tte is not None:
+            tte_seconds.append(tte * delta_t)
     
     if not tte_seconds:
         print("[visualize] No hits found, cannot plot TTE histogram")
@@ -75,7 +200,6 @@ def plot_time_to_hit_histogram(predictions, fps=25.0, stride_frames=10, bins=10,
     
     ax.set_xlabel('Time-to-Hit (seconds)', fontsize=12)
     ax.set_ylabel('Count', fontsize=12)
-    ax.set_title('Distribution of Time-to-Hit (Hits Only)', fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3, axis='y')
     
     # Add statistics
@@ -100,7 +224,9 @@ def plot_cumulative_hit_rate(predictions, fps=25.0, stride_frames=10, output_pat
     
     Parameters
     predictions : list of tuples
-        Each tuple is (pred_z, true_z, hit_h, tte_steps) from ValidationStep.
+        Each tuple is either:
+        - (pred_z, true_z, hit_h, tte_steps), or
+        - (pred_z, true_z, exact_hit_h, exact_tte_steps, grouped_hit_h, grouped_tte_steps).
     fps : float
         Frame rate (Hz).
     stride_frames : int
@@ -118,7 +244,8 @@ def plot_cumulative_hit_rate(predictions, fps=25.0, stride_frames=10, output_pat
     
     # Extract TTE in seconds for all predictions
     tte_list = []
-    for _, _, hit_h, tte in predictions:
+    for pred in predictions:
+        _, tte = _extract_exact_hit_fields(pred)
         if tte is not None:
             tte_list.append(tte * delta_t)
         else:
@@ -146,7 +273,6 @@ def plot_cumulative_hit_rate(predictions, fps=25.0, stride_frames=10, output_pat
     
     ax.set_xlabel('Time (seconds)', fontsize=12)
     ax.set_ylabel('Cumulative Hit Rate', fontsize=12)
-    ax.set_title('Cumulative Prediction Hit Rate Over Time', fontsize=14, fontweight='bold')
     ax.grid(True, alpha=0.3)
     ax.set_ylim([0, 1.05])
     
@@ -177,14 +303,13 @@ def plot_hit_count_summary(predictions, output_path=None, figsize=(8, 6)):
     fig : matplotlib.figure.Figure
     """
     
-    hits = sum(1 for _, _, hit_h, _ in predictions if hit_h)
+    hits = sum(1 for pred in predictions if _extract_exact_hit_fields(pred)[0])
     misses = len(predictions) - hits
     
     fig, ax = plt.subplots(figsize=figsize)
     bars = ax.bar(['Hits', 'Misses'], [hits, misses], color=['steelblue', 'coral'], edgecolor='black', alpha=0.7)
     
     ax.set_ylabel('Count', fontsize=12)
-    ax.set_title('Overall Prediction Performance', fontsize=14, fontweight='bold')
     ax.set_ylim([0, max(hits, misses) * 1.15])
     
     # Add count and percentage labels
@@ -209,7 +334,9 @@ def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps
     
     Parameters
     predictions : list of tuples
-        Each tuple is (pred_z, true_z, hit_h, tte_steps) from ValidationStep.predict_one_trajectory.
+        Each tuple is either:
+        - (pred_z, true_z, hit_h, tte_steps), or
+        - (pred_z, true_z, exact_hit_h, exact_tte_steps, grouped_hit_h, grouped_tte_steps).
     output_dir : Path
         Directory to save plots.
     S : int
@@ -240,6 +367,35 @@ def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps
     if fig:
         figs['confusion_matrix'] = fig
 
+    fig = plot_normalized_confusion_matrix(
+        cm,
+        labels,
+        mode="row",
+        output_path=output_dir / "confusion_matrix_row_normalized.png",
+    )
+    if fig:
+        figs['confusion_matrix_row_normalized'] = fig
+
+    fig = plot_normalized_confusion_matrix(
+        cm,
+        labels,
+        mode="column",
+        output_path=output_dir / "confusion_matrix_column_normalized.png",
+    )
+    if fig:
+        figs['confusion_matrix_column_normalized'] = fig
+
+    grouped_cm, grouped_labels = _grouped_confusion_from_metrics(metrics.grouped_exact)
+    if grouped_cm is not None:
+        fig = plot_confusion_matrix(
+            grouped_cm,
+            grouped_labels,
+            output_path=output_dir / "confusion_matrix_grouped.png",
+            figsize=(8, 6),
+        )
+        if fig:
+            figs['confusion_matrix_grouped'] = fig
+
     # --- Filter predictions for other plots (exclude unknowns) ---
     filtered_predictions = [p for p in predictions if -1 not in p[0] and -1 not in p[1]]
 
@@ -253,12 +409,27 @@ def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps
         figs['tte_histogram'] = fig
 
     # Plot 3: Step-wise hit counts
-    horizon = max((tte for _, _, _, tte in filtered_predictions if tte is not None), default=10)
+    tte_steps = []
+    for pred in filtered_predictions:
+        _, tte = _extract_exact_hit_fields(pred)
+        if tte is not None:
+            tte_steps.append(tte)
+    horizon = max(tte_steps, default=10)
     fig = plot_hits_per_horizon_step(filtered_predictions, horizon=horizon, fps=fps, stride_frames=stride_frames, output_path=output_dir / "hits_per_horizon_step.png")
     if fig:
         figs["hits_per_horizon_step"] = fig
 
     # Plot 4: Hit/miss summary
+    fig = plot_hit_count_summary(filtered_predictions, output_path=output_dir / "hit_count_summary_ungrouped.png")
+    if fig:
+        figs['hit_count_summary_ungrouped'] = fig
+
+    grouped_predictions = [(None, None, p[4], p[5]) for p in filtered_predictions if len(p) >= 6]
+    fig = plot_hit_count_summary(grouped_predictions, output_path=output_dir / "hit_count_summary_grouped.png")
+    if fig:
+        figs['hit_count_summary_grouped'] = fig
+
+    # Keep legacy output filename for compatibility.
     fig = plot_hit_count_summary(filtered_predictions, output_path=output_dir / "hit_count_summary.png")
     if fig:
         figs['hit_count_summary'] = fig
@@ -272,7 +443,9 @@ def plot_hits_per_horizon_step(predictions, horizon, fps=25.0, stride_frames=10,
 
     Parameters
     predictions : list of tuples
-        Each tuple is (pred_z, true_z, hit_h, tte_steps)
+        Each tuple is either:
+        - (pred_z, true_z, hit_h, tte_steps), or
+        - (pred_z, true_z, exact_hit_h, exact_tte_steps, grouped_hit_h, grouped_tte_steps).
     horizon : int
         Maximum horizon (H)
     fps : float
@@ -284,7 +457,8 @@ def plot_hits_per_horizon_step(predictions, horizon, fps=25.0, stride_frames=10,
     # Initialize count array for steps 1..H
     hit_counts = np.zeros(horizon, dtype=int)
 
-    for _, _, hit_h, tte in predictions:
+    for pred in predictions:
+        hit_h, tte = _extract_exact_hit_fields(pred)
         if hit_h and tte is not None and 1 <= tte <= horizon:
             hit_counts[tte - 1] += 1
 
@@ -307,7 +481,6 @@ def plot_hits_per_horizon_step(predictions, horizon, fps=25.0, stride_frames=10,
 
     ax.set_xlabel("Prediction Horizon Step", fontsize=12)
     ax.set_ylabel("Number of Hits", fontsize=12)
-    ax.set_title("Number of Hits at Each Horizon Step", fontsize=14, fontweight="bold")
 
     ax.set_xticks(range(1, horizon + 1))
     ax.grid(True, axis="y", alpha=0.3)

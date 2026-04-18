@@ -32,10 +32,10 @@ p(S_t=s,A_t=a \mid O_{1:T},\theta^{\mathrm{old}})
 This quantity is the posterior responsibility assigned to the latent pair \((s,a)\) at time step \(t\). 
 For each fixed \(t\), the values \(\{\gamma_t(s,a)\}_{s,a}\) form a normalized joint posterior distribution:
 \begin{equation}
-\sum_{s,a}\gamma_t(s,a)=1.
+\sum_{s,a}\gamma_t(s,a)=1
 \end{equation}
 
-The transition-update derivations also use the posterior transition marginals
+The transition-update derivations also use the posterior transition marginals:
 \begin{align}
 \xi_t^{S}(s',s)
 &=
@@ -62,12 +62,12 @@ p(O_{1:T},S_{1:T},A_{1:T}\mid \theta)
 \label{eq:obs_loglik}
 \end{equation}
 Direct maximization of \eqref{eq:obs_loglik} is difficult because the latent state
-trajectories are not observed and must be summed out \cite{Dempster1977,pml1Book}.
+sequences are not observed and must be summed out \cite{Dempster1977,pml1Book}.
 
 In the \ac{EM} algorithm, this difficulty is addressed by introducing an auxiliary distribution \(q(S_{1:T},A_{1:T})\) over the latent trajectories, with:
 \begin{equation}
-q(S_{1:T},A_{1:T}) \ge 0,
-\qquad
+q(S_{1:T},A_{1:T}) \ge 0, 
+\qquad 
 \sum_{S_{1:T},A_{1:T}} q(S_{1:T},A_{1:T}) = 1
 \end{equation}
 Using this distribution, the log-likelihood can be rewritten as:
@@ -373,11 +373,11 @@ b_t^{(j)}\log p_{s,a,j}
 \end{align}
 
 
-For convenience, define the effective posterior count of the joint state pair \((s,a)\) as
+For convenience, define the effective posterior count of the joint state pair \((s,a)\) as:
 \begin{equation}
 N_{s,a}
 =
-\sum_{t=1}^{T}\gamma_t(s,a).
+\sum_{t=1}^{T}\gamma_t(s,a)
 \label{eq:hier_effective_count}
 \end{equation}
 
@@ -489,13 +489,13 @@ are combined multiplicatively and then renormalized to obtain a valid probabilit
 
 Here, \(Z_{s,a}\) is the normalization constant that ensures that
 \eqref{eq:poe_emission_def} defines a valid probability distribution. Using the
-continuous-binary decomposition of the observation, it can be written more explicitly as
+continuous-binary decomposition of the observation, it can be written more explicitly as:
 \begin{equation}
 Z_{s,a}
 =
 \sum_{b \in \{0,1\}^{B}}
 \int
-p_s(x,b \mid s)\,p_a(x,b \mid a)\,dx.
+p_s(x,b \mid s)\,p_a(x,b \mid a)\,dx
 \end{equation}
 
 Using the decomposition \(O_t=(x_t,b_t)\), both experts factorize into continuous and binary parts:
@@ -506,14 +506,14 @@ p_s(x_t \mid s)\,p_s(b_t \mid s),
 \\
 p_a(O_t \mid a)
 &=
-p_a(x_t \mid a)\,p_a(b_t \mid a).
+p_a(x_t \mid a)\,p_a(b_t \mid a)
 \end{align}
 
-The corresponding parameter sets are written as
+The corresponding parameter sets are written as:
 \begin{equation}
 \theta_s=(\mu_s,\Sigma_s,\{p_j^s\}_{j=1}^{B}),
 \qquad
-\theta_a=(\mu_a,\Sigma_a,\{p_j^a\}_{j=1}^{B}).
+\theta_a=(\mu_a,\Sigma_a,\{p_j^a\}_{j=1}^{B})
 \end{equation}
 
 For the continuous features, Gaussian experts with diagonal covariance are used:
@@ -528,7 +528,7 @@ p_a(x_t \mid a)
 &=
 \mathcal{N}(x_t \mid \mu_a,\Sigma_a),
 \qquad
-\Sigma_a=\mathrm{diag}\!\left(\sigma^2_{a,1},\dots,\sigma^2_{a,D_c}\right).
+\Sigma_a=\mathrm{diag}\!\left(\sigma^2_{a,1},\dots,\sigma^2_{a,D_c}\right)
 \end{align}
 
 For the binary features, factorized Bernoulli experts are used:
@@ -541,7 +541,7 @@ p_s(b_t \mid s)
 p_a(b_t \mid a)
 &=
 \prod_{j=1}^{B}
-(p_j^a)^{b_t^{(j)}}(1-p_j^a)^{1-b_t^{(j)}}.
+(p_j^a)^{b_t^{(j)}}(1-p_j^a)^{1-b_t^{(j)}}
 \end{align}
 
 Because the experts factorize into continuous and binary parts, the normalization constant also factorizes:
@@ -562,22 +562,22 @@ p_s(b \mid s)\,p_a(b \mid a)
 \right)
 \nonumber\\
 &=
-Z_{s,a}^{(x)}\,Z_{s,a}^{(b)}.
+Z_{s,a}^{(x)}\,Z_{s,a}^{(b)}
 \end{align}
 
-The continuous normalization term is therefore
+The continuous normalization term is therefore:
 \begin{equation}
 Z_{s,a}^{(x)}
 =
 \int
 \mathcal{N}(x \mid \mu_s,\Sigma_s)\,
-\mathcal{N}(x \mid \mu_a,\Sigma_a)\,dx.
+\mathcal{N}(x \mid \mu_a,\Sigma_a)\,dx
 \end{equation}
 Using the standard Gaussian product identity, this becomes
 \begin{equation}
 Z_{s,a}^{(x)}
 =
-\mathcal{N}(\mu_s \mid \mu_a,\Sigma_s+\Sigma_a).
+\mathcal{N}(\mu_s \mid \mu_a,\Sigma_s+\Sigma_a)
 \label{eq:poe_zx_closed}
 \end{equation}
 Hence,
@@ -591,7 +591,7 @@ Hence,
 -\frac{1}{2}
 (\mu_s-\mu_a)^\top
 (\Sigma_s+\Sigma_a)^{-1}
-(\mu_s-\mu_a).
+(\mu_s-\mu_a)
 \end{align}
 
 For the binary part,
@@ -601,7 +601,7 @@ Z_{s,a}^{(b)}
 \sum_{b \in \{0,1\}^{B}}
 \prod_{j=1}^{B}
 (p_j^s)^{b^{(j)}}(1-p_j^s)^{1-b^{(j)}}
-(p_j^a)^{b^{(j)}}(1-p_j^a)^{1-b^{(j)}}.
+(p_j^a)^{b^{(j)}}(1-p_j^a)^{1-b^{(j)}}
 \end{align}
 Since the Bernoulli experts factorize across dimensions, the sum also factorizes:
 \begin{equation}
@@ -610,7 +610,7 @@ Z_{s,a}^{(b)}
 \prod_{j=1}^{B}
 \left[
 p_j^s p_j^a + (1-p_j^s)(1-p_j^a)
-\right].
+\right]
 \label{eq:poe_zb_closed}
 \end{equation}
 Taking the logarithm yields
@@ -621,10 +621,10 @@ Taking the logarithm yields
 \log
 \left[
 p_j^s p_j^a + (1-p_j^s)(1-p_j^a)
-\right].
+\right]
 \end{equation}
 
-Combining the two experts and the normalization term, the log-emission probability becomes
+Combining the two experts and the normalization term, the log-emission probability becomes:
 \begin{align}
 \log p(O_t \mid s,a)
 &=
@@ -640,13 +640,13 @@ Combining the two experts and the normalization term, the log-emission probabili
 -
 \log Z_{s,a}^{(x)}
 -
-\log Z_{s,a}^{(b)}.
+\log Z_{s,a}^{(b)}
 \label{eq:poe_log_emission}
 \end{align}
 
 
 Substituting \eqref{eq:poe_log_emission} into the emission contribution of the auxiliary function,
-defined in \eqref{eq:q_emit_only}, gives
+defined in \eqref{eq:q_emit_only}, gives:
 \begin{align}
 Q_{\mathrm{emit}}(\theta,\theta^{\mathrm{old}})
 &=
@@ -680,7 +680,7 @@ b_t^{(j)}\log p_j^a + (1-b_t^{(j)})\log(1-p_j^a)
 \gamma_t(s,a)\,\log Z_{s,a}^{(x)}
 -
 \sum_{t=1}^{T}\sum_{s,a}
-\gamma_t(s,a)\,\log Z_{s,a}^{(b)}.
+\gamma_t(s,a)\,\log Z_{s,a}^{(b)}
 \label{eq:poe_qemit_expanded}
 \end{align}
 
@@ -697,17 +697,17 @@ but also all normalization terms involving that style state across the action ex
 symmetrically for the action-expert parameters. Therefore, the emission M-step no longer reduces to a 
 set of independent closed-form weighted maximum-likelihood updates.
 
-At the theoretical level, this means that the \ac{PoE} emission parameters are optimized by increasing
-\begin{equation}
+At the theoretical level, this means that the \ac{PoE} emission parameters are optimized by increasing 
+$
 Q_{\mathrm{emit}}(\theta,\theta^{\mathrm{old}})
-\end{equation}
+$ 
 with respect to the expert parameters using a generalized \ac{EM} step, rather than by solving 
 closed-form maximization equations for each parameter separately \cite{Dempster1977,Wu1983}.
 
 \subsection{Gradient Form}
 
 Let \(\vartheta_s\) denote a parameter of the style expert and \(\vartheta_a\) a parameter of the 
-action expert. Differentiating \eqref{eq:poe_qemit_expanded} gives the generic gradient structure
+action expert. Differentiating \eqref{eq:poe_qemit_expanded} gives the generic gradient structure:
 \begin{equation}
 \frac{\partial Q_{\mathrm{emit}}}{\partial \vartheta_s}
 =
@@ -730,7 +730,7 @@ and similarly
 \frac{\partial}{\partial \vartheta_a}\log p_a(O_t \mid a)
 -
 \frac{\partial}{\partial \vartheta_a}\log Z_{s,a}
-\right].
+\right]
 \label{eq:poe_action_grad}
 \end{equation}
 
