@@ -1,0 +1,273 @@
+% !TEX TS-program = LuaLaTeX
+% !TEX encoding = UTF-8 Unicode
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+%%
+%%  This file is an example of using asmeconf with lualatex to solve and plot an ode in a landscape figure.
+%%
+%%  Use of an up-to-date LaTeX distribution (after 2022) is very strongly recommended. 
+%%
+%%  Author: John H. Lienhard V
+%%          Department of Mechanical Engineering
+%%          Massachusetts Institute of Technology
+%%          Cambridge, MA 02139-4307 USA
+%%
+	\def\luaexversionno{1.04}
+%%	2025/03/27
+%%
+ %=========================================================
+%% 
+%% LICENSE: 
+%%
+%% Copyright (c) 2025 John H. Lienhard
+%% Offered under the MIT license: https://ctan.org/license/mit 
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\DocumentMetadata{%
+	lang=en-US, % default
+	pdfstandard=A-3u,% A-2b, A-2u, A-3b, A-3u. Check that your figures also meet the standard you choose.
+	pdfversion=1.7,% 2.0 (Version 2.0 supports pdfstandard=A-4f with pdftex or UA-2 with LuaLaTeX)
+%	pdfversion  = 2.0, % default
+%	pdfstandard = { ua-2 , a-4f },
+%	tagging = on, % for producing tagged pdf
+}
+
+\documentclass[grid,colorlinks,nofoot]{asmeconf}
+
+\hypersetup{%
+	pdftitle={Example of asmconf with LuaLaTeX to solve an ODE},
+	pdfkeywords={asmeconf, LuaLaTeX, ODE, pgfplots, landscape figure},
+	pdfauthor={John H. Lienhard},
+}
+
+\usepackage[figuresright]{rotating}% to use a landscape figure
+\usepackage{luacode}% for compatibility with older installations
+% logos used in this document
+\newcommand*\pdfTeX{pdf\TeX}    
+\newcommand*\LuaLaTeX{Lua\LaTeX}
+\newcommand*\BibTeX{Bib\TeX}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Now use lua code
+
+%% Runge-Kutta for simple first-order ODE
+\begin{luacode*}
+-- Differential equation y’(t) = f(t,y)
+-- with f(t,y) = A * y * cos(t+sqrt(1+y)).
+-- Initial condition: y(0) = 1
+function f(t,y,A)
+    return A * y * math.cos(t+math.sqrt(1+y))
+end
+-- Code to write PGFplots data as coordinates
+function print_RKfour(tMax,npoints,A,option)
+     local t0 = 0.0
+     local y0 = 1.0
+     local A = A
+     local h = (tMax-t0)/(npoints-1)
+     local t = t0
+     local y = y0
+     if option~=[[]] then
+          tex.sprint("\\addplot["..option.."] coordinates{")
+     else
+          tex.sprint("\\addplot coordinates{")
+     end
+     tex.sprint("("..t0..","..y0..")")
+     for i=1, npoints do
+          k1 = h * f(t,y,A)
+          k2 = h * f(t+h/2,y+k1/2,A)
+          k3 = h * f(t+h/2,y+k2/2,A)
+          k4 = h * f(t+h,y+k3,A)
+          y = y + (k1+2*k2+2*k3+k4)/6
+          t = t + h
+          tex.sprint("("..t..","..y..")")
+     end
+     tex.sprint("}")
+end
+\end{luacode*}
+
+%% Define a latex macro to call the case to be plotted
+\newcommand\addLUADEDplot[4][]{%
+     \directlua{print_RKfour(#2,#3,#4,[[#1]])}%
+}
+% SYNTAX: Solution of the initial value problem
+% Code assumed t = 0 at start and y(0) = 1 
+% #2 is the final time
+% #3 is the number of points
+% #4 is an amplitude parameter
+% #1 are options passed to the pgfplots \addplot function.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% For plotting the results, call pgfplots package
+
+\usepackage{pgfplots}% load AFTER xcolor, which was already called by asmeconf.cls
+\pgfplotsset{compat=newest}% to activate latest features
+
+\pgfplotsset{%
+     width=\textwidth,%
+     height=0.6\textwidth,%
+     /tikz/font={\sffamily},% 
+     % every axis plot/.style={line width=2pt},
+    every axis/.append style={very thick},% see manual page 189
+    every minor tick/.append style={very thin,black},% modifies the style `every tick'
+    every minor grid/.append style={very thin, color=Snow4},
+    every major tick/.append style={thin, black},% modifies the style `every minor tick'
+    every major grid/.append style={thin, color=Snow4},
+    major tick length={1.2em},
+    minor tick length={0.5em},
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% This environment will generate the .bib file the first time you run the code
+% if the .bib file already exists, it will not be overwritten
+\begin{filecontents}{asmeconf-lualatex-ode-example.bib}
+@online{fairbairns,
+  author 	= {Robin Fairbairns and Sebastian Rahtz and Leonor Barroca},
+  title 	= {A Package for Rotated Objects in \LaTeX},
+  version	= {2.16d},
+  organization = {Comprehensive \TeX\ Archive Network},
+  year 		= {2016},
+  url 		= {https://www.ctan.org/pkg/rotating},
+  urldate 	= {October 2, 2019},
+}      
+@article{montijano2014,
+   title	= {Numerical methods with \LuaLaTeX},
+   author	= {Juan I. Montijano and Mario P{\'{e}}rez and Luis R{\'{a}}ndez and Juan Luis Varona},
+   year		= 2014,
+   volume	= 35,
+   month	= {January},
+   number	= 1,
+   pages	= {51--56},
+   journal	= {TUGboat},
+   url		= {https://tug.org/TUGboat/tb35-1/tb109montijano.pdf},
+   note		= {Open access.}
+}
+@manual{pgfplots,
+   title 	= {Manual for Package \textsc{PGFPLOTS}},
+   url		= {https://ctan.org/pkg/pgfplots},
+   author 	= {Christian Feuers{\"{a}}nger},
+   version 	= {1.17},
+   year 	= {2020},
+   organization = {Comprehensive \TeX\ Archive Network},
+   month 	= feb,
+   urldate	= {January 4, 2021},
+}
+@manual{lua,
+   author 	= {Roberto {l}erusalimschy and Luiz Henrique {de Figueiredo} and Waldemar Celes},
+   title    = {{L}ua 5.3 Reference Manual},
+   url	 	= {https://www.lua.org/manual/5.3/},
+   organization = {Pontifical Catholic University},
+   address 	= {Rio de Janeiro, Brazil},
+   year 	= {2017},
+}
+\end{filecontents}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\ConfName{Proceedings of the \texttt{asmeconf} \linebreak International Examples Congress and Exposition}
+\ConfAcronym{AIECE21}
+\ConfDate{January 20, 2021}
+\ConfCity{Cambridge, MA}
+\PaperNo{AIECE2021-0001}
+
+\title{Example of \NoCaseChange{{\upshape\LuaLaTeX}} with asmeconf.cls for ODE Integration}
+ 
+\SetAuthors{John H.\ Lienhard V\affil{1}\CorrespondingAuthor{lienhard@mit.edu}}
+\SetAffiliation{1}{Department of Mechanical Engineering \\ Massachusetts Institute of Technology \\ Cambridge, MA}
+
+\maketitle
+
+\versionfootnote{Version~\luaexversionno, \today}
+
+\keywords{asmeconf, \LuaLaTeX, ODE, pgfplots, landscape}
+
+%%%%%%%%%  ABSTRACT  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+This paper is an example of using {\upshape\texttt{asmeconf}} with {\upshape\LuaLaTeX} to solve an ODE initial value problem using a fourth-order Runge-Kutta method and to plot the result using {\upshape\texttt{PGFPLOTS}}. The use of a landscape figure is also illustrated. References are given for further reading.
+\end{abstract}
+
+%%%%%%%%%  NOMENCLATURE (OPTIONAL) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{nomenclature}
+\entry{$A$}{Constant parameter [--]}
+\entry{$t$}{Time [s]}
+\entry{$y(t)$}{Position [m]}
+\end{nomenclature}
+
+%%%%%%%%%  BODY OF PAPER %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Introduction}
+\LuaLaTeX{} is built upon the Lua programming language~\cite{lua}. By directly using Lua code in a \LaTeX\ file, we can accomplish a wide range of tasks, as illustrated in the open-access paper by Montijano et al.~\cite{montijano2014}.  In the present example, we follow Montijano et al.\ in solving a nonlinear first-order ordinary differential equation and plotting the result---all within a single \LaTeX\ file!
+
+\section{Solution to an initial value problem}
+We consider an initial value problem like that of Montijano et al.:
+\begin{equation}\label{eqn:1}
+y'(t) = A\cdot y(t) \cos\Big(t + \sqrt{1 + y(t)}\,\Big) \text{ with }y(0)=1
+\end{equation}
+Here, $A$ is a constant. We may adopt a fourth-order Runge-Kutta algorithm for the integration, which we shall perform to $t = 30$~s using a 400 point discretization.  The details of the Runge-Kutta algorithm and a listing of the code are given in Montijano et al. (You can also read the code in the present \texttt{.tex} file.)
+
+The algorithm is implemented directly in the preamble of this file, and the results are plotted in Fig.~\ref{fig:1} for $A = \{0.25, 0.5, 0.75, 1.0\}$. Plotting is done using the \texttt{PGFPLOTS} package~\cite{pgfplots}.
+
+Landscape figures may be produced at full-page size by putting \verb|\usepackage[figuresright]{rotating}| (Fig.~\ref{fig:1}) into your \texttt{.tex} file's preamble and using the \texttt{sidewaysfigure*} environment~\cite{fairbairns}.
+
+\begin{sidewaysfigure*}
+\begin{tikzpicture}
+\begin{axis}[%
+	 xmin=0., 
+	 xmax=30., 
+	 ymin=0.0, 
+	 ymax=1.1,
+     xtick={0,5,...,30}, 
+     ytick={0,0.2,...,1.0},
+     minor x tick num=4, 
+     minor y tick num=3,
+     xlabel={Time, $\mathsf{t}$ [s]}, 
+     ylabel={Position, $\mathsf{y}$ [m]},
+     xticklabel={$\mathsf{\pgfmathprintnumber{\tick}}$},
+     yticklabel={$\mathsf{\pgfmathprintnumber{\tick}}$},
+     legend style={ 
+    	at={(0.7,0.85)},
+		anchor=west,
+		fill=none,
+        cells={anchor=west},
+     },
+     ]
+% tMax = 30, npoints = 400, A is the last argument
+\addLUADEDplot[color=Purple4,densely dashed,,very thick]{30}{400}{0.25};% color names are from xcolor package
+	\addlegendentry[fill=white]{$\mathsf{A = 0.25}$} 
+\addLUADEDplot[color=Chartreuse4,dashdotted,very thick]{30}{400}{0.5};
+	\addlegendentry[fill=white]{$\mathsf{A = 0.5}$} 
+\addLUADEDplot[color=Red3,densely dotted,very thick]{30}{400}{0.75};
+	\addlegendentry[fill=white]{$\mathsf{A = 0.75}$}
+\addLUADEDplot[color=Blue3,smooth,very thick]{30}{400}{1};
+	\addlegendentry[fill=white]{$\mathsf{A = 1}$} 
+\end{axis}
+\end{tikzpicture}
+\caption{A trial of pgfplot with Luacode Runge-Kutta integration}\label{fig:1}
+\end{sidewaysfigure*}
+
+
+%%%  CONCLUSIONS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Conclusion}
+\LuaLaTeX{} enables numerical computations within a \LaTeX{} environment. By combining this capability with
+\texttt{PGFPlots}, the need for separate numerical and/or graphics packages can be reduced.
+
+%%%  ACKNOWLEDGMENTS %%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section*{Acknowledgments}
+The example shown in this paper is directly based on an example given by Montijano et al.~\cite{montijano2014}. Additional examples, such as the
+Lorenz attractor, are contained in that paper.
+
+
+%%%  REFERENCES  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\bibliographystyle{asmeconf}%% .bst file following ASME conference format. Do not change.
+\bibliography{asmeconf-lualatex-ode-example}%% this bib file will be generated from the filecontents environment upon first run of this .tex file.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}
+

@@ -1,0 +1,139 @@
+%%
+%%  This file is `asmewide.sty'.
+%%
+%%  Copyright (c) 2025 John H. Lienhard.  Use under the MIT license: https://ctan.org/license/mit 
+%%
+%%  Defines a widetext environment within ASME dimensions
+%%  Use for material spanning both columns (i.e., for wide equations)
+%%
+%%  The original widetext environment was developed in revtex; elements of the present code have been modified revtex4-2.dtx, under LPPL1.3c. 
+%%  The unmodified code is available at: https://ctan.org/pkg/revtex
+%%	This code also adopts concepts from the widetext.sty package by Anjishnu Sarkar, https://blog.pnas.org/widetext.sty.
+%%  The modifications made were: follow ASME dimensions; remove revtex-specific macros; update/rework commands; adapt to most recent cuted.sty
+%%	(Leaders don't vanish at pagebreaks, as in revtex, evidently related to how cuted.sty handles strip construction. Have coded around this.)
+%% 
+%%  Required packages: 	cuted.sty v2.0 and flushend.sty v4.0 [2021/10/04] or later; 
+%%						asmeconf.cls or asmejour.cls w/their required packages, esp. etoolbox, xparse
+%%
+%%	The widetext environment can only appear once per page. It clashes with floats and footnotes, 
+%%		and often requires some hand-fitting of page layouts.
+%%
+%%  USAGE: \begin{widetext} ...wide material here... \end{widetext}
+%%	OPTIONAL ARGUMENTS: 
+%%		\begin{widetext[N] ...change upper/lower separation of wide material from default Xpt to Npt (X = 5pt asmeconf.cls; X = 10pt asmejour.cls)
+%%		\begin{widetext}[][tbn]: t = top line only; b = bottom line only; n = no lines.  BOTH arguments are REQUIRED, even if first is left empty.
+%%
+%%  asmewide,sty supports one option, [raggedend], which suppresses final page column balancing: \usepackage[raggedend]{asmewide}
+%%
+%%  NB: the strip environment from cuted is incompatible with the [lineno] option to asmeconf and asmejour!
+%%
+\NeedsTeXFormat{LaTeX2e}
+
+\def\AW@versionno{1.11}
+\def\AW@versiondate{2025/01/22\space}
+\ProvidesPackage{asmewide}[\AW@versiondate\space v\AW@versionno\space ASME wide equation environment (JHL)]
+
+\DeclareOption{raggedend}{% Added 2022/05/08, to suppressed flushend on last page, if desired
+	\AfterEndPreamble{\raggedend}
+}
+\DeclareOption*{}
+\ProcessOptions \relax
+
+\ifdefined\NewDocumentCommand\else
+  \RequirePackage{xparse}
+\fi
+\RequirePackage{etoolbox}
+\RequirePackage{cuted}[2021/10/04]%features used here were first added in the [2021/10/04] version of cuted.sty!
+\@ifpackagelater{cuted}{2021/10/04}{%
+    \relax
+}{%
+    \PackageError{asmewide}{Your version of cuted.sty is too old. You can get an update at https://ctan.org/pkg/cuted}{You need an up-to-date version of cuted.sty to run asmewide.sty.}%
+}
+
+\RequirePackage{flushend}[2021/10/04]
+%
+% https://tex.stackexchange.com/a/43541/119566
+\def\@getcl@ss#1.cls#2\relax{\def\@currentclass{#1}}
+\def\@getclass{\expandafter\@getcl@ss\@filelist\relax}
+\@getclass
+\typeout{Running asmewide.sty with the \@currentclass\space class.}
+%
+\newbox\@TopLeader
+\newbox\@BottomLeader
+\newlength\savparskip \setlength\savparskip{\parskip}
+\newlength\@RuleWidth 
+\appto\maketitle{\setlength\@RuleWidth{\dimexpr(\columnwidth+0.5\columnsep-1pt)}}% do this after entering twocolumn, in \maketitle. 2025/01/22
+\newlength\@TopSpace \setlength\@TopSpace{0ex}
+\newlength\@TopCorr \setlength\@TopCorr{-5pt}
+\def\@asmeindent{3.5mm}
+\def\@TopRuleWeight{0.5pt}
+\def\@BottomRuleWeight{0.5pt}
+\def\@DSS{5}% default stripsep
+%
+\@ifclassloaded{asmeconf}{%
+    \setlength\@TopCorr{-1ex}% keep \abovedisplayskip since text could start the page
+    \setlength\@TopSpace{1ex}% provide space apparently lost with cuted.sty in asmeconf.cls
+    \def\@asmeindent{0.25in}% asmeconf
+}{\relax}
+
+\@ifclassloaded{asmejour}{%
+	\AtBeginDocument{\setlength\@RuleWidth{\columnwidth}}
+    \setlength\@TopCorr{-9pt}% asmejour 
+    \def\@BottomRuleWeight{1pt}% asmejour
+    \def\@DSS{10}% default stripsep, asmejour
+}{\relax}
+%
+% Set ascenders and descenders 1.2 times greater than \baselineskip
+\NewDocumentCommand\@SetTopLeader{}{% NB: boxes are cleared after they are used; this command is issued once with each widetext environment
+    \setbox\@TopLeader\vbox{%
+    	\hbox to \@RuleWidth{%
+	    	\leaders\hrule height\@TopRuleWeight \hfil  
+	    	\vrule height 1.2\baselineskip width\@TopRuleWeight}
+    }
+}
+\NewDocumentCommand\@TopLine{}{%
+	\vskip\@TopSpace
+	\dimen@\ht\@TopLeader\advance\dimen@\dp\@TopLeader
+	\cleaders\box\@TopLeader\vskip\dimen@
+}
+\NewDocumentCommand\@SetBottomLeader{}{%
+    \setbox\@BottomLeader\hbox to \@RuleWidth{%
+    	\vrule depth 1.2\baselineskip width\@BottomRuleWeight
+    	\leaders\hrule height\@BottomRuleWeight \hfil
+    }
+}
+\NewDocumentCommand\@BottomLine{}{%
+	\par 
+	\vskip 3pt% provide some space between low equation numbers and rule
+    \setbox\@BottomLeader\vbox{%
+	    \hbox to \textwidth{\hfil\box\@BottomLeader}%
+    }%
+	\dimen@\ht\@BottomLeader\advance\dimen@\dp\@BottomLeader
+	\cleaders\box\@BottomLeader\vskip\dimen@ 
+	\vskip -1.5pt% reduce trailing separation w.r.t. baseline when \stripsep = 0
+}
+\preCutedStrip={\@TopLine}
+\postCutedStrip={\@BottomLine}
+\DeclareDocumentEnvironment{widetext}{O{\@DSS}o}{% 
+	\@SetTopLeader
+	\@SetBottomLeader
+	\notblank{#1}{%
+		\setlength{\stripsep}{#1pt plus 5pt minus 5pt}
+	}{
+		\setlength{\stripsep}{\@DSS pt plus 5pt minus 5pt}
+	}
+	\ifstrequal{#2}{t}{\setbox\@BottomLeader\vbox{}}{%
+		\ifstrequal{#2}{b}{\setbox\@TopLeader\vbox{\vskip \@TopCorr}}{%cuted inserts some additional space, we remove here
+			\ifstrequal{#2}{n}{\setbox\@TopLeader\vbox{\vskip \@TopCorr}\setbox\@BottomLeader\vbox{}}{\relax}
+		}
+	}
+	\begin{strip}
+	\setlength\parindent{\@asmeindent}% strip makes parindent zero; enlarge for ASME
+	\setlength\parskip{\savparskip}% strip makes \parskip zero w/o glue; set to match main text
+	}{%	
+	\end{strip}\ignorespacesafterend
+}
+%%
+\endinput
+%%
+%% End of file `asmewide.sty'.

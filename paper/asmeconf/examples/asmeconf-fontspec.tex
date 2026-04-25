@@ -1,0 +1,516 @@
+% !TEX TS-program = LuaLaTeX
+% !TEX encoding = UTF-8 Unicode
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+%%
+%%  This file is an example of using asmeconf with fontspec and lualatex to support non-Latin alphabets.
+%%
+	\def\fontspecversionno{1.04}
+%%	2025/11/08
+%%
+%%  Author: John H. Lienhard V
+%%          Department of Mechanical Engineering
+%%          Massachusetts Institute of Technology
+%%          Cambridge, MA 02139-4307 USA
+%%
+ %=========================================================
+%% 
+%% LICENSE: 
+%%
+%% Copyright (c) 2025 John H. Lienhard
+%% Offered under the MIT license: https://ctan.org/license/mit 
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\DocumentMetadata{%
+	pdfstandard=A-3b,% A-2b, A-2u, A-3b, or A-3u (don't use u options with LuaLaTeX)
+	pdfversion=1.7,
+	lang=en-US,
+	debug = {xmp-export},
+}
+\documentclass[loadscripts,colorlinks,nofoot,russian,greek,ukrainian,vietnamese,french,portuguese,turkish,polish,indonesian,italian,german,latin,serbianc,bidi=basic,japanese]{asmeconf}
+%
+%\documentclass[colorlinks,nofoot,bidi=basic]{asmeconf}
+%
+% spanish, german, and many others do not need to be named if babel is 2024 or later; just need bidi=basic for arabic (and japanese if using that language)
+%
+% March 2025: the japanese option has a minor conflict with the chinese-traditional font. Just click past the error message.
+% November 2025: spanish has a minor issue with \@lbibitem - click past it or take spanish out of the optional argument.
+%
+% [loadscripts] option added 2025/04/13 - required to access non-Latin scripts.
+
+
+\usepackage{hologo}% access various latex logos if needed
+
+% directly add this xmp property. See l3pdfmeta.pdf. This is not automatic with \DocumentMetadata. "True" must be capitalized. 
+\ExplSyntaxOn
+	\pdfmeta_xmp_add:n{<xmpRights:Marked>True</xmpRights:Marked>}
+\ExplSyntaxOff
+
+\hypersetup{%
+	pdftitle={{Language Support in ASMECONF: Non-Latin Alphabets, Lualatex, and fontspec}},
+	pdfkeywords={asmeconf, non-Latin alphabets, fontspec, LuaLaTeX, PDFLaTeX},
+	pdfauthor={John H. Lienhard},
+	pdfsubject = {Describes font support in asmeconf LaTeX template},
+	pdfurl={https://ctan.org/pkg/asmeconf},% may delete
+	pdflicenseurl={https://ctan.org/pkg/asmeconf},
+	pdfcopyright={Copyright (c) \the\year\ by John H. Lienhard},
+	pdfcontactemail={lienhard@mit.edu},
+	pdfcaptionwriter={{John H. Lienhard, V}},
+	pdfcontactaddress={77 Massachusetts Avenue, Room 3-166},
+    pdfcontactcity={Cambridge, MA},
+    pdfcontactpostcode={02139},
+    pdfcontactcountry={USA},
+    pdfcontacturl={https://lienhard.mit.edu},
+	pdfauthortitle={Professor of Mechanical Engineering},
+}
+
+% To avoid typing these over and over, define:
+\newcommand*\FS{{\upshape\texttt{fontspec}}}
+\newcommand*\LLT{{\upshape\hologo{LuaLaTeX}}}
+\newcommand*\AC{{\upshape\texttt{asmeconf}}}
+\newcommand*\PLT{{\upshape\texttt{\hologo{pdfLaTeX}}}}
+
+% define a unicode character by its codepoint
+\ExplSyntaxOn
+	\cs_new:Npn \MySym #1  { \codepoint_generate:nn {#1} { 12 } }
+\ExplSyntaxOff
+
+\providecommand*{\checkmark}{\MySym{"2713}} % because default checkmark has poor glyph information
+\renewcommand*{\textast}{\MySym{"002A}} % because default checkmark has poor glyph information
+
+%\AtBeginDocument{\let\ast\textast} 
+% brute force fix of bug in luatexja-fontspec, when Japanese option is used. This affects the \ast of \CorrespondingAuthor
+
+%% It's necessary to force full embedding of the fonts to get valid PDF/A-3b
+\usepackage{luacode}
+\begin{luacode}
+local function embedfull(tfmdata)
+    tfmdata.embedding = "full"
+end
+luatexbase.add_to_callback("luaotfload.patch_font", embedfull, "embedfull")
+\end{luacode}
+
+
+\makeatletter
+\def\NotoBan@scale{0.98}% vary this if the Bengali is too small/large; the default value 0.92 matches scaling of the other Noto fonts used.
+\def\NotoDev@scale{0.98}% vary this if the Devanagari is too small/large; the default value 0.92 matches scaling of the other Noto fonts used.
+%\def\NotoTam@scale{0.92}% vary this if the Tamil is too small/large; the default value 0.92 matches scaling of the other Noto fonts used.
+\def\NotoAra@scale{0.93}% The serif font only; the default value is 0.91
+
+% Noto family is not as close to Tex Gyre Termes as I'd like, so for abstract examples in Latin script [only], I'm using Noto Serif Italic for visual consistency
+\newfontfamily{\NotoSerif}{NotoSerif}[UprightFont=*-Regular,ItalicFont=*-Italic, BoldItalicFont=*-BoldItalic, BoldFont=*-Bold, Extension=.ttf,Scale=0.84,WordSpace={1,1.4,1}]
+\newfontfamily{\NotoSerifItalns}{NotoSerif-Italic.ttf}[ItalicFont=*,Scale=\Noto@scale]% Turkish has trouble with WordSpace
+\makeatother
+
+% babel [serbianc] module redefines some math commands that are also redefined by babel [russian].  Let's avoid error messages 
+% by erasing the [serbianc] definitions before \begin{document}, which is where [russian] will define them. 
+\usepackage{etoolbox}
+\AtEndPreamble{%
+\let\sh\relax \let\ch\relax \let\tg\relax \let\ctg\relax \let\arctg\relax \let\arcctg\relax \let\cth\relax \let\cosec\relax }
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% This environment will generate the .bib file the first time you run the code
+% NB: if the .bib file already exists, it will not be overwritten
+\begin{filecontents}{asmeconf-fontspec.bib}
+@online{lienhard2021,
+  author 	= {John H. Lienhard},
+  title 	= {{\texttt{asmeconf}}: A template for {ASME} conference papers},
+  organization = {Comprehensive \TeX\ Archive Network},
+  version	= {{\versionno}},
+  year 		= {2025},
+  url 		= {https://ctan.org/pkg/asmeconf},
+  urldate 	= {{\today}},
+} 
+@online{bezos2025,
+  author 	= {Javier Bezos and Johannes L. Braams},
+  title 	= {{\texttt{babel}}: Localization and internationalization},
+  organization = {Comprehensive \TeX\ Archive Network},
+  version	= {25.25},
+  year 		= {2025},
+  url 		= {https://ctan.org/pkg/babel},
+  urldate 	= {March 14, 2025},
+}           
+@online{robertson2023,
+  author 	= {Will Robertson},
+  title 	= {Experimental Unicode mathematical typesetting: The \textsf{unicode-math} package},
+  version	= {0.8r},
+  organization = {Comprehensive \TeX\ Archive Network},
+  year 		= {2023},
+  url 		= {https://ctan.org/pkg/unicode-math},
+  urldate 	= {March 9, 2025},
+}
+@online{lua-jp,
+   author	= {{\hologo{LuaTeX}-ja project team}},
+   title	= {The {\hologo{LuaLaTeX}}-ja package},
+   version	= {20210103.0},
+   organization = {Comprehensive \TeX\ Archive Network},
+   year		= 2021,
+   url		= {https://ctan.org/pkg/luatexja},
+   urldate	= {January 5, 2021},
+}
+@online{dpc,
+   author	= {David Carlisle},
+   title	= {The {\texttt{dcolumn}} package},
+   version	= {1.06},
+   organization = {Comprehensive \TeX\ Archive Network},
+   year		= 2014,
+   url		= {https://ctan.org/pkg/dcolumn},
+   urldate	= {January 8, 2021},
+}
+\end{filecontents}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\ConfName{Proceedings of the \texttt{asmeconf} \linebreak International Examples Congress and Exposition}
+\ConfAcronym{AIECE24}
+\ConfDate{August 1, 2024}
+\ConfCity{Cambridge, MA}
+\PaperNo{AIECE2024-0002}
+
+\title{Language Support in ASMECONF: Non-Latin Alphabets, Lualatex, and fontspec}
+ 
+\SetAuthors{John H.\ Lienhard V\affil{}\CorrespondingAuthor{lienhard@mit.edu}}
+\SetAffiliation{}{Department of Mechanical Engineering \\ Massachusetts Institute of Technology, Cambridge, MA}
+
+\maketitle
+
+\versionfootnote{Version~\fontspecversionno, \today}
+
+\keywords{asmeconf, language support, non-Latin alphabets, fontspec, \LLT}
+
+%%%%%%%%%  ABSTRACT  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+This note describes the use of \AC\ to format multilingual documents in Latin or non-Latin alphabets. Font support encompasses the Arabic, Chinese, Greek, Hindi, Korean, Marathi, Russian, and Tamil languages, among others. For asian alphabets, \LLT\ and \FS\ are employed.  The system fonts that must be installed for \FS\ are listed, and examples of simple abstracts are shown in twenty-five languages.
+\end{abstract}
+
+%%%%%%%%%  BODY OF PAPER %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction: why have this?}
+The \AC\ class~\cite{lienhard2021} provides a template for formatting conference papers submitted to the American Society of Mechanical Engineers.
+The goal of adding language support to \AC\ is to enable authors to include translations of a paper's abstract or brief quotations in languages other than English.  Although the entire \AC\ template may, in principle, be switched to another language without modifying the class file, I have not explored this option in much detail. These language capabilities are experimental, and their future development will be guided by the feedback that I receive from authors. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{The babel package}
+The typesetting of languages is handled by the \texttt{babel} package~\cite{bezos2025}, which is called by the \AC\ class. For many languages, \texttt{babel} includes language definition files (\texttt{.ldf}) that provide information about section or caption titles, hyphenation rules, and so on.  When an \texttt{.ldf} exists, \texttt{babel} will recognize the language as a global option that can be passed as an option to \AC, assuming that an appropriate font is available. A list of the many languages with \texttt{.ldf} files is given in the \texttt{babel} documentation.
+
+For languages in Latin scripts, it's usually safe to assume that the font is present, and many such languages have \texttt{.ldf} files. For other scripts, additional steps are needed. The \AC\ class handles this differently under \PLT\ and \LLT. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Using Non-Latin Scripts}
+When using \PLT, \AC will load appropriate fonts for Greek, Vietnamese, and certain cyrillic-script languages (see Table~\ref{tab:1}). The user can give the corresponding class option and then call for a change of language as described in Section~\ref{sec:6}. No additional work is required.  
+
+To access a broader range of fonts, \AC\ can be used under \LLT, with \FS. In that case, \AC\ will employ unicode fonts that are installed on the user's computer. The class option \texttt{[loadscripts]} must be called to load the non-Latin fonts listed in Tables~\ref{tab:1} and~\ref{tab:2}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{table}[t]
+\caption{Languages in non-Latin scripts for which \NoCaseChange{\AC} provides font support. 
+Required class options are shown where needed. Several languages are available only with LUALATEX.\label{tab:1}}%
+\centering{%
+\begin{tabular}{@{\hspace*{1.5em}}l@{\hspace*{4em}}c@{\hspace*{2.5em}}c@{\hspace*{1.5em}}}
+\toprule
+\textbf{Language} & \textbf{\hologo{pdfLaTeX}} & \textbf{\LLT}\\ \midrule
+Arabic		& \textit{n/a}	&  bidi=basic\\
+Belarusian	& belarusian 	& \\
+Bengali		& \textit{n/a}	& \\
+Bulgarian 	& bulgarian 	& \\
+Chinese		& \textit{n/a}	& \\
+Greek 		& greek 		& \\
+Hindi		& \textit{n/a}	& \\
+Japanese 	& \textit{n/a}	& japanese \\
+Korean		& \textit{n/a}	& \\
+Macedonian 	& macedonian 	& \\
+Marathi		& \textit{n/a}	& \\
+Russian 	& russian 		& \\
+Serbian		&serbianc$^\ast$& \\
+Tamil		& \textit{n/a}	& \\
+Ukrainian 	& ukrainian 	& \\
+Vietnamese	& vietnamese	& \\
+\bottomrule
+\multicolumn{3}{@{}p{\columnwidth}}{\footnotesize$^\ast$\ Serbian option \texttt{[serbianc]}, for both engines, uses cyrillic. In \PLT, use \texttt{\textbackslash selectlanguage\{serbianc\}}. In \LLT, instead select ``\texttt{serbian-cyrillic}''.}
+\end{tabular}
+}
+\end{table}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Unicode fonts}
+The \FS\ package~\cite{robertson2023} allows \LLT\ to access fonts that are on the user's system.  Today, these fonts are normally in unicode, a 16-bit format that allows a font to contain a vast number of glyphs---up to $2^{16}$. Multiple languages can be contained within a single font. Specialized unicode fonts are dedicated to some languages that have many thousands of characters, such as Japanese or Chinese.
+
+When processed in \PLT, \AC\ uses the \texttt{newtxtext} and \texttt{inconsolata} fonts, a collection of eight-bit fonts, for Latin script. To use \FS, those are replaced by corresponding unicode fonts. Specialized fonts are needed for some additional scripts. Only some of these fonts are included in a standard \LaTeX\ distribution. Thus, the user may need to install several unicode fonts onto their own system in order to use \AC\ with \FS.
+Fortunately, such fonts are free and easily downloaded.
+
+The needed fonts are listed in Table~\ref{tab:2}. The Latin fonts are required for English when using \FS; however, these are included in a standard \TeX\ Live installation.
+
+%%%%%%%%%%%%%%% two column table %%%%%%%%%%%%%%%%%% 
+\NewDocumentCommand\R{O{11pt}}{\rule{0pt}{#1}}
+\begin{table*}[t!]
+\caption{System fonts used by \NoCaseChange{\AC} with \NoCaseChange{\FS}. For all fonts, load regular and bold face.  For Latin, Cyrillic, and Greek serif and sans serif fonts, also load italic and bold italic. For Noto Sans Arabic, install semibold instead of bold.\label{tab:2}}%
+\centering{%
+\begin{tabular*}{\textwidth}{@{\hspace*{0.5em}}@{\extracolsep{\fill}}>{\raggedright}p{6em}>{\raggedright}p{12em}>{\raggedright}p{10em}p{23em}@{\hspace*{0.5em}}}
+\toprule
+\textbf{Script}\rule{0pt}{11pt}		  &
+\multicolumn{1}{c}{\textbf{Language}} &
+\multicolumn{1}{c}{\textbf{Fonts}}    &
+\multicolumn{1}{c}{\textbf{Where to get the font}}\\ \midrule
+Latin$^*$ 	& most European languages 		& TeX Gyre Termes, & \url{https://ctan.org/tex-archive/fonts/newtx/opentype}, \rule{0pt}{11pt}\\
+& & TeX~Gyre~Heros, &  \url{https://ctan.org/tex-archive/fonts/tex-gyre/opentype}\\ 
+%\url{http://www.gust.org.pl/projects/e-foundry/tex-gyre} \\
+& & Inconsolatazi4  & \url{https://ctan.org/tex-archive/fonts/inconsolata/opentype} \\
+Arabic\R 	& Arabic, Punjabi, Urdu, others & Amiri,\\ Noto~Sans~Arabic & \url{https://github.com/alif-type/amiri}\hfill\hbox{} \url{https://github.com/googlefonts/noto-fonts} \\
+Bengali\R 	& Assamese, Bengali, others 	& Noto Serif Bengali,\\ Noto~Sans Bengali& \url{https://github.com/googlefonts/noto-fonts} \\
+Cyrillic\R  & Belarusian, Bulgarian, Macedonian, Russian, Serbian, Ukrainian, others & Noto Serif,\\ Noto~Sans, Noto~Sans~Mono & \url{https://github.com/googlefonts/noto-fonts} \\
+Devanagari\R& Hindi, Kashmiri, Marathi, Nepali, Sanskrit, others & Noto Serif Devanagari,\\ Noto~Sans Devanagari& \url{https://github.com/googlefonts/noto-fonts} \\
+Greek\R 	& Greek 				& Noto Serif, Noto~Sans, Noto~Sans~Mono 						& \url{https://github.com/googlefonts/noto-fonts} \\
+Hangul\R 	& Korean 				& Noto~Serif~CJK~KR, Noto~Sans~CJK~KR, Noto~Sans~Mono~CJK~KR 	& \url{https://github.com/googlefonts/noto-fonts} \\
+Japanese\R  & Japanese 				& Noto~Serif~CJK~JP, Noto~Sans~CJK~JP, Noto~Sans~Mono~CJK~JP 	& \url{https://github.com/googlefonts/noto-fonts} \\
+Simplified\R\ Chinese & Mandarin 	& Noto~Serif~CJK~SC, Noto~Sans~CJK~SC, Noto~Sans~Mono~CJK~SC 	& \url{https://github.com/googlefonts/noto-fonts} \\
+Tamil\R 	& Tamil, others 		& Noto~Serif~Tamil, Noto~Sans~Tamil 							& \url{https://github.com/googlefonts/noto-fonts} \\
+Traditional\R\ Chinese & Traditional Mandarin, Cantonese & Noto~Serif~CJK~TC, Noto~Sans~CJK~TC, Noto~Sans~Mono~CJK~TC & \url{https://github.com/googlefonts/noto-fonts} \\
+\bottomrule
+\multicolumn{4}{l}{\R $^*$\ The Latin fonts are \textit{required} with \AC+\FS, even if English is the only language called. Install others as needed.}
+\end{tabular*}
+}
+\end{table*}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Using fontspec with asmeconf}
+
+When running \LLT, \texttt{fontspec} is loaded by default (as of Feb.\ 2024).   With \FS, \texttt{babel} will use \texttt{.ldf} files or separate initialization files (\texttt{.ini}) when they are available for a given language. These files provide language specific information, using include the appropriate names for abstract, figure, table, appendix, and so on.  These languages can be accessed as described in Section~\ref{sec:6}.
+
+The class option \texttt{loadscripts} must be called to load the non-Latin fonts listed in Tables~\ref{tab:1} and~\ref{tab:2}.
+
+When captions and the like are not needed (as for short passages like the abstracts herein), \texttt{babel} can load many languages ``on the fly'', with only a basic call in the \text{.tex} file (see Section \ref{sec:6}), if an appropriate font is available, without even using a class option.  Adding the language name to as an option to \verb|\documentclass| ensures that an \texttt{.ldf} or \texttt{.ini} file will also be loaded.
+
+Arabic typesetting is a little more complicated. The script runs right to left, and so arabic requires the \texttt{bidi} package, which can be loaded as a class option.  Similarly, when \texttt{[japanese]} is given as an option to the class, \AC\ calls the \texttt{luatexja-fontspec} package~\cite{lua-jp}, which is a specialized module for typesetting Japanese. (\textit{The Japanese option has a conflict with Chinese-traditional text as of March 2025, but both still typeset.})
+
+What about support for scripts not shown in Table~\ref{tab:2}?  Macros from \texttt{babel} for adding fonts can be placed into the preamble of your document.  The \texttt{babel} package supports roughly 250 languages, and \AC\ has been tried with only about thirty.  In fact, any of the scripts mentioned can be called from your preamble rather than using the \texttt{[loadscripts]} option.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{How to call a language\label{sec:6}}
+
+Call a language with \verb|\begin{selectlanguage}{<lang>}|, where \texttt{<lang>} is the lower-case name of the language.  
+For example, suppose that a Spanish language abstract is desired. The user puts \texttt{[spanish]} as a class option (this language has an \texttt{.ldf} file), and then writes:
+\begin{quotation}
+\noindent\hbox{}\verb|\begin{selectlanguage}{spanish}|\\
+\verb|\begin{abstract*}|\\
+\verb|Este es el resumen del artículo|\ldots\\ 
+\verb|\end{abstract*}|\\
+\verb|\end{selectlanguage}|
+\end{quotation}
+
+As it happens, this short snippet does not even require the class option because the word for ``abstract'' is grabbed on the fly and the font is the same as for the main English text. On the other hand, a Greek abstract needs to have a font specified. The \AC\ class loads this font automatically under \LLT ; for \PLT, the font is loaded if the class option \texttt{[greek]} is used.
+
+\textsc{\textbf{Nota Bene:}} \textbf{1)} Your \texttt{.tex} file \textit{must} be saved in \texttt{utf-8} encoding.  Some operating systems default to a different encoding that will garble unicode characters. \textbf{2)} The features used to provide language support under \FS\ require an up-to-date \LaTeX\ distribution (2020 or~later). \textbf{3)} The documentation of \texttt{babel} provides detailed guidance on loading languages.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Abstracts}
+Examples of abstracts in various languages now follow. Reading the source \texttt{.tex} file for this document may clarify the syntax.
+
+\begin{selectlanguage}{chinese-simplified}
+\begin{abstract*}
+这是文章的摘要。我们用中文书写，描述了问题，方法和结果，还包括了参考文献。
+\end{abstract*}
+\end{selectlanguage}% edited by Zi Hao Foo
+
+\begin{selectlanguage}{chinese-traditional}% this is Mandarin
+\begin{abstract*}
+這是文章的摘要。我們用中文書寫，描述了問題，方法和結果，還包括了參考文獻。
+\end{abstract*}
+\end{selectlanguage}% edited by Zi Hao Foo
+
+\begin{selectlanguage}{chinese-traditional}% this is Cantonese
+\begin{abstract*}
+係文嘅摘要。 我哋用中文書寫，描述了問題，方法同結果，仲包括埋參考文獻。
+\end{abstract*}
+\end{selectlanguage}% edited by Zi Hao Foo
+
+{\NotoSerif
+\begin{selectlanguage}{spanish}
+\begin{abstract*}
+Este es el resumen del artículo. Escribimos en español. Se describen el problema, los métodos y los resultados. También se incluyen referencias.
+\end{abstract*}
+\end{selectlanguage}% edited by Aarón Montoya-Moraga
+
+\begin{selectlanguage}{english}
+\begin{abstract*}
+This is the summary of the article. We write in English. The problem, methods, and results are described. References are also included.
+\end{abstract*}
+\end{selectlanguage}% checked by JHL :-) 
+}%
+
+\begin{selectlanguage}{hindi}
+\begin{abstract*}
+यह हिंदी में लिखे गए एक लेख का सारांश है। समस्या, विधियों और परिणामों का वर्णन किया गया है। संदर्भ भी शामिल हैं।
+\end{abstract*}
+\end{selectlanguage}% Checked by Debanjan Banerjee
+
+\begin{selectlanguage}{bengali}
+\begin{abstract*}
+এটি নিবন্ধের সংক্ষিপ্তসার। আমরা বাংলা ভাষায় লিখি। সমস্যা, পদ্ধতি এবং ফলাফল বর্ণনা করা হয়। উল্লেখগুলিও অন্তর্ভুক্ত রয়েছে।
+\end{abstract*}
+\end{selectlanguage}% Checked by Yagnaseni Roy
+
+\begin{selectlanguage}{arabic}% NB: provide package option [bidi=basic] to get RL type.
+\begin{abstract*}\upshape
+هذا هو ملخص المقال. نكتب بالعربية. يتم وصف المشكلة والطرق والنتائج. يتم تضمين المراجع أيضاً. 
+\end{abstract*}
+\end{selectlanguage}% Edited by Omar Labban
+
+{\NotoSerif
+\begin{selectlanguage}{portuguese}
+\begin{abstract*}
+Este é o resumo do artigo. Escrevemos em português. O problema, métodos e resultados são descritos. Referências também estão incluídas.
+\end{abstract*}
+\end{selectlanguage}% Checked by Igo Krebs
+}%
+
+\begin{selectlanguage}{russian}
+\begin{abstract*}
+Это резюме статьи. Пишем по русски. Описаны проблема, методы и результаты. Библиография также включена.
+\end{abstract*}
+\end{selectlanguage}% edited by Steven Gerasimoff
+
+\begin{selectlanguage}{japanese}
+\begin{abstract*}
+%論文の要約です。日本語で記述します。問題、方法、および結果について説明します。また、参考文献も含めます。           
+この論文の日本語での要約は以下のとおりです。問題、方法、および結果が説明されています。参考資料も添付してあります。
+\end{abstract*}
+\end{selectlanguage}% Edited by Keiji Yano and Yoshiki Okamoto
+
+\begin{selectlanguage}{marathi}
+\begin{abstract*}
+हा लेखाचा सारांश आहे. आपण मराठीत लिहित आहो. ह्यात समस्या , पद्धती आणि परिणामाचे वर्णन केले आहेत. संदर्भ देखील समविष्ट आहेत. 
+\end{abstract*}
+\end{selectlanguage}% Edited by Vibhawari Deshmukh. (Note that proper fontspec renderer is needed for the combining characters.)
+
+{\NotoSerif
+\begin{selectlanguage}{turkish}
+\begin{abstract*}{\NotoSerifItalns
+Bu, makalenin özetidir. Türkçe yazıyoruz. Sorun, yöntemler ve sonuçlar açıklanmaktadır. Referanslar da dahildir.}%
+\end{abstract*}%
+\end{selectlanguage}% Edited by Aslı Demir
+}%
+
+\begin{selectlanguage}{korean}
+\begin{abstract*}
+이것은 한국어로 쓰인 논문의 초록입니다. 문제, 방법 및 결과가 설명되어 있습니다. 참조도 포함됩니다.
+\end{abstract*}
+\end{selectlanguage}% Edited by Hyung Won Chung.
+
+{\NotoSerif
+\begin{selectlanguage}{french}
+\begin{abstract*}
+Ceci est le résumé de l'article. Il est écrit en français. Le problème, les méthodes et les résultats sont décrits. Des références sont également incluses.
+\end{abstract*}
+\end{selectlanguage}% Edited by Christine Gervais.
+
+\begin{selectlanguage}{german}
+\begin{abstract*}
+Hier ist die Zusammenfassung des Beitrags. Wir schreiben auf Deutsch. Die Fragestellung, die Methoden und die Ergebnisse werden beschrieben. Der Beitrag enthält auch ein Literaturverzeichnis.
+\end{abstract*}
+\end{selectlanguage}% Edited by Greg Thiel.
+}%
+
+\begin{selectlanguage}{tamil}
+\begin{abstract*}
+ இது கட்டுரையின் சுருக்கம். நாங்கள் தமிழில் எழுதுகிறோம். சிக்கல், முறைகள் மற்றும் முடிவுகள் விவரிக்கப்பட்டுள்ளன. குறிப்புகளும் சேர்க்கப்பட்டுள்ளன.
+\end{abstract*}
+\end{selectlanguage}% Edited by Jaichander Swaminathan. (Note that HarfBuzz is needed for combining characters to render correctly.)
+
+{\NotoSerif
+\begin{selectlanguage}{vietnamese}
+\begin{abstract*}
+Đây là phần tóm tắt của bài báo khoa học. Chúng tôi viết bằng tiếng Việt. Vấn đề, các phương pháp và các kết quả được mô tả trong phần này. Tài liệu tham khảo cũng được bao gồm.%
+\end{abstract*}
+\end{selectlanguage}% Checked and edited by Nguyen Le and Thao Nguyen
+
+\begin{selectlanguage}{italian}
+\begin{abstract*}
+Questo è il riassunto dell'articolo. Scriviamo in italiano. Vengono descritti il ​​problema, i metodi e i risultati. Sono inclusi anche i riferimenti.
+\end{abstract*}
+\end{selectlanguage}% Checked by Jacopo Buongiorno.	
+
+\begin{selectlanguage}{indonesian}
+\begin{abstract*}
+Ini adalah ringkasan dari artikel tersebut. Kami menulis dalam bahasa Indonesia. Masalah, metode, dan hasil dijelaskan. Referensi juga disertakan.
+\end{abstract*}
+\end{selectlanguage}% checked by Danyal Rehman and Turga Ganapathy
+
+\begin{selectlanguage}{polish}
+\begin{abstract*}
+To jest podsumowanie artykułu. Piszemy po polsku. Opisano problem, metody i wyniki. Literatura źródłowa zostanie udostępniona.
+\end{abstract*}
+\end{selectlanguage}% Edited by Leon Awerbuch
+
+\begin{selectlanguage}{swahili}
+\begin{abstract*}
+Huu ni Muhtasari wa makala. Tunaandika kwa Kiswahili.
+Matatizo, Mbinu na matokeo yameelezewa. Marejeleo pia yamejumuishwa.
+\end{abstract*}
+\end{selectlanguage}% Edited by Judith Mmari
+}%
+
+\begin{selectlanguage}{ukrainian}
+\begin{abstract*}
+Це короткий зміст статті. Пишемо українською мовою. Описана проблема, методи та результати. Стаття включає список використаної літератури.
+\end{abstract*}
+\end{selectlanguage}% Edited by Svetlana Boriskina
+
+\begin{selectlanguage}{greek}%
+\begin{abstract*}
+Αυτή είναι η περίληψη του άρθρου. Χρησιμοποιούμε την ελληνική γλώσσα. Περιγράφεται το πρόβλημα, οι μέθοδοι και τα αποτελέσματα. Περιλαμβάνονται επίσης αναφορές.
+\end{abstract*}
+\end{selectlanguage}% Edited by George Barbastathis
+
+% Use global option [serbianc]
+% Note -- the Slavic language .ldf files redefine math operators. Russian and Ukrainian avoid conflicts, but Serbian does not. See local fix in preamble.
+\begin{selectlanguage}{serbian-cyrillic}
+\begin{abstract*}
+Ово је резиме чланка. Пишемо на српском. Описани су проблем, методе и резултати. Укључене су и референце.
+\end{abstract*}
+\end{selectlanguage}% confirmed by Bora Mikić
+
+{\NotoSerif
+\begin{selectlanguage}{latin}
+\begin{abstract*}
+Hoc argumentum in articulum. Latine scribere nobis. Quaestio est, modi, et describit eventus qui. Alia sunt opera citatis.
+\end{abstract*}
+\end{selectlanguage}
+}%
+
+%%%  ENTIRE DOCUMENT  %%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Changing the language of the entire document}
+The main language of the document is English  by default.  This means that section headings, captions, and other words chosen by macros will be in English. 
+
+To chose a different main language, give the option \texttt{[main=..]}, e.g., \texttt{[main=french]}. The standard caption and section names will follow \texttt{babel}'s dictionary for the language chosen.  Users may additionally change ``Keywords'', ``Nomenclature'',  ``Corresponding author'', and ``Joint first authors'' by renewing the commands \verb|\keywordname|, \verb|\nomname|, \verb|\CAwords|, and \verb|\JAwords|. Changes to the page footer are described in the \AC\ documentation~\cite{lienhard2021}. 
+% The pdf bookmark for ``Appendices'' may be changed by renewing \verb|\appendicesname|. % dropped this bookmark, Spring 2025.
+(See the \texttt{babel} documentation \cite[Ch.~3]{bezos2025} if the dictionary for the main language lacks the correct word for, say, \verb|abstractname|).
+
+I have not explored this usage in detail, and I would welcome comments from authors who attempt such conversions.
+
+Note that some languages make characters active, which can have unexpected effects. For example, Spanish makes ``.'' an active character, which clashes with the default decimal separator when using \texttt{dcolumn}'s \texttt{d\{n.m\}}~\cite{dpc}. The command \texttt{\textbackslash spanishdeactivate\{.\}} stops this behavior. As of August 2024, \texttt{asmeconf} defines a \texttt{dcolumn} type \texttt{,\{n.m\}} that uses a comma (not a period) as the decimal separator.
+%Alternatively, the decimal separator can be changed to a comma by putting \texttt{\textbackslash newcolumntype\{d\}[1]\{D\{,\}\{,\}\{\#1}\}\} in the preamble.
+
+
+%%%  CONCLUSIONS      %%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Conclusion}
+\AC\ has multilingual capabilities under both \PLT\ and \LLT.  In particular, with \FS, \AC\ can support a wide range of scripts and languages within a \LaTeX\ environment. These capabilities are largely experimental, and their future development will be guided by feedback that I receive from those using these features.
+
+%%%  ACKNOWLEDGMENTS   %%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Acknowledgments}
+Thanks to everyone who helped me sort out the translated abstracts: Leon Awerbuch, Debanjan Banerjee, George Barbastathis, Svetlana Boriskina, Jacopo Buongiorno, Hyung Won Chung, Aslı Demir, Vibhawari Deshmukh, Zi Hao Foo, Turga Ganapathy, Steven Gerasimoff, Christine Gervais, Igo Krebs, Omar Labban, Nguyen Le, Bora Mikić, Judith Mmari, Aarón Montoya-Moraga, Thao Nguyen, Yoshiki Okamoto, Danyal Rehman, Yagnaseni Roy, Jaichander Swaminathan, Gregory Thiel, and Keiji Yano. All were generous with their time.
+
+%%%  REFERENCES       %%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\bibliographystyle{asmeconf}%% .bst file following ASME conference format. Do not change.
+\bibliography{asmeconf-fontspec}%% this bib file will be generated from the filecontents environment upon first run of this .tex file. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\end{document}
+

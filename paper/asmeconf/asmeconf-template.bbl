@@ -1,0 +1,255 @@
+\begin{thebibliography}{10}
+\newcommand{\enquote}[1]{``#1''}
+\providecommand{\url}[1]{\texttt{#1}}
+\providecommand{\urlprefix}{URL }
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{DOI \discretionary{}{}{}#1}\else
+  \providecommand{\doi}{DOI \discretionary{}{}{}\begingroup
+  \urlstyle{rm}\Url}\fi
+\providecommand{\eprint}[2][]{\urlprefix\url{#1#2}}
+
+\bibitem{Schwarting2018}
+Schwarting, Wilko, Alonso-Mora, Javier and Rus, Daniela.
+\newblock \enquote{Planning and Decision-Making for Autonomous Vehicles.}
+\newblock \emph{Annual Review of Control, Robotics, and Autonomous Systems}
+  Vol.~1 No.~1 (2018): pp. 187--210.
+\newblock \doi{10.1146/annurev-control-060117-105157}.
+
+\bibitem{Lefevre2014}
+Lefevre, Stephanie, Vasquez, Dizan and Laugier, Christian.
+\newblock \enquote{A survey on motion prediction and risk assessment for
+  intelligent vehicles.}
+\newblock \emph{Robomech Journal} Vol.~1 (2014).
+\newblock \doi{10.1186/s40648-014-0001-z}.
+
+\bibitem{Madjid_2026}
+Madjid, Nadya~Abdel, Ahmad, Abdulrahman, Mebrahtu, Murad, Babaa, Yousef,
+  Nasser, Abdelmoamen, Malik, Sumbal, Hassan, Bilal, Werghi, Naoufel, Dias,
+  Jorge and Khonji, Majid.
+\newblock \enquote{Trajectory prediction for autonomous driving: Progress,
+  limitations, and future directions.}
+\newblock \emph{Information Fusion} Vol. 126 (2026): p. 103588.
+\newblock \doi{10.1016/j.inffus.2025.103588}.
+\newblock \urlprefix\url{http://dx.doi.org/10.1016/j.inffus.2025.103588}.
+
+\bibitem{10054035}
+Negash, Natnael~M. and Yang, James.
+\newblock \enquote{Driver Behavior Modeling Toward Autonomous Vehicles:
+  Comprehensive Review.}
+\newblock \emph{IEEE Access} Vol.~11 (2023): pp. 22788--22821.
+\newblock \doi{10.1109/ACCESS.2023.3249144}.
+
+\bibitem{Rudenko_2020}
+Rudenko, Andrey, Palmieri, Luigi, Herman, Michael, Kitani, Kris~M, Gavrila,
+  Dariu~M and Arras, Kai~O.
+\newblock \enquote{Human motion trajectory prediction: a survey.}
+\newblock \emph{The International Journal of Robotics Research} Vol.~39 No.~8
+  (2020): p. 895–935.
+\newblock \doi{10.1177/0278364920917446}.
+\newblock \urlprefix\url{http://dx.doi.org/10.1177/0278364920917446}.
+
+\bibitem{murphy2002dynamic}
+Murphy, K.P.
+\newblock \emph{Dynamic Bayesian Networks: Representation, Inference and
+  Learning}.
+\newblock University of California, Berkeley (2002).
+\newblock \urlprefix\url{https://books.google.de/books?id=4Uc6HQAACAAJ}.
+
+\bibitem{krajewski2018highddatasetdronedataset}
+Krajewski, Robert, Bock, Julian, Kloeker, Laurent and Eckstein, Lutz.
+\newblock \enquote{The highD Dataset: A Drone Dataset of Naturalistic Vehicle
+  Trajectories on German Highways for Validation of Highly Automated Driving
+  Systems.} (2018).
+\newblock \eprint{1810.05642},
+  \urlprefix\url{https://arxiv.org/abs/1810.05642}.
+
+\bibitem{PhysRevE.62.1805}
+Treiber, Martin, Hennecke, Ansgar and Helbing, Dirk.
+\newblock \enquote{Congested traffic states in empirical observations and
+  microscopic simulations.}
+\newblock \emph{Phys. Rev. E} Vol.~62 (2000): pp. 1805--1824.
+\newblock \doi{10.1103/PhysRevE.62.1805}.
+\newblock \urlprefix\url{https://link.aps.org/doi/10.1103/PhysRevE.62.1805}.
+
+\bibitem{Kesting2007GeneralLM}
+Kesting, Arne, Treiber, Martin and Helbing, Dirk.
+\newblock \enquote{General Lane-Changing Model MOBIL for Car-Following Models.}
+\newblock \emph{Transportation Research Record} Vol. 1999 (2007): pp. 86 -- 94.
+\newblock \urlprefix\url{https://api.semanticscholar.org/CorpusID:39345746}.
+
+\bibitem{zhou2025}
+Zhou, Shirui, Zheng, Shiteng, Tian, Junfang, Jiang, Rui and Zhang, H.~M.
+\newblock \enquote{Twenty-Five Years of the Intelligent Driver Model:
+  Foundations, Extensions, Applications, and Future Directions.} (2025).
+\newblock \eprint{2506.05909},
+  \urlprefix\url{https://arxiv.org/abs/2506.05909}.
+
+\bibitem{GIPPS1981105}
+Gipps, P.G.
+\newblock \enquote{A behavioural car-following model for computer simulation.}
+\newblock \emph{Transportation Research Part B: Methodological} Vol.~15 No.~2
+  (1981): pp. 105--111.
+\newblock \doi{https://doi.org/10.1016/0191-2615(81)90037-0}.
+\newblock
+  \urlprefix\url{https://www.sciencedirect.com/science/article/pii/0191261581900370}.
+
+\bibitem{wang2023probabilisticpredictionlongitudinaltrajectory}
+Wang, Shuli, Gao, Kun, Zhang, Lanfang, Liu, Yang and Chen, Lei.
+\newblock \enquote{Probabilistic Prediction of Longitudinal Trajectory
+  Considering Driving Heterogeneity with Interpretability.} (2023).
+\newblock \eprint{2312.12123},
+  \urlprefix\url{https://arxiv.org/abs/2312.12123}.
+
+\bibitem{app112210562}
+Ghandour, Raymond, Potams, Albert~Jose, Boulkaibet, Ilyes, Neji, Bilel and
+  Al~Barakeh, Zaher.
+\newblock \enquote{Driver Behavior Classification System Analysis Using Machine
+  Learning Methods.}
+\newblock \emph{Applied Sciences} Vol.~11 No.~22 (2021).
+\newblock \doi{10.3390/app112210562}.
+\newblock \urlprefix\url{https://www.mdpi.com/2076-3417/11/22/10562}.
+
+\bibitem{rabiner1989tutorial}
+Rabiner, L.R.
+\newblock \enquote{A tutorial on hidden Markov models and selected applications
+  in speech recognition.}
+\newblock \emph{Proceedings of the IEEE} Vol.~77 No.~2 (1989): pp. 257--286.
+\newblock \doi{10.1109/5.18626}.
+
+\bibitem{8500717}
+Deng, Qi, Wang, Jiao and Soffker, Dirk.
+\newblock \enquote{Prediction of human driver behaviors based on an improved
+  HMM approach.}
+\newblock \emph{2018 IEEE Intelligent Vehicles Symposium (IV)}: pp. 2066--2071.
+  2018.
+\newblock \doi{10.1109/IVS.2018.8500717}.
+
+\bibitem{pearl1995bayesian}
+Pearl, Judea and Russell, Stuart.
+\newblock \enquote{Bayesian Networks.}
+\newblock Arbib, Michael~A. (ed.). \emph{The Handbook of Brain Theory and
+  Neural Networks}.
+\newblock MIT Press, Cambridge, MA (1995): pp. 149--153.
+
+\bibitem{electronics8010040}
+Li, Junxiang, Dai, Bin, Li, Xiaohui, Xu, Xin and Liu, Daxue.
+\newblock \enquote{A Dynamic Bayesian Network for Vehicle Maneuver Prediction
+  in Highway Driving Scenarios: Framework and Verification.}
+\newblock \emph{Electronics} Vol.~8 No.~1 (2019).
+\newblock \doi{10.3390/electronics8010040}.
+\newblock \urlprefix\url{https://www.mdpi.com/2079-9292/8/1/40}.
+
+\bibitem{2025bayesiannetworkapproachbuilding}
+Młynarczyk, Dorota, Calvo, Gabriel, Palmi-Perales, Francisco, Armero, Carmen,
+  Gómez-Rubio, Virgilio and Martinez-Iranzo, Ursula.
+\newblock \enquote{Bayesian network approach to building an affective module
+  for a driver behavioural model.} (2025).
+\newblock \eprint{2502.03254},
+  \urlprefix\url{https://arxiv.org/abs/2502.03254}.
+
+\bibitem{talluri2025enhancingsafetystandardsautomated}
+Talluri, Kranthi~Kumar, Madsen, Anders~L. and Weidl, Galia.
+\newblock \enquote{Enhancing Safety Standards in Automated Systems Using
+  Dynamic Bayesian Networks.} (2025).
+\newblock \eprint{2505.02050},
+  \urlprefix\url{https://arxiv.org/abs/2505.02050}.
+
+\bibitem{mozaffari2023multimodalmanoeuvretrajectoryprediction}
+Mozaffari, Sajjad, Sormoli, Mreza~Alipour, Koufos, Konstantinos and Dianati,
+  Mehrdad.
+\newblock \enquote{Multimodal Manoeuvre and Trajectory Prediction for Automated
+  Driving on Highways Using Transformer Networks.} (2023).
+\newblock \eprint{2303.16109},
+  \urlprefix\url{https://arxiv.org/abs/2303.16109}.
+
+\bibitem{zhang2024learningcarfollowingbehaviorsusing}
+Zhang, Chengyuan, Chen, Kehua, Zhu, Meixin, Yang, Hai and Sun, Lijun.
+\newblock \enquote{Learning Car-Following Behaviors Using Bayesian Matrix
+  Normal Mixture Regression.} (2024).
+\newblock \eprint{2404.16023},
+  \urlprefix\url{https://arxiv.org/abs/2404.16023}.
+
+\bibitem{Bethge2023ModelPC}
+Bethge, Johanna, Pfefferkorn, Maik, Rose, Alexander, Peters, Jan and Findeisen,
+  Rolf.
+\newblock \enquote{Model Predictive Control with Gaussian-Process-Supported
+  Dynamical Constraints for Autonomous Vehicles.}
+\newblock \emph{ArXiv} Vol. abs/2303.04725 (2023).
+\newblock \urlprefix\url{https://api.semanticscholar.org/CorpusID:257405042}.
+
+\bibitem{Goodfellow-et-al-2016}
+Goodfellow, Ian, Bengio, Yoshua and Courville, Aaron.
+\newblock \emph{Deep Learning}.
+\newblock MIT Press (2016).
+\newblock \url{http://www.deeplearningbook.org}.
+
+\bibitem{salzmann2021trajectrondynamicallyfeasibletrajectoryforecasting}
+Salzmann, Tim, Ivanovic, Boris, Chakravarty, Punarjay and Pavone, Marco.
+\newblock \enquote{Trajectron++: Dynamically-Feasible Trajectory Forecasting
+  With Heterogeneous Data.} (2021).
+\newblock \eprint{2001.03093},
+  \urlprefix\url{https://arxiv.org/abs/2001.03093}.
+
+\bibitem{vaswaniattention}
+Vaswani, Ashish, Shazeer, Noam, Parmar, Niki, Uszkoreit, Jakob, Jones, Llion,
+  Gomez, Aidan~N., Kaiser, Lukasz and Polosukhin, Illia.
+\newblock \enquote{Attention Is All You Need.} (2023).
+\newblock \eprint{1706.03762},
+  \urlprefix\url{https://arxiv.org/abs/1706.03762}.
+
+\bibitem{ngiam2022scenetransformerunifiedarchitecture}
+Ngiam, Jiquan, Caine, Benjamin, Vasudevan, Vijay, Zhang, Zhengdong, Chiang,
+  Hao-Tien~Lewis, Ling, Jeffrey, Roelofs, Rebecca, Bewley, Alex, Liu, Chenxi,
+  Venugopal, Ashish, Weiss, David, Sapp, Ben, Chen, Zhifeng and Shlens,
+  Jonathon.
+\newblock \enquote{Scene Transformer: A unified architecture for predicting
+  multiple agent trajectories.} (2022).
+\newblock \eprint{2106.08417},
+  \urlprefix\url{https://arxiv.org/abs/2106.08417}.
+
+\bibitem{shi2023motiontransformerglobalintention}
+Shi, Shaoshuai, Jiang, Li, Dai, Dengxin and Schiele, Bernt.
+\newblock \enquote{Motion Transformer with Global Intention Localization and
+  Local Movement Refinement.} (2023).
+\newblock \eprint{2209.13508},
+  \urlprefix\url{https://arxiv.org/abs/2209.13508}.
+
+\bibitem{inproceedingshivt}
+Zikang, Zhou, Ye, Luyao, Wang, Jianping, Wu, Kui and Lu, Kejie.
+\newblock \enquote{HiVT: Hierarchical Vector Transformer for Multi-Agent Motion
+  Prediction.}: pp. 8813--8823. 2022.
+\newblock \doi{10.1109/CVPR52688.2022.00862}.
+
+\bibitem{NIPS2015_8d55a249}
+Sohn, Kihyuk, Lee, Honglak and Yan, Xinchen.
+\newblock \enquote{Learning Structured Output Representation using Deep
+  Conditional Generative Models.}
+\newblock Cortes, C., Lawrence, N., Lee, D., Sugiyama, M. and Garnett, R.
+  (eds.). \emph{Advances in Neural Information Processing Systems}, Vol.~28.
+  2015. Curran Associates, Inc.
+\newblock
+  \urlprefix\url{https://proceedings.neurips.cc/paper_files/paper/2015/file/8d55a249e6baa5c06772297520da2051-Paper.pdf}.
+
+\bibitem{mangalam2020journeydestinationendpointconditioned}
+Mangalam, Karttikeya, Girase, Harshayu, Agarwal, Shreyas, Lee, Kuan-Hui, Adeli,
+  Ehsan, Malik, Jitendra and Gaidon, Adrien.
+\newblock \enquote{It Is Not the Journey but the Destination: Endpoint
+  Conditioned Trajectory Prediction.} (2020).
+\newblock \eprint{2004.02025},
+  \urlprefix\url{https://arxiv.org/abs/2004.02025}.
+
+\bibitem{ho2020denoisingdiffusionprobabilisticmodels}
+Ho, Jonathan, Jain, Ajay and Abbeel, Pieter.
+\newblock \enquote{Denoising Diffusion Probabilistic Models.} (2020).
+\newblock \eprint{2006.11239},
+  \urlprefix\url{https://arxiv.org/abs/2006.11239}.
+
+\bibitem{jiang2023motiondiffusercontrollablemultiagentmotion}
+Jiang, Chiyu~Max, Cornman, Andre, Park, Cheolho, Sapp, Ben, Zhou, Yin and
+  Anguelov, Dragomir.
+\newblock \enquote{MotionDiffuser: Controllable Multi-Agent Motion Prediction
+  using Diffusion.} (2023).
+\newblock \eprint{2306.03083},
+  \urlprefix\url{https://arxiv.org/abs/2306.03083}.
+
+\end{thebibliography}
