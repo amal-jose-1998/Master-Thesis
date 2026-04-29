@@ -58,6 +58,7 @@ class ValidationConfig:
     fps: float = 25.0                  # For TTE conversion
     stride_frames: int = 10            # For TTE conversion
     skip_partial_horizons: bool = True # If True, skip t > T - H - 1
+    prediction_target: str = "joint" # "action" or "joint"; whether to predict just action or the full (style, action) pair.
 
 
 class ValidationStep:
@@ -128,52 +129,56 @@ class ValidationStep:
                 # Still in warmup, skip
                 continue
             
-            # Compute MAP over the joint latent (style, action).
-            logprob = pred_out.pred_logprob  # (S, A); log-space table for next timestep: log p(z_{t+1}|O_{1:t}).
-            # Flatten (S,A) into length S*A and take argmax.
-            if isinstance(logprob, torch.Tensor):
-                idx = int(torch.argmax(logprob.view(-1)).item())
+            logprob = pred_out.pred_logprob  # (S, A)
+
+            if self.config.prediction_target == "action":
+                # Main mode for tied_action:
+                # marginalize style and predict only the shared action.
+                s_hat, a_hat = self._action_map_from_logprob(logprob)
+
+            elif self.config.prediction_target == "joint":
+                # Diagnostic mode:
+                # predict the full (style, action) pair.
+                s_hat, a_hat = self._joint_map_from_logprob(logprob)
+
             else:
-                idx = int(np.argmax(np.asarray(logprob).reshape(-1)))
-            # Decode flattened index back into (s,a)
-            s_hat = idx // self.A # marginal style
-            a_hat = idx % self.A  # marginal action
-            # Store prediction as a tuple (style, action).
-            pred_z = (s_hat, a_hat)
-            # Ground truth is taken at t+1
-            true_z = tuple(traj.latents_gt[t + 1])  
-            
-            # 5. Compute Hit@H and TTE with maneuver group mapping
-            horizon_latents = traj.latents_gt[t+1:t+1+self.config.horizon]  # (≤H, 2)
-            # Define maneuver groups
-            MANEUVER_GROUPS = {
-                (0, 1): 'brake',
-                (1, 3): 'brake',
-                (0, 2): 'acceleration',
-                (1, 0): 'acceleration',
-                (0, 3): 'following',
-                (1, 2): 'following',
-            }
-            def get_maneuver_group(style, action):
-                return MANEUVER_GROUPS.get((style, action), None)
+                raise ValueError(
+                    f"Unknown prediction_target='{self.config.prediction_target}'. "
+                    "Use 'action' or 'joint'."
+                )
+
+            pred_z_joint = (s_hat, a_hat)
+            true_z_joint = tuple(traj.latents_gt[t + 1])
+
+            # Convert to the metric label space.
+            # For action mode: (s,a) -> (0,a)
+            # For joint mode:  (s,a) -> (s,a)
+            pred_z = self._metric_pair(pred_z_joint)
+            true_z = self._metric_pair(true_z_joint)
+
+            horizon_latents = traj.latents_gt[t + 1:t + 1 + self.config.horizon]
 
             hit_h = False
             tte_steps = None
-            pred_group = get_maneuver_group(s_hat, a_hat)
-            for h, lat_h in enumerate(horizon_latents, start=1):  # 1-indexed
-                gt_style, gt_action = lat_h
-                # Exact match
-                if (gt_style, gt_action) == pred_z:
+
+            for h, lat_h in enumerate(horizon_latents, start=1):
+                gt_joint = tuple(lat_h)
+
+                if gt_joint == (-1, -1):
+                    continue
+
+                gt_eval = self._metric_pair(gt_joint)
+
+                if gt_eval == pred_z:
                     hit_h = True
                     tte_steps = h
                     break
-                # Group match
-                gt_group = get_maneuver_group(gt_style, gt_action)
-                if pred_group is not None and gt_group is not None and pred_group == gt_group:
-                    hit_h = True
-                    tte_steps = h
-                    break
-            predictions.append((pred_z, true_z, hit_h, tte_steps))
+
+            # First two fields are the evaluated labels.
+            # Last two fields keep the original joint labels for debugging.
+            predictions.append(
+                (pred_z, true_z, hit_h, tte_steps, pred_z_joint, true_z_joint)
+            )
         
         return predictions
     
@@ -206,7 +211,8 @@ class ValidationStep:
             predictions = self.predict_one_trajectory(traj) # Runs the full online filtering loop
             all_predictions.extend(predictions)  # Collect for visualization
             
-            for pred_z, true_z, hit_h, tte_steps in predictions: # Update metrics for each prediction
+            for pred in predictions:
+                pred_z, true_z, hit_h, tte_steps = pred[:4]
                 # Skip predictions with UNKNOWN ground truth latents (-1, -1) to avoid index errors in confusion matrix computation
                 if true_z == (-1, -1):
                     continue
@@ -216,10 +222,10 @@ class ValidationStep:
                 metrics.tte.add(tte_steps)
                 total_predictions += 1 # Increment scored count.
             
-            kept = [(p,t,h,tte) for (p,t,h,tte) in predictions if t != (-1,-1)] # Keeps only those with known ground truth for printing.
+            kept = [p for p in predictions if p[1] != (-1, -1)] # Keeps only those with known ground truth for printing.
             print(
                 f"  -> {len(kept)} scored predictions | " # number of scored samples for this trajectory
-                f"hits={sum(1 for _, _, h, _ in kept if h)}/{len(kept) if kept else 0}"
+                f"hits={sum(1 for p in kept if p[2])}/{len(kept) if kept else 0}"
             )
         
         print(f"\n[validate] Total predictions: {total_predictions}", flush=True) # total scored samples across all trajectories. 
@@ -235,3 +241,53 @@ class ValidationStep:
             )
         
         return metrics, all_predictions
+
+    def _joint_map_from_logprob(self, logprob):
+        if isinstance(logprob, torch.Tensor):
+            idx = int(torch.argmax(logprob.reshape(-1)).item())
+        else:
+            idx = int(np.argmax(np.asarray(logprob).reshape(-1)))
+
+        s_hat = idx // self.A
+        a_hat = idx % self.A
+
+        return int(s_hat), int(a_hat)
+
+    def _action_map_from_logprob(self, logprob):
+        if isinstance(logprob, torch.Tensor):
+            logprob_action = torch.logsumexp(logprob, dim=0)  # (A,)
+            a_hat = int(torch.argmax(logprob_action).item())
+            s_hat = int(torch.argmax(logprob[:, a_hat]).item())
+        else:
+            lp = np.asarray(logprob)
+            logprob_action = np.logaddexp.reduce(lp, axis=0)
+            a_hat = int(np.argmax(logprob_action))
+            s_hat = int(np.argmax(lp[:, a_hat]))
+
+        return int(s_hat), int(a_hat)
+
+    def _metric_pair(self, z):
+        s, a = int(z[0]), int(z[1])
+
+        # Preserve unknown labels in both joint and action mode.
+        if s < 0 or a < 0:
+            return (-1, -1)
+
+        if self.config.prediction_target == "action":
+            return (0, a)
+
+        if self.config.prediction_target == "joint":
+            return (s, a)
+
+        raise ValueError(
+            f"Unknown prediction_target='{self.config.prediction_target}'. "
+            "Use 'action' or 'joint'."
+        )
+
+    @property
+    def metric_S(self):
+        return 1 if self.config.prediction_target == "action" else self.S
+
+    @property
+    def metric_A(self):
+        return self.A

@@ -1,0 +1,14 @@
+{
+  "exact_accuracy": 0.7938975346892394,
+  "macro_precision": 0.6760820290332541,
+  "macro_recall": 0.8202711205136378,
+  "macro_f1": 0.7151700589051335,
+  "hit_rate": 0.8134016317037011,
+  "mean_tte_sec": 0.42420763118833493,
+  "median_tte_sec": 0.4,
+  "p25_tte_sec": 0.4,
+  "p75_tte_sec": 0.4,
+  "num_hits": 91624,
+  "num_total": 112643,
+  "prediction_target": "joint"
+}

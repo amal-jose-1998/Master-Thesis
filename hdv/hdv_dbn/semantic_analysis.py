@@ -7,7 +7,8 @@ from pathlib import Path
 from .trainer import HDVTrainer
 from .config import (
     SEMANTIC_CONFIG,
-    resolve_semantic_feature_cols
+    resolve_semantic_feature_cols,
+    TIED_ACTION_FEATURES
 )
 from .utils.semantic_analysis_utils import (
     load_sequences_from_experiment_split, 
@@ -89,6 +90,38 @@ def run_semantic_analysis(model_path, data_root, split_name="train", semantic_fe
         ["a", "action_name", f"rmse_{rmse_mode}_between_style0_and_style1"],
         consistency_rows,
     )
+    # Extra tied-action check:
+    # For tied_action, the same action index should be similar across styles
+    # mainly in action-related features, not necessarily in context/risk features.
+    action_feat_idx = [
+        i for i, f in enumerate(feat_names)
+        if f in set(TIED_ACTION_FEATURES)
+    ]
+
+    if action_feat_idx:
+        action_feat_names = [feat_names[i] for i in action_feat_idx]
+        means_sa_action = means_sa[:, :, action_feat_idx]
+        stds_sa_action = stds_sa[:, :, action_feat_idx]
+
+        action_consistency_rows = compute_action_style_consistency(
+            means_sa=means_sa_action,
+            feat_names=action_feat_names,
+            S=S,
+            A=A,
+            rmse_mode=rmse_mode,
+            stds_sa=stds_sa_action,
+            frac_sa=frac_sa,
+        )
+
+        _write_csv(
+            out_dir / "action_style_consistency_action_features.csv",
+            [
+                "a",
+                "action_name",
+                f"rmse_{rmse_mode}_between_style0_and_style1_action_features",
+            ],
+            action_consistency_rows,
+        )
 
     # 7) Summary JSON
     total_mass = float(np.sum(mass_sa))
@@ -113,6 +146,9 @@ def run_semantic_analysis(model_path, data_root, split_name="train", semantic_fe
         "artifacts": {
             "joint_semantics_csv": str(out_dir / "joint_semantics.csv"),
             "action_style_consistency_csv": str(out_dir / "action_style_consistency.csv"),
+            "action_style_consistency_action_features_csv": str(
+                out_dir / "action_style_consistency_action_features.csv"
+            ),
         },
         "run_tag": run_tag,
         "out_dir": str(out_dir),

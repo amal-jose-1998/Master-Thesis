@@ -38,3 +38,36 @@ def load_semantic_labels_from_yaml(yaml_path, S, A):
             labels.append(f"{style_name}/{action_name}")
 
     return labels
+
+
+def load_action_labels_from_yaml(yaml_path, A):
+    """
+    Load one label per action.
+
+    Returns:
+        [a0_label, a1_label, ..., a{A-1}_label]
+    """
+    with open(yaml_path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    labels = []
+
+    actions = data.get("actions", {})
+    actions_by_style = data.get("actions_by_style", {})
+
+    for a in range(A):
+        a_key = f"a{a}"
+
+        if a_key in actions:
+            labels.append(str(actions[a_key].get("name", a_key)))
+            continue
+
+        # Fallback: read from s0/actions_by_style
+        s0_actions = actions_by_style.get("s0", {})
+        if a_key in s0_actions:
+            labels.append(str(s0_actions[a_key].get("name", a_key)))
+            continue
+
+        labels.append(a_key)
+
+    return labels

@@ -46,21 +46,52 @@ def param_count(trainer):
         em = trainer.emissions
         disable_discrete = bool(getattr(TRAINING_CONFIG, "disable_discrete_obs", False))
         
-        Dc = int(getattr(em, "cont_dim", 0))
-        B = int(getattr(em, "bin_dim", 0))
-        if disable_discrete:
-            B = 0
-        
         em_name = str(getattr(TRAINING_CONFIG, "emission_model", "")).lower().strip()
+
         if em_name == "hierarchical":
+            Dc = int(getattr(em, "cont_dim", 0))
+            B = int(getattr(em, "bin_dim", 0))
+            if disable_discrete:
+                B = 0
+
             # gauss_mean (S,A,Dc), gauss_var (S,A,Dc), bern_p (S,A,B)
             k_em = 2 * S * A * Dc + S * A * B
+
         elif em_name == "poe":
+            Dc = int(getattr(em, "cont_dim", 0))
+            B = int(getattr(em, "bin_dim", 0))
+            if disable_discrete:
+                B = 0
+
             # style mean/var (S,Dc), action mean/var (A,Dc),
             # style p (S,B), action p (A,B)
             k_em = 2 * (S + A) * Dc + (S + A) * B
+
+        elif em_name == "tied_action":
+            style_Dc = int(getattr(em, "style_cont_dim", 0))
+            action_Dc = int(getattr(em, "action_cont_dim", 0))
+
+            style_B = int(getattr(em, "style_bin_dim", 0))
+            action_B = int(getattr(em, "action_bin_dim", 0))
+
+            if disable_discrete:
+                style_B = 0
+                action_B = 0
+
+            # style mean/var (S,style_Dc), action mean/var (A,action_Dc)
+            # style p (S,style_B), action p (A,action_B)
+            k_em = (
+                2 * S * style_Dc
+                + 2 * A * action_Dc
+                + S * style_B
+                + A * action_B
+            )
+
         else:
-            raise ValueError(f"Unknown emission_model='{em_name}'. Expected 'hierarchical' or 'poe'.")
+            raise ValueError(
+                f"Unknown emission_model='{em_name}'. "
+                "Expected 'hierarchical', 'poe', or 'tied_action'."
+            )
 
     except Exception as e:
         raise RuntimeError("Emission parameter counting failed") from e

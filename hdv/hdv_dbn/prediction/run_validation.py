@@ -20,7 +20,7 @@ try:
     from .data_loader import load_test_data_for_prediction
     from .apply_gt_labels import compute_gt_latents, z_to_sa
     from .visualize_metrics import visualize_all_metrics
-    from .semantic_label_utils import load_semantic_labels_from_yaml
+    from .semantic_label_utils import load_semantic_labels_from_yaml, load_action_labels_from_yaml
 
 except ImportError:
     project_root = Path(__file__).resolve().parents[3]
@@ -32,7 +32,7 @@ except ImportError:
     from hdv.hdv_dbn.prediction.data_loader import load_test_data_for_prediction
     from hdv.hdv_dbn.prediction.apply_gt_labels import compute_gt_latents, z_to_sa
     from hdv.hdv_dbn.prediction.visualize_metrics import visualize_all_metrics
-    from hdv.hdv_dbn.prediction.semantic_label_utils import load_semantic_labels_from_yaml
+    from hdv.hdv_dbn.prediction.semantic_label_utils import load_semantic_labels_from_yaml, load_action_labels_from_yaml
 
 
 def main():
@@ -41,9 +41,9 @@ def main():
     
     # Construct paths
     data_root = workspace_root / "hdv" / "data" / "highd"
-    exp_dir = workspace_root / "hdv" / "models" / "main-model-sticky_S2_A4_hierarchical"
+    exp_dir = workspace_root / "hdv" / "models" / "paper-run_S2_A4_tied_action"
     checkpoint_path = exp_dir / "final.npz"
-    out_dir = exp_dir / "prediction"
+    
     
     print(f"[run_validation] Workspace: {workspace_root}")
     print(f"[run_validation] Data root: {data_root}")
@@ -101,13 +101,15 @@ def main():
     print("[run_validation] Running validation...")
     config = ValidationConfig(
         warmup_steps=5,
-        horizon=10,
+        horizon=5,
         fps=25.0,
         stride_frames=10,
-        skip_partial_horizons=True # don’t score near the end if we can’t see H future steps
+        skip_partial_horizons=True, # don’t score near the end if we can’t see H future steps
+        prediction_target="joint",
     )
     
     model = HDVDbnModel(trainer) # Wrap the trainer as a generative model
+    out_dir = exp_dir / f"prediction_{config.prediction_target}"
     print(f"[run_validation] Model: S={model.num_styles}, A={model.num_actions}\n")
     
     validator = ValidationStep(model, config) # Creates an evaluator instance holding the model + config.
@@ -115,7 +117,8 @@ def main():
     print(f"[run_validation] Collected {len(all_predictions)} total predictions from single evaluation pass\n")
     
     # Step 4: Print summary results
-    summary = metrics.summary(S=model.num_styles, A=model.num_actions)
+    summary = metrics.summary(S=validator.metric_S, A=validator.metric_A)
+    summary["prediction_target"] = config.prediction_target
     
     out_dir.mkdir(parents=True, exist_ok=True)
     
@@ -142,18 +145,25 @@ def main():
     semantic_map_path = exp_dir / "semantic_map.yaml"
     S = model.num_styles
     A = model.num_actions
-    semantic_labels = load_semantic_labels_from_yaml(semantic_map_path, S, A)
+    if config.prediction_target == "action":
+        semantic_labels = load_action_labels_from_yaml(semantic_map_path, A)
+        S_vis = 1
+        A_vis = A
+    else:
+        semantic_labels = load_semantic_labels_from_yaml(semantic_map_path, S, A)
+        S_vis = S
+        A_vis = A
 
     # Pass metrics to visualization for correct confusion matrix
     figs = visualize_all_metrics(
         predictions=all_predictions,
         output_dir=out_dir,
-        S=S,
-        A=A,
+        S=S_vis,
+        A=A_vis,
         labels=semantic_labels,
         fps=config.fps,
         stride_frames=config.stride_frames,
-        metrics=metrics
+        metrics=metrics,
     )
     print(f"[run_validation] Generated {len(figs)} visualization plots\n")
     

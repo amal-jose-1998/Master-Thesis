@@ -11,6 +11,7 @@ from pathlib import Path
 from .model import HDVDBN
 from .hierarchical_emissions import MixedEmissionModel as HierarchicalMixedEmissionModel
 from .poe_emissions import MixedEmissionModel as PoEMixedEmissionModel
+from .tied_action_emissions import MixedEmissionModel as TiedActionMixedEmissionModel
 from .config import TRAINING_CONFIG
 from .utils.wandb_logger import WandbLogger
 from .utils.trainer_diagnostics import (
@@ -104,8 +105,10 @@ class HDVTrainer:
             self.emissions = PoEMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
         elif em_mode == "hierarchical":
             self.emissions = HierarchicalMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
+        elif em_mode == "tied_action":
+            self.emissions = TiedActionMixedEmissionModel(obs_names=self.obs_names, disable_discrete_obs=disable_disc)
         else:
-            raise ValueError(f"Unknown emission_model='{em_mode}'. Use 'poe' or 'hierarchical'.")
+            raise ValueError(f"Unknown emission_model='{em_mode}'. Use 'poe', 'hierarchical', or 'tied_action'.")
 
         self.emission_model = em_mode
         
@@ -1173,6 +1176,25 @@ class HDVTrainer:
                 "gauss_mean",
                 "gauss_var",
                 "bern_p",
+            }
+        elif self.emission_model == "tied_action":
+            required = {
+                "obs_names",
+                "bernoulli_names",
+                "style_feature_names",
+                "action_feature_names",
+                "style_idx",
+                "action_idx",
+                "style_cont_idx",
+                "action_cont_idx",
+                "style_bin_idx",
+                "action_bin_idx",
+                "style_gauss_mean",
+                "style_gauss_var",
+                "action_gauss_mean",
+                "action_gauss_var",
+                "style_bern_p",
+                "action_bern_p",
             }
         else:
             raise ValueError(f"Unknown emission_model='{self.emission_model}' in save().")

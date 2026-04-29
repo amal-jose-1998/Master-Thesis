@@ -74,7 +74,7 @@ Modeling, Mixed Traffic Environments}
 
 %%%%%  ABSTRACT  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
-At least for the foreseeable future, Autonomous vehicles(AVs) will have to operate in mixed traffic with human-driven vehicles (HDVs), which requires reliable prediction of human maneuvers. 
+For the foreseeable future, autonomous vehicles (AVs) will have to operate in mixed traffic with human-driven vehicles (HDVs), which requires reliable prediction of human maneuvers.  
 This paper presents an interpretable probabilistic framework for short-horizon human driver maneuver prediction using Dynamic Bayesian Networks (DBNs). 
 The model is trained on the highD naturalistic highway dataset using window-based observations from vehicle motion and surrounding traffic interactions. 
 The model uses a hierarchical latent structure in which action states are conditioned on broader driving regimes, allowing maneuver type and interaction context to be represented jointly.
@@ -273,15 +273,41 @@ and each observation depends on the latent state pair.}]
 
 The temporal dependencies are factorized such that the style state evolves according to its previous value, while the action state depends on both the previous action 
 and the current style. 
-This structure reflects the assumption that broader driving regime changes more slowly, whereas short-term maneuver depends on both recent behavior and current traffic context. 
+This structure reflects the assumption that the broader driving regime changes more slowly, whereas short-term maneuver depends on both recent behavior and current traffic context. 
 The emission model links each window-level feature vector to the latent state pair $(S_t, A_t)$.
+
+The joint distribution of the proposed DBN for a sequence of length $T$ is written as
+\begin{equation}\label{eqn:dbn_factorization}
+\begin{aligned}
+&\Pr(S_{1:T},A_{1:T},O_{1:T}) \\
+&= \Pr(S_1)\Pr(A_1 \mid S_1)\Pr(O_1 \mid S_1,A_1) \\
+&\quad \times \prod_{t=2}^{T}
+\Pr(S_t \mid S_{t-1})
+\Pr(A_t \mid A_{t-1},S_t)
+\Pr(O_t \mid S_t,A_t).
+\end{aligned}
+\end{equation}
 
 The emission model is conditioned directly on the joint latent state pair $(S_t, A_t)$. 
 Continuous features are modeled with diagonal Gaussian distributions and binary features with Bernoulli distributions. 
 
+For each latent pair $(s,a)$, the emission likelihood is defined as
+\begin{equation}\label{eqn:emission_model}
+\begin{aligned}
+\Pr(O_t \mid S_t=s,A_t=a)
+&= \prod_{d \in \mathcal{C}}
+\mathcal{N}\left(o_{t,d};\mu_{s,a,d},\sigma^2_{s,a,d}\right) \\
+&\quad \times
+\prod_{b \in \mathcal{B}}
+\mathrm{Bern}\left(o_{t,b};\rho_{s,a,b}\right),
+\end{aligned}
+\end{equation}
+where $\mathcal{C}$ is the set of continuous features and $\mathcal{B}$ is the set of binary features. 
+The parameters $\mu_{s,a,d}$ and $\sigma^2_{s,a,d}$ define the Gaussian emission for continuous feature $d$, while $\rho_{s,a,b}$ 
+defines the Bernoulli probability for binary feature $b$.
 
 \subsection{Training and Online Prediction}
-Model parameters are estimated from the training data using expectation-maximization (EM) algorithm. 
+Model parameters are estimated from the training data using the expectation-maximization (EM) algorithm. 
 Continuous features are standardized using statistics computed from the training split only, and model initialization includes initial-state probabilities, 
 transition probabilities, and emission parameters derived from the training data. 
 The training procedure learns both the temporal dynamics of the latent states and the emission model linking latent states to window-level features.
@@ -299,8 +325,17 @@ alt={Causal online prediction pipeline. Past observations are used to update the
 \label{fig:predictive_evaluation_pipeline}
 \end{figure}
 
-\section{Experimental Setup}
+After filtering, the one-step-ahead predictive distribution over the next action is obtained as
+\begin{equation}\label{eqn:action_prediction}
+\Pr(A_{t+1} \mid O_{1:t})
+=
+\sum_{s_t,a_t,s_{t+1}}
+\Pr(S_t=s_t,A_t=a_t \mid O_{1:t})
+\Pr(S_{t+1} \mid s_t)
+\Pr(A_{t+1} \mid a_t,S_{t+1}).
+\end{equation}
 
+\section{Experimental Setup}
 
 \subsection{Data Split and Compared Configurations}
 The selected highD subset is partitioned at the vehicle level into disjoint training, validation, and test sets to prevent leakage across overlapping 
@@ -308,10 +343,28 @@ windows from the same trajectory.
 The split contains 35{,}318 training vehicles (70\%), 5{,}045 validation vehicles (10\%), and 10{,}092 test vehicles (20\%). 
 The training set is used for parameter estimation, the validation set is used for model selection and early stopping, and the test set is reserved for final evaluation.
 
-
 \subsection{Evaluation Protocol}
+Evaluation is performed in both generative and predictive settings. 
+In the generative setting, the trained model is applied to full unseen test sequences to measure how well it explains the observation data. 
+In the predictive setting, inference is carried out online in a strictly causal manner. 
+At each time step, only observations available up to that time are used to update the filtered belief and generate a one-step-ahead maneuver prediction.
+
+During online evaluation, the first five window observations of each test trajectory are used as warmup and are excluded from scoring. 
+After warmup, one-step-ahead predictions are generated sequentially. 
+For horizon-based evaluation, the forecast horizon covers the next five observations, corresponding to 2.0\,s.
+
 \subsection{Evaluation Metrics}
+Generative performance is assessed using negative log-likelihood, Bayesian Information Criterion (BIC), and posterior-based occupancy diagnostics. 
+Predictive performance is assessed using exact one-step accuracy, macro-averaged precision, recall, and F1-score, together with a horizon-based hit rate over 2.0\,s. 
+The latter metric counts a prediction as successful if the predicted maneuver appears at least once within the prediction horizon, which helps 
+capture near-miss predictions between temporally adjacent behavior changes.
+
+In addition, average CPU latency is measured for online belief update and next-step prediction to assess whether the method is suitable for real-time use.
+
 \subsection{Implementation Details}
+The model is trained with EM using validation log-likelihood for monitoring and early stopping. 
+Feature scaling is computed from the training split only and reused unchanged for validation and test data. 
+Inference and evaluation are performed on the fixed held-out test split used across all compared configurations.
 
 \section{Results and Discussion}
 

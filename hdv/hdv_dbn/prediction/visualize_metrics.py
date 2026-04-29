@@ -334,9 +334,7 @@ def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps
     
     Parameters
     predictions : list of tuples
-        Each tuple is either:
-        - (pred_z, true_z, hit_h, tte_steps), or
-        - (pred_z, true_z, exact_hit_h, exact_tte_steps, grouped_hit_h, grouped_tte_steps).
+        (pred_eval, true_eval, hit_h, tte_steps, pred_joint, true_joint)
     output_dir : Path
         Directory to save plots.
     S : int
@@ -385,16 +383,17 @@ def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps
     if fig:
         figs['confusion_matrix_column_normalized'] = fig
 
-    grouped_cm, grouped_labels = _grouped_confusion_from_metrics(metrics.grouped_exact)
-    if grouped_cm is not None:
-        fig = plot_confusion_matrix(
-            grouped_cm,
-            grouped_labels,
-            output_path=output_dir / "confusion_matrix_grouped.png",
-            figsize=(8, 6),
-        )
-        if fig:
-            figs['confusion_matrix_grouped'] = fig
+    if hasattr(metrics, "grouped_exact"):
+        grouped_cm, grouped_labels = _grouped_confusion_from_metrics(metrics.grouped_exact)
+        if grouped_cm is not None:
+            fig = plot_confusion_matrix(
+                grouped_cm,
+                grouped_labels,
+                output_path=output_dir / "confusion_matrix_grouped.png",
+                figsize=(8, 6),
+            )
+            if fig:
+                figs["confusion_matrix_grouped"] = fig
 
     # --- Filter predictions for other plots (exclude unknowns) ---
     filtered_predictions = [p for p in predictions if -1 not in p[0] and -1 not in p[1]]
@@ -424,15 +423,9 @@ def visualize_all_metrics(*, predictions, metrics, output_dir, S, A, labels, fps
     if fig:
         figs['hit_count_summary_ungrouped'] = fig
 
-    grouped_predictions = [(None, None, p[4], p[5]) for p in filtered_predictions if len(p) >= 6]
-    fig = plot_hit_count_summary(grouped_predictions, output_path=output_dir / "hit_count_summary_grouped.png")
+    fig = plot_hit_count_summary(filtered_predictions, output_path=output_dir / "hit_count_summary.png",)
     if fig:
-        figs['hit_count_summary_grouped'] = fig
-
-    # Keep legacy output filename for compatibility.
-    fig = plot_hit_count_summary(filtered_predictions, output_path=output_dir / "hit_count_summary.png")
-    if fig:
-        figs['hit_count_summary'] = fig
+        figs["hit_count_summary"] = fig
 
     return figs
 

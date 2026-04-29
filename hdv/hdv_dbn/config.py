@@ -99,9 +99,11 @@ class TrainingConfig:
     # -------------------------------------------------------------
     # Emission model selection
     # -------------------------------------------------------------
-    # "poe"    : Product-of-Experts emissions (your PoE module)
-    # "linear" : additive log-likelihoods (no PoE logZ coupling)
-    emission_model: Literal["poe", "hierarchical"] = "hierarchical"
+    # "poe"         : Product-of-Experts emissions
+    # "hierarchical": one emission per (style, action) pair
+    # "tied_action" : shared action emission across styles
+    emission_model: Literal["poe", "hierarchical", "tied_action"] = "tied_action"
+
     # Only used for "poe" if that implementation uses gradient M-step
     poe_em_lr: float = 3e-3
     poe_em_steps: int = 20
@@ -141,9 +143,9 @@ class TrainingConfig:
 
     # Transition MAP priors (Dirichlet + stickiness)
     alpha_A_s: float = 0.01   # smoothing for style rows
-    kappa_A_s: float = 5.0    # extra self-transition mass for style (stickier)
+    kappa_A_s: float = 0.0    # extra self-transition mass for style (stickier)
     alpha_A_a: float = 0.01   # smoothing for action rows
-    kappa_A_a: float = 1.0     # extra self-transition mass for action (less sticky than style)
+    kappa_A_a: float = 0.0     # extra self-transition mass for action (less sticky than style)
 
     verbose: int = 1
     use_progress: bool = True
@@ -160,7 +162,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "main-model-sticky"
+    wandb_run_name: Optional[str] = "paper-run"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
@@ -306,6 +308,22 @@ CONTINUOUS_FEATURES: List[str] = [
     if n not in set(BERNOULLI_FEATURES)
 ]
 
+# =============================================================================
+# Tied action-emission feature split
+# =============================================================================
+# Action features should describe the physical maneuver.
+# Style features should describe interaction, risk, and surrounding traffic.
+
+TIED_ACTION_FEATURES: List[str] = (
+    WINDOW_EGO_FEATURES
+    + WINDOW_LC_FEATURES
+    + WINDOW_LANE_GEOM_FEATURES
+)
+
+TIED_STYLE_FEATURES: List[str] = [
+    n for n in WINDOW_FEATURE_COLS
+    if n not in set(TIED_ACTION_FEATURES)
+]
 
 SEM_FEATS_CORE: List[str] = (
     WINDOW_EGO_FEATURES
@@ -341,7 +359,7 @@ SEM_FEATS_VALIDITY: List[str] = [
 @dataclass(frozen=True)
 class SemanticAnalysisConfig:
     # Paths (edit these)
-    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/main-model-sticky_S2_A4_hierarchical/final.npz"
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/final.npz"
     data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 
     # Speed/debug controls

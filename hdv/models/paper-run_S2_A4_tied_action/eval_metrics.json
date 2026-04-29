@@ -1,0 +1,90 @@
+{
+  "anticipatory_ll": {
+    "artifacts": {
+      "ap_nll_vs_horizon_png": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/ap_nll_vs_horizon.png"
+    },
+    "summary": {
+      "H": 10,
+      "ap_nll_by_h": [
+        22.758374610537842,
+        23.093432359863463,
+        23.354348606057485,
+        23.60442368721201,
+        23.87435470228299,
+        24.217721708107625,
+        24.642604116914566,
+        25.164944601430292,
+        25.731833613892363,
+        26.239204152400813
+      ],
+      "ap_nll_mean_over_h": 24.26812421586995,
+      "n_pause_total": 193357,
+      "t_warmup": 5
+    }
+  },
+  "meta": {
+    "A": 4,
+    "S": 2,
+    "W": 50,
+    "bern_weight": 1.0,
+    "bernoulli_ll_enabled": true,
+    "checkpoint_name": "final.npz",
+    "checkpoint_path": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/final.npz",
+    "cpd_init": "sticky",
+    "emission_model": "tied_action",
+    "experiment_dir": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action",
+    "lc_weight_mode": "B",
+    "learn_pi0": false,
+    "n_test_vehicles": 10092,
+    "stride": 10
+  },
+  "metrics": {
+    "BIC": 16431150.463497432,
+    "artifacts": {
+      "entropy_action_png": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/entropy_action.png",
+      "entropy_heatmaps_npz": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/entropy_heatmaps.npz",
+      "entropy_joint_png": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/entropy_joint.png",
+      "entropy_style_png": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/entropy_style.png"
+    },
+    "ent_action_vehicle_median": 2.5131273591493353e-10,
+    "ent_action_vehicle_n": 10092,
+    "ent_action_vehicle_p10": 4.639703499151316e-41,
+    "ent_action_vehicle_p90": 4.9929087166698105e-09,
+    "ent_joint_vehicle_median": 9.028543417734295e-10,
+    "ent_joint_vehicle_n": 10092,
+    "ent_joint_vehicle_p10": 1.0899189887865172e-11,
+    "ent_joint_vehicle_p90": 3.736461597163848e-08,
+    "ent_style_vehicle_median": 2.127089316129754e-12,
+    "ent_style_vehicle_n": 10092,
+    "ent_style_vehicle_p10": 0.0,
+    "ent_style_vehicle_p90": 1.0228755184231611e-08,
+    "k_params": 270,
+    "keff_action": 3.871313549758111,
+    "keff_joint": 6.65989572501068,
+    "keff_style": 1.727060751324224,
+    "ll_per_timestep": -23.87866320380363,
+    "occ_action_max": 0.3311060667037964,
+    "occ_joint_max": 0.25655242800712585,
+    "occ_style_max": 0.764003574848175,
+    "total_T": 343983,
+    "traj_ll_pw_p5": -44.90192869031751,
+    "traj_ll_pw_p50": -21.048588234230323,
+    "traj_ll_pw_p95": -9.718443475450792
+  },
+  "online_ll": {
+    "artifacts": {
+      "T_vs_avg_nll_png": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/T_vs_avg_nll.png"
+    },
+    "summary": {
+      "avg_nll_per_timestep_weighted": 23.878669130784193,
+      "n_sequences": 10092,
+      "per_sequence_avg_nll": {
+        "mean": 23.526799495321185,
+        "median": 21.048594407682067,
+        "p10": 11.75014952773689,
+        "p90": 37.901079813188865
+      },
+      "total_T": 343983
+    }
+  }
+}

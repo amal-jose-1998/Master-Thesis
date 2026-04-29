@@ -57,7 +57,7 @@ def main():
     script_dir = Path(__file__).resolve().parent
     workspace_root = script_dir.parent.parent.parent
 
-    exp_dir = workspace_root / "hdv" / "models" / "main-model-sticky_S2_A4_hierarchical"
+    exp_dir = workspace_root / "hdv" / "models" / "paper-run_S2_A4_tied_action"
     checkpoint_path = exp_dir / "final.npz"
 
     warmup_steps = 5

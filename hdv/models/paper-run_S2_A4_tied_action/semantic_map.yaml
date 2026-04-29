@@ -1,0 +1,185 @@
+label_rules:
+  model: tied_action_lc_none
+  unknown_z: -1
+  S: 2
+  A: 4
+
+
+  thresholds:
+    # ---------------------------------------------------------
+    # Style / interaction context
+    # ---------------------------------------------------------
+    high_interaction_front_exists: 0.80
+    low_interaction_front_exists_max: 0.60
+
+    high_interaction_front_dx_max: 70.0
+    low_interaction_front_dx_min: 70.0
+
+    high_interaction_thw_max: 3.0
+
+    # ---------------------------------------------------------
+    # Braking action:
+    # ---------------------------------------------------------
+    brake_ax_neg_frac: 0.90
+    brake_ax_last: -0.15
+    brake_vx_slope: -0.006
+
+    # ---------------------------------------------------------
+    # Acceleration actions: 
+    # ---------------------------------------------------------
+    accel_ax_pos_frac: 0.90
+    accel_ax_last: 0.15
+    accel_vx_slope: 0.005
+
+    # ---------------------------------------------------------
+    # Negative lateral tendency: 
+    # ---------------------------------------------------------
+    negative_lateral_vy: -0.02
+    negative_lateral_ay: -0.015
+    negative_lateral_ay_neg_frac: 0.60
+
+    # ---------------------------------------------------------
+    # Positive lateral tendency: 
+    # ---------------------------------------------------------
+    positive_lateral_vy: 0.03
+    positive_lateral_ay: 0.02
+    positive_lateral_ay_pos_frac: 0.75
+
+    # ---------------------------------------------------------
+    # Cruising:
+    # ---------------------------------------------------------
+    cruise_vx_slope_abs_max: 0.005
+    cruise_ax_last_abs_max: 0.12
+    cruise_ax_neg_frac_min: 0.45
+    cruise_ax_neg_frac_max: 0.75
+    cruise_ax_pos_frac_min: 0.20
+    cruise_ax_pos_frac_max: 0.50
+
+  
+  priority:
+    - action_1_braking
+    - action_2_acceleration_negative_lateral_tendency
+    - action_3_acceleration_positive_lateral_tendency
+    - action_0_cruising_mild_deceleration
+    - unknown
+
+  style_decision:
+    s0:
+      any_of:
+        - "front_exists_frac < low_interaction_front_exists_max"
+        - "front_dx_min > low_interaction_front_dx_min"
+
+    s1:
+      any_of:
+        - "front_exists_frac >= high_interaction_front_exists"
+        - all_of:
+            - "front_dx_min <= high_interaction_front_dx_max"
+            - "front_thw_last <= high_interaction_thw_max"
+
+  action_decision:
+    a1:
+      all_of:
+        - "ax_neg_frac >= brake_ax_neg_frac"
+        - "ax_last <= brake_ax_last"
+      optional_support:
+        - "vx_slope <= brake_vx_slope"
+
+    a2:
+      all_of:
+        - "ax_pos_frac >= accel_ax_pos_frac"
+        - "ax_last >= accel_ax_last"
+        - "vx_slope >= accel_vx_slope"
+        - any_of:
+            - "vy_last <= negative_lateral_vy"
+            - "ay_last <= negative_lateral_ay"
+            - "ay_neg_frac >= negative_lateral_ay_neg_frac"
+
+    a3:
+      all_of:
+        - "ax_pos_frac >= accel_ax_pos_frac"
+        - "ax_last >= accel_ax_last"
+        - "vx_slope >= accel_vx_slope"
+        - any_of:
+            - "vy_last >= positive_lateral_vy"
+            - "ay_last >= positive_lateral_ay"
+            - "ay_pos_frac >= positive_lateral_ay_pos_frac"
+
+    a0:
+      all_of:
+        - "abs(vx_slope) <= cruise_vx_slope_abs_max"
+        - "abs(ax_last) <= cruise_ax_last_abs_max"
+        - "ax_neg_frac >= cruise_ax_neg_frac_min"
+        - "ax_neg_frac <= cruise_ax_neg_frac_max"
+        - "ax_pos_frac >= cruise_ax_pos_frac_min"
+        - "ax_pos_frac <= cruise_ax_pos_frac_max"
+
+
+styles:
+  s0:
+    name: low_interaction
+    description: 
+      Higher-speed and lower-interaction regime. A front vehicle is not always present, and the vehicle is less constrained by a close leader.
+
+  s1:
+    name: high_interaction
+    description: 
+      Car-following or high-interaction regime. A front vehicle is almost always present, the front distance is shorter, and the ego vehicle is more coupled
+      to surrounding traffic.
+
+actions:
+  a0:
+    name: cruising
+    description: 
+      Almost constant speed with small acceleration and deceleration changes. The longitudinal acceleration is close to zero but slightly negative.
+      This is not strong braking and not strong acceleration.
+
+  a1:
+    name: braking
+    description:
+      Sustained braking or speed reduction. The acceleration is clearly negative, the speed slope is negative, and ax_neg_frac is close to 1.0.
+
+  a2:
+    name: acceleration_negative_lateral_tendency
+    description:
+      Acceleration-dominant behavior with negative lateral tendency. The vehicle speeds up while lateral velocity or lateral acceleration is mostly negative.
+
+  a3:
+    name: acceleration_positive_lateral_tendency
+    description:
+      Acceleration-dominant behavior with positive lateral tendency. The vehicle speeds up while lateral velocity or lateral acceleration is mostly positive.
+
+
+actions_by_style:
+  s0:
+    a0:
+      name: cruising
+      description: Cruising in a low-interaction context.
+    a1:
+      name: braking
+      description: Braking in a low-interaction context.
+    a2:
+      name: acceleration_negative_lateral_tendency
+      description: Acceleration with negative lateral tendency in a low-interaction context.
+    a3:
+      name: acceleration_positive_lateral_tendency
+      description: Acceleration with positive lateral tendency in a low-interaction context.
+
+  s1:
+    a0:
+      name: cruising
+      description: Cruising in a high-interaction context.
+    a1:
+      name: braking
+      description: Braking in a high-interaction context.
+    a2:
+      name: acceleration_negative_lateral_tendency
+      description: Acceleration with negative lateral tendency in a high-interaction context.
+    a3:
+      name: acceleration_positive_lateral_tendency
+      description: Acceleration with positive lateral tendency in a high-interaction context.
+
+other_cases:
+  unknown:
+    description: No clear rule matched.
+    condition:
+      - no_other_condition_matched
