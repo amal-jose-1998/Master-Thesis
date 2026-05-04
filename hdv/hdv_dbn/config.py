@@ -162,7 +162,7 @@ class TrainingConfig:
 
     use_wandb: bool = True
     wandb_project: str = "hdv_dbn_highd"
-    wandb_run_name: Optional[str] = "paper-run"
+    wandb_run_name: Optional[str] = "paper-run-lc_b"
 
     backend: Literal["torch"] = "torch"
     device: Literal["cuda", "cpu"] = "cuda"
@@ -359,7 +359,7 @@ SEM_FEATS_VALIDITY: List[str] = [
 @dataclass(frozen=True)
 class SemanticAnalysisConfig:
     # Paths (edit these)
-    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/final.npz"
+    model_path: str = r"/home/RUS_CIP/st184634/implementation/hdv/models/paper-run-lc_b_S2_A4_tied_action/final.npz"
     data_root: str = r"/home/RUS_CIP/st184634/implementation/hdv/data/highd"
 
     # Speed/debug controls

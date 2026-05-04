@@ -100,15 +100,6 @@ Wang, Shuli, Gao, Kun, Zhang, Lanfang, Liu, Yang and Chen, Lei.
 \newblock \eprint{2312.12123},
   \urlprefix\url{https://arxiv.org/abs/2312.12123}.
 
-\bibitem{app112210562}
-Ghandour, Raymond, Potams, Albert~Jose, Boulkaibet, Ilyes, Neji, Bilel and
-  Al~Barakeh, Zaher.
-\newblock \enquote{Driver Behavior Classification System Analysis Using Machine
-  Learning Methods.}
-\newblock \emph{Applied Sciences} Vol.~11 No.~22 (2021).
-\newblock \doi{10.3390/app112210562}.
-\newblock \urlprefix\url{https://www.mdpi.com/2076-3417/11/22/10562}.
-
 \bibitem{rabiner1989tutorial}
 Rabiner, L.R.
 \newblock \enquote{A tutorial on hidden Markov models and selected applications
@@ -176,6 +167,35 @@ Bethge, Johanna, Pfefferkorn, Maik, Rose, Alexander, Peters, Jan and Findeisen,
   Dynamical Constraints for Autonomous Vehicles.}
 \newblock \emph{ArXiv} Vol. abs/2303.04725 (2023).
 \newblock \urlprefix\url{https://api.semanticscholar.org/CorpusID:257405042}.
+
+\bibitem{app112210562}
+Ghandour, Raymond, Potams, Albert~Jose, Boulkaibet, Ilyes, Neji, Bilel and
+  Al~Barakeh, Zaher.
+\newblock \enquote{Driver Behavior Classification System Analysis Using Machine
+  Learning Methods.}
+\newblock \emph{Applied Sciences} Vol.~11 No.~22 (2021).
+\newblock \doi{10.3390/app112210562}.
+\newblock \urlprefix\url{https://www.mdpi.com/2076-3417/11/22/10562}.
+
+\bibitem{XUE2022103738}
+Xue, Qingwen, Xing, Yingying and Lu, Jian.
+\newblock \enquote{An integrated lane change prediction model incorporating
+  traffic context based on trajectory data.}
+\newblock \emph{Transportation Research Part C: Emerging Technologies} Vol. 141
+  (2022): p. 103738.
+\newblock \doi{https://doi.org/10.1016/j.trc.2022.103738}.
+\newblock
+  \urlprefix\url{https://www.sciencedirect.com/science/article/pii/S0968090X22001723}.
+
+\bibitem{geng2023ensemble}
+Geng, Boshuo, Ma, Jianxiao and Zhang, Shaohu.
+\newblock \enquote{Ensemble deep learning-based lane-changing behavior
+  prediction of manually driven vehicles in mixed traffic environments.}
+\newblock \emph{Electronic Research Archive} Vol.~31 No.~10 (2023): pp.
+  6216--6235.
+\newblock \doi{10.3934/era.2023315}.
+\newblock
+  \urlprefix\url{https://www.aimspress.com/article/doi/10.3934/era.2023315}.
 
 \bibitem{Goodfellow-et-al-2016}
 Goodfellow, Ian, Bengio, Yoshua and Courville, Aaron.

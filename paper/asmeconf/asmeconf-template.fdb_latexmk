@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex asmeconf-template"] 1777228459.54482 "asmeconf-template.aux" "asmeconf-template.bbl" "asmeconf-template" 1777228471.09482 0
-  "./asmeconf-sample.bib" 1777026208 13029 40858842a38c554e4e1ab244b73509fe ""
+["bibtex asmeconf-template"] 1777890918.60794 "asmeconf-template.aux" "asmeconf-template.bbl" "asmeconf-template" 1777890926.59855 0
+  "./asmeconf-sample.bib" 1777717814 14130 3be589619d6b990f96204fdc2fa99f8c ""
   "./asmeconf.bst" 1776867927 38475 77f4bf816e05f26fa6b3df2d9387ff56 ""
-  "asmeconf-template.aux" 1777228467 14725 e24389acc9a4699a97204e5efb317dea "pdflatex"
+  "asmeconf-template.aux" 1777890925 20055 fecb38d1bda23e882b3568deb9fa0094 "pdflatex"
   (generated)
   "asmeconf-template.bbl"
   "asmeconf-template.blg"
   (rewritten before read)
-["pdflatex"] 1777228460.203 "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" "asmeconf-template.pdf" "asmeconf-template" 1777228471.09627 0
+["pdflatex"] 1777890918.96375 "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" "asmeconf-template.pdf" "asmeconf-template" 1777890926.59981 0
   "C:/Users/amalj/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map" 1776869240 229949 3d63eec7f34bc632cfe7e5da3d1a353e ""
   "C:/Users/amalj/AppData/Local/MiKTeX/miktex/data/le/pdftex/pdflatex.fmt" 1776787506 13333487 c57391f54a504d1a736e97df647fde71 ""
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ec-tlf.enc" 1736607166 2914 fdbc4a54b9bc76f4551b5303f2737d33 ""
@@ -75,7 +75,6 @@
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/vf/public/newtx/ntxmi07.vf" 1736607166 2576 00170a9818781c2db9363dd10075173f ""
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/vf/public/newtx/ntxmia.vf" 1736607166 2052 32313fcb5c0cec3f7956da7328e62ee4 ""
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/vf/public/newtx/ntxsy.vf" 1736607166 1792 7cf99effbd74f7851ca7683a6d12b685 ""
-  "C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/vf/public/newtx/ntxsy5.vf" 1736607166 1856 05afd1fb7a543fb973348907ffdabf53 ""
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/vf/public/newtx/ntxsy7.vf" 1736607166 1940 bf4bac1135a7513fb45cfd9280176019 ""
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/tex/context/base/mkii/supp-pdf.mkii" 1580390158 71627 94eb9990bed73c364d7f53f960cc8c5b ""
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/tex/generic/babel/babel.sty" 1765441417 146654 eaac99efd6386094bb8a3980e34ec87b ""
@@ -271,12 +270,15 @@
   "T2Azi4.fd" 0 -1 0 ""
   "T5ntxtlf.fd" 0 -1 0 ""
   "T5zi4.fd" 0 -1 0 ""
-  "asmeconf-template.aux" 1777228467 14725 e24389acc9a4699a97204e5efb317dea "pdflatex"
-  "asmeconf-template.bbl" 1777228460 11489 129d2090edad3d8292b2108b96854a9b "bibtex asmeconf-template"
-  "asmeconf-template.tex" 1777228448 25630 9d1557ed01edca01a699c7c94f167ba1 ""
+  "asmeconf-template.aux" 1777890925 20055 fecb38d1bda23e882b3568deb9fa0094 "pdflatex"
+  "asmeconf-template.bbl" 1777890918 12383 2d97509902b37e8396aed767d8b37f1d "bibtex asmeconf-template"
+  "asmeconf-template.tex" 1777890909 48458 81b50bbb5b11ff75e0d6fbcc648340f5 ""
   "asmeconf.cls" 1776867927 123558 1bf4ce87c057169644a0d948f2c6a21b ""
-  "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" 1777228448 25630 9d1557ed01edca01a699c7c94f167ba1 ""
+  "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" 1777890909 48458 81b50bbb5b11ff75e0d6fbcc648340f5 ""
+  "confusion_matrix.png" 1777568181 586826 92a79186e828a406685dec1a816361ef ""
+  "lcb_confusion_matrix.png" 1777459516 480557 16dc1cf1da7a046ad657f6ef08717311 ""
   "prediction.png" 1774886440 471864 ec36ad685794ced2c576696c79b108a3 ""
+  "val_ll.png" 1777792803 351687 25adba702c8ca8cc1acbbf1fa3675846 ""
   "windowize.png" 1774479412 424878 325be059c3a77291d0214845a1d1cd00 ""
   (generated)
   "asmeconf-template.aux"

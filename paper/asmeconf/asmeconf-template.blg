@@ -10,13 +10,13 @@ Warning--empty pages in Lefevre2014
 Warning--there's an eprint but no archive in krajewski2018highddatasetdronedataset
 Warning--there's an eprint but no archive in zhou2025
 Warning--there's an eprint but no archive in wang2023probabilisticpredictionlongitudinaltrajectory
-Warning--empty pages in app112210562
 Warning--empty pages in electronics8010040
 Warning--there's an eprint but no archive in 2025bayesiannetworkapproachbuilding
 Warning--there's an eprint but no archive in talluri2025enhancingsafetystandardsautomated
 Warning--there's an eprint but no archive in mozaffari2023multimodalmanoeuvretrajectoryprediction
 Warning--there's an eprint but no archive in zhang2024learningcarfollowingbehaviorsusing
 Warning--empty pages in Bethge2023ModelPC
+Warning--empty pages in app112210562
 Warning--there's an eprint but no archive in salzmann2021trajectrondynamicallyfeasibletrajectoryforecasting
 Warning--there's an eprint but no archive in vaswaniattention
 Warning--there's an eprint but no archive in ngiam2022scenetransformerunifiedarchitecture
@@ -26,45 +26,45 @@ Warning--empty pages in NIPS2015_8d55a249
 Warning--there's an eprint but no archive in mangalam2020journeydestinationendpointconditioned
 Warning--there's an eprint but no archive in ho2020denoisingdiffusionprobabilisticmodels
 Warning--there's an eprint but no archive in jiang2023motiondiffusercontrollablemultiagentmotion
-You've used 32 entries,
+You've used 34 entries,
             3102 wiz_defined-function locations,
-            945 strings with 14392 characters,
-and the built_in function-call counts, 14021 in all, are:
-= -- 878
-> -- 478
-< -- 30
-+ -- 180
-- -- 148
-* -- 935
-:= -- 1496
-add.period$ -- 153
-call.type$ -- 32
+            963 strings with 15022 characters,
+and the built_in function-call counts, 15140 in all, are:
+= -- 969
+> -- 498
+< -- 35
++ -- 188
+- -- 154
+* -- 1009
+:= -- 1606
+add.period$ -- 165
+call.type$ -- 34
 change.case$ -- 4
 chr.to.int$ -- 0
-cite$ -- 52
-duplicate$ -- 1429
-empty$ -- 1395
-format.name$ -- 178
-if$ -- 3089
+cite$ -- 54
+duplicate$ -- 1540
+empty$ -- 1495
+format.name$ -- 186
+if$ -- 3348
 int.to.chr$ -- 0
-int.to.str$ -- 32
-missing$ -- 345
-newline$ -- 193
-num.names$ -- 36
-pop$ -- 635
+int.to.str$ -- 34
+missing$ -- 367
+newline$ -- 207
+num.names$ -- 38
+pop$ -- 666
 preamble$ -- 1
 purify$ -- 0
 quote$ -- 0
-skip$ -- 369
+skip$ -- 415
 stack$ -- 0
-substring$ -- 381
-swap$ -- 1015
-text.length$ -- 30
+substring$ -- 447
+swap$ -- 1102
+text.length$ -- 35
 text.prefix$ -- 0
 top$ -- 0
 type$ -- 0
 warning$ -- 20
-while$ -- 59
-width$ -- 34
-write$ -- 394
+while$ -- 65
+width$ -- 36
+write$ -- 422
 (There were 20 warnings)

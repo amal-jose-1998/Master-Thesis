@@ -1,0 +1,14 @@
+{
+  "exact_accuracy": 0.703982703165229,
+  "macro_precision": 0.6950041242931504,
+  "macro_recall": 0.715120670263466,
+  "macro_f1": 0.5867383283752697,
+  "hit_rate": 0.739554285626972,
+  "mean_tte_sec": 0.4471193479406204,
+  "median_tte_sec": 0.4,
+  "p25_tte_sec": 0.4,
+  "p75_tte_sec": 0.4,
+  "num_hits": 96801,
+  "num_total": 130891,
+  "prediction_target": "action"
+}

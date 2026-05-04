@@ -158,10 +158,10 @@ actions_by_style:
       name: braking
       description: Braking in a low-interaction context.
     a2:
-      name: acceleration_negative_lateral_tendency
+      name: acceleration_with_left_lateral_tendency
       description: Acceleration with negative lateral tendency in a low-interaction context.
     a3:
-      name: acceleration_positive_lateral_tendency
+      name: acceleration_with_right_lateral_tendency
       description: Acceleration with positive lateral tendency in a low-interaction context.
 
   s1:
@@ -172,10 +172,10 @@ actions_by_style:
       name: braking
       description: Braking in a high-interaction context.
     a2:
-      name: acceleration_negative_lateral_tendency
+      name: acceleration_with_left_lateral_tendency
       description: Acceleration with negative lateral tendency in a high-interaction context.
     a3:
-      name: acceleration_positive_lateral_tendency
+      name: acceleration_with_right_lateral_tendency
       description: Acceleration with positive lateral tendency in a high-interaction context.
 
 other_cases:

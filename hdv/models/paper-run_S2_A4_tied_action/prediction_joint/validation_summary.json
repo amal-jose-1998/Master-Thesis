@@ -10,5 +10,16 @@
   "p75_tte_sec": 0.4,
   "num_hits": 91624,
   "num_total": 112643,
-  "prediction_target": "joint"
+  "prediction_target": "joint",
+  "exp_dir": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action",
+  "semantic_map": "/home/RUS_CIP/st184634/implementation/hdv/models/paper-run_S2_A4_tied_action/semantic_map.yaml",
+  "fill_unknown": "none",
+  "warmup_steps": 5,
+  "horizon": 5,
+  "gt_total_windows": 343983,
+  "gt_unknown_windows": 187109,
+  "gt_known_windows": 156874,
+  "gt_unknown_fraction": 0.5439483927984813,
+  "gt_known_fraction": 0.45605160720151866,
+  "scored_fraction_of_gt_windows": 0.32746676434591243
 }

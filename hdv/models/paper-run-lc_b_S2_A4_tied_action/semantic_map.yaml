@@ -35,7 +35,6 @@ label_rules:
     # Lane-change
     # ---------------------------------------------------------
     lane_change_lc_present: 0.10
-    lane_change_vy_std: 0.50
     lane_change_d_left_min_max: 1.30
     lane_change_d_right_min_max: 1.30
 
@@ -84,13 +83,11 @@ label_rules:
         - "vx_slope >= accel_vx_slope"
 
     a3:
-      all_of:
-        - "vy_last_std >= lane_change_vy_std"
-        - any_of:
-            - "lc_left_present >= lane_change_lc_present"
-            - "lc_right_present >= lane_change_lc_present"
-            - "d_left_lane_min <= lane_change_d_left_min_max"
-            - "d_right_lane_min <= lane_change_d_right_min_max"
+      any_of:
+        - "lc_left_present >= lane_change_lc_present"
+        - "lc_right_present >= lane_change_lc_present"
+        - "d_left_lane_min <= lane_change_d_left_min_max"
+        - "d_right_lane_min <= lane_change_d_right_min_max"
 
     a0:
       all_of:

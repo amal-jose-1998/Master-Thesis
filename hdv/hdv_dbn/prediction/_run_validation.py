@@ -41,7 +41,7 @@ def main():
     
     # Construct paths
     data_root = workspace_root / "hdv" / "data" / "highd"
-    exp_dir = workspace_root / "hdv" / "models" / "paper-run-lc_b_S2_A4_tied_action"
+    exp_dir = workspace_root / "hdv" / "models" / "paper-run_S2_A4_tied_action"
     checkpoint_path = exp_dir / "final.npz"
     
     
@@ -66,6 +66,7 @@ def main():
     trajectories = []
     
     A = trainer.A  # Number of actions
+    
     total_unknown = 0
     total_gt_windows = 0
     for i, (traj_id, scaled_obs, raw_obs) in enumerate(zip(test_data.trajectory_ids, test_data.scaled_obs, test_data.raw_obs)):
