@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.21)  4 MAY 2026 12:35
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.21)  5 MAY 2026 13:50
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -2028,80 +2028,141 @@ File: ts1ntxtlf.fd 2015/01/18 v1.0 fd file for TS1/ntxtlf
 LaTeX Font Info:    Font shape `TS1/ntxtlf/m/n' will be
 (Font)              scaled to size 6.0pt on input line 69.
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/it' will be
-(Font)              scaled to size 10.0pt on input line 88.
-
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
+(Font)              scaled to size 10.0pt on input line 86.
  (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/en\babel-english.tex)
 Package babel Info: Importing data for english
-(babel)             from babel-en.ini. Reported on input line 128.
+(babel)             from babel-en.ini. Reported on input line 133.
 LaTeX Font Info:    Font shape `TS1/ntxtlf/m/n' will be
-(Font)              scaled to size 10.0pt on input line 128.
+(Font)              scaled to size 10.0pt on input line 133.
  [1{C:/Users/amalj/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/tex-gyre/q-ec.enc}
 
 
 {C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ec-tlf.enc}{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/tex-gyre/q-ts1.enc}] [2]
-<Framework.drawio.png, id=93, 709.65125pt x 297.11pt>
+<Framework.drawio.png, id=96, 709.65125pt x 297.11pt>
 File: Framework.drawio.png Graphic file (type png)
 <use Framework.drawio.png>
-Package pdftex.def Info: Framework.drawio.png  used on input line 221.
+Package pdftex.def Info: Framework.drawio.png  used on input line 219.
 (pdftex.def)             Requested size: 257.28102pt x 107.71661pt.
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
-(Font)              scaled to size 9.0pt on input line 222.
+(Font)              scaled to size 9.0pt on input line 220.
 LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
-(Font)              scaled to size 9.0pt on input line 222.
+(Font)              scaled to size 9.0pt on input line 220.
 LaTeX Font Info:    Font shape `T1/qhv/b/n' will be
-(Font)              scaled to size 8.19003pt on input line 222.
-<windowize.png, id=97, 792.9625pt x 498.86375pt>
+(Font)              scaled to size 8.19003pt on input line 220.
+<ax__global.png, id=102, 423.5022pt x 316.18124pt>
+File: ax__global.png Graphic file (type png)
+<use ax__global.png>
+Package pdftex.def Info: ax__global.png  used on input line 285.
+(pdftex.def)             Requested size: 239.46788pt x 178.78264pt.
+<ay__global.png, id=103, 410.13225pt x 316.18124pt>
+File: ay__global.png Graphic file (type png)
+<use ay__global.png>
+Package pdftex.def Info: ay__global.png  used on input line 295.
+(pdftex.def)             Requested size: 231.82562pt x 178.71992pt.
+<vx__global.png, id=104, 419.8887pt x 316.18124pt>
+File: vx__global.png Graphic file (type png)
+<use vx__global.png>
+Package pdftex.def Info: vx__global.png  used on input line 307.
+(pdftex.def)             Requested size: 236.91786pt x 178.40633pt.
+<vy__global.png, id=105, 403.9893pt x 316.18124pt>
+File: vy__global.png Graphic file (type png)
+<use vy__global.png>
+Package pdftex.def Info: vy__global.png  used on input line 317.
+(pdftex.def)             Requested size: 231.82562pt x 181.43613pt.
+<lane_change_frame_distribution.png, id=106, 1140.26pt x 877.2775pt>
+File: lane_change_frame_distribution.png Graphic file (type png)
+<use lane_change_frame_distribution.png>
+Package pdftex.def Info: lane_change_frame_distribution.png  used on input line 334.
+(pdftex.def)             Requested size: 234.37175pt x 180.31157pt.
+<lane_changes_per_trajectory.png, id=107, 1167.36125pt x 850.17625pt>
+File: lane_changes_per_trajectory.png Graphic file (type png)
+<use lane_changes_per_trajectory.png>
+Package pdftex.def Info: lane_changes_per_trajectory.png  used on input line 344.
+(pdftex.def)             Requested size: 239.46788pt x 174.39104pt.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+<std__ax__global.png, id=108, 403.9893pt x 316.18124pt>
+File: std__ax__global.png Graphic file (type png)
+<use std__ax__global.png>
+Package pdftex.def Info: std__ax__global.png  used on input line 360.
+(pdftex.def)             Requested size: 231.82562pt x 181.43613pt.
+<std__ay__global.png, id=109, 421.69545pt x 316.18124pt>
+File: std__ay__global.png Graphic file (type png)
+<use std__ay__global.png>
+Package pdftex.def Info: std__ay__global.png  used on input line 370.
+(pdftex.def)             Requested size: 239.46788pt x 179.54974pt.
+<std__vx__global.png, id=110, 413.3844pt x 316.18124pt>
+File: std__vx__global.png Graphic file (type png)
+<use std__vx__global.png>
+Package pdftex.def Info: std__vx__global.png  used on input line 382.
+(pdftex.def)             Requested size: 239.46788pt x 183.1585pt.
+<std__vy__global.png, id=111, 410.13225pt x 316.18124pt>
+File: std__vy__global.png Graphic file (type png)
+<use std__vy__global.png>
+Package pdftex.def Info: std__vy__global.png  used on input line 392.
+(pdftex.def)             Requested size: 239.46788pt x 184.61067pt.
+
+Underfull \vbox (badness 1097) has occurred while \output is active []
+
+ [3 <./Framework.drawio.png>]
+<windowize.png, id=129, 792.9625pt x 498.86375pt>
 File: windowize.png Graphic file (type png)
 <use windowize.png>
-Package pdftex.def Info: windowize.png  used on input line 273.
-(pdftex.def)             Requested size: 257.28102pt x 161.86237pt.
- [3{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ot1-tlf.enc} <./Framework.drawio.png>]
-<DBN.drawio.png, id=115, 329.23pt x 299.1175pt>
+Package pdftex.def Info: windowize.png  used on input line 419.
+(pdftex.def)             Requested size: 487.8192pt x 306.90215pt.
+<DBN.drawio.png, id=131, 329.23pt x 299.1175pt>
 File: DBN.drawio.png Graphic file (type png)
 <use DBN.drawio.png>
-Package pdftex.def Info: DBN.drawio.png  used on input line 290.
-(pdftex.def)             Requested size: 141.50534pt x 128.56323pt.
-<prediction.png, id=116, 847.165pt x 357.335pt>
+Package pdftex.def Info: DBN.drawio.png  used on input line 435.
+(pdftex.def)             Requested size: 167.23108pt x 151.9363pt.
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [4{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ot1-tlf.enc} <./ax__global.png> <./ay__global.png> <./vx__global.png> <./vy__global.png>]
+<prediction.png, id=148, 847.165pt x 357.335pt>
 File: prediction.png Graphic file (type png)
 <use prediction.png>
-Package pdftex.def Info: prediction.png  used on input line 372.
+Package pdftex.def Info: prediction.png  used on input line 516.
 (pdftex.def)             Requested size: 542.02501pt x 228.63364pt.
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-[4 <./windowize.png> <./DBN.drawio.png>] [5 <./prediction.png>]
-<val_ll.png, id=150, 2537.48pt x 1332.98pt>
-File: val_ll.png Graphic file (type png)
-<use val_ll.png>
-Package pdftex.def Info: val_ll.png  used on input line 509.
-(pdftex.def)             Requested size: 257.28102pt x 135.13637pt.
- [6 <./val_ll.png>]
-<confusion_matrix.png, id=170, 840.0183pt x 713.3049pt>
+[5 <./lane_change_frame_distribution.png> <./lane_changes_per_trajectory.png>] [6 <./std__ax__global.png> <./std__ay__global.png> <./std__vx__global.png> <./std__vy__global.png>]
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [7 <./windowize.png> <./DBN.drawio.png>] [8 <./prediction.png>]
+<confusion_matrix.png, id=203, 840.0183pt x 713.3049pt>
 File: confusion_matrix.png Graphic file (type png)
 <use confusion_matrix.png>
-Package pdftex.def Info: confusion_matrix.png  used on input line 558.
+Package pdftex.def Info: confusion_matrix.png  used on input line 711.
 (pdftex.def)             Requested size: 433.62166pt x 368.21053pt.
 
-
-LaTeX Warning: `h' float specifier changed to `ht'.
-
-[7]
-Overfull \hbox (2.74901pt too wide) in paragraph at lines 646--655
+Overfull \hbox (2.74901pt too wide) in paragraph at lines 762--771
  [][] 
  []
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-[8 <./confusion_matrix.png>] (asmeconf-template.bbl [9]
+[9]
+Underfull \vbox (badness 1783) has occurred while \output is active []
+
+ [10 <./confusion_matrix.png>] (asmeconf-template.bbl
 Underfull \hbox (badness 1168) in paragraph at lines 134--140
 \T1/ntxtlf/m/n/10 cisco, Armero, Car-men, Gómez-Rubio, Vir-gilio and
  []
 
-
+[11]
 Underfull \hbox (badness 10000) in paragraph at lines 181--189
 \T1/ntxtlf/m/n/10 URL [][]$https : / / www . sciencedirect . com / science / article / pii /
  []
@@ -2136,36 +2197,24 @@ Underfull \hbox (badness 2913) in paragraph at lines 254--260
 []\T1/ntxtlf/m/n/10 Mangalam, Kart-tikeya, Gi-rase, Har-shayu, Agar-wal,
  []
 
-)
-<lcb_confusion_matrix.png, id=283, 824.3598pt x 713.7867pt>
-File: lcb_confusion_matrix.png Graphic file (type png)
-<use lcb_confusion_matrix.png>
-Package pdftex.def Info: lcb_confusion_matrix.png  used on input line 707.
-(pdftex.def)             Requested size: 257.28102pt x 222.77461pt.
-
-
-LaTeX Warning: `h' float specifier changed to `ht'.
-
-[10] [11
-
- <./lcb_confusion_matrix.png>] (asmeconf-template.aux)
+) [12] (asmeconf-template.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2020/03/25>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 32357 strings out of 467871
- 630463 string characters out of 5418376
- 1213541 words of memory out of 5000000
- 60538 multiletter control sequences out of 15000+600000
- 721079 words of font info for 141 fonts, out of 8000000 for 9000
+ 32407 strings out of 467871
+ 631555 string characters out of 5418376
+ 1226806 words of memory out of 5000000
+ 60579 multiletter control sequences out of 15000+600000
+ 722234 words of font info for 145 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 90i,17n,93p,1278b,2504s stack positions out of 10000i,1000n,20000p,200000b,200000s
-<C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI5.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI7.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qtmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txbsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txexs.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txmiaX.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmri.pfb>
-Output written on asmeconf-template.pdf (11 pages, 1514741 bytes).
+ 90i,17n,93p,1278b,2530s stack positions out of 10000i,1000n,20000p,200000b,200000s
+<C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI5.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI7.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qtmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txbsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txexs.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txmiaX.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtxsf/zsfmia-reg.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmri.pfb>
+Output written on asmeconf-template.pdf (12 pages, 1425521 bytes).
 PDF statistics:
- 500 PDF objects out of 1000 (max. 8388607)
- 139 named destinations out of 1000 (max. 500000)
- 276 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 535 PDF objects out of 1000 (max. 8388607)
+ 145 named destinations out of 1000 (max. 500000)
+ 316 words of extra memory for PDF output out of 10000 (max. 10000000)
 

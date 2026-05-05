@@ -272,4 +272,11 @@ Jiang, Chiyu~Max, Cornman, Andre, Park, Cheolho, Sapp, Ben, Zhou, Yin and
 \newblock \eprint{2306.03083},
   \urlprefix\url{https://arxiv.org/abs/2306.03083}.
 
+\bibitem{Hinton2002}
+Hinton, Geoffrey~E.
+\newblock \enquote{Training Products of Experts by Minimizing Contrastive
+  Divergence.}
+\newblock \emph{Neural Computation} Vol.~14 No.~8 (2002): pp. 1771--1800.
+\newblock \doi{10.1162/089976602760128018}.
+
 \end{thebibliography}

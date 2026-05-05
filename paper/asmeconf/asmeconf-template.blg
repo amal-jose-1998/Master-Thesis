@@ -26,45 +26,45 @@ Warning--empty pages in NIPS2015_8d55a249
 Warning--there's an eprint but no archive in mangalam2020journeydestinationendpointconditioned
 Warning--there's an eprint but no archive in ho2020denoisingdiffusionprobabilisticmodels
 Warning--there's an eprint but no archive in jiang2023motiondiffusercontrollablemultiagentmotion
-You've used 34 entries,
+You've used 35 entries,
             3102 wiz_defined-function locations,
-            963 strings with 15022 characters,
-and the built_in function-call counts, 15140 in all, are:
-= -- 969
-> -- 498
-< -- 35
-+ -- 188
-- -- 154
-* -- 1009
-:= -- 1606
-add.period$ -- 165
-call.type$ -- 34
+            971 strings with 15181 characters,
+and the built_in function-call counts, 15644 in all, are:
+= -- 1011
+> -- 502
+< -- 38
++ -- 190
+- -- 155
+* -- 1040
+:= -- 1654
+add.period$ -- 170
+call.type$ -- 35
 change.case$ -- 4
 chr.to.int$ -- 0
-cite$ -- 54
-duplicate$ -- 1540
-empty$ -- 1495
-format.name$ -- 186
-if$ -- 3348
+cite$ -- 55
+duplicate$ -- 1591
+empty$ -- 1544
+format.name$ -- 187
+if$ -- 3467
 int.to.chr$ -- 0
-int.to.str$ -- 34
-missing$ -- 367
-newline$ -- 207
-num.names$ -- 38
-pop$ -- 666
+int.to.str$ -- 35
+missing$ -- 376
+newline$ -- 213
+num.names$ -- 39
+pop$ -- 680
 preamble$ -- 1
 purify$ -- 0
 quote$ -- 0
-skip$ -- 415
+skip$ -- 437
 stack$ -- 0
-substring$ -- 447
-swap$ -- 1102
-text.length$ -- 35
+substring$ -- 483
+swap$ -- 1140
+text.length$ -- 38
 text.prefix$ -- 0
 top$ -- 0
 type$ -- 0
 warning$ -- 20
-while$ -- 65
-width$ -- 36
-write$ -- 422
+while$ -- 68
+width$ -- 37
+write$ -- 434
 (There were 20 warnings)

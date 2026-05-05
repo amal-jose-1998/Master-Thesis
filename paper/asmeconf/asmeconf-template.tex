@@ -79,10 +79,8 @@ Autonomous vehicles (AVs) are expected to operate for many years in mixed traffi
 This paper presents a probabilistic framework for short-horizon human driver maneuver prediction using Dynamic Bayesian Networks (DBNs). 
 The model is trained on the highD naturalistic highway dataset using window-based observations from vehicle motion and surrounding traffic interactions. 
 The DBN uses a hierarchical latent structure, where action states are conditioned on broader driving regimes, allowing maneuver type and interaction context to be modeled together.
-
-Two model variants are evaluated: a model without lane-change reweighting and a lane-change-weighted model. 
-On the test set, the model without lane-change reweighting gives the best performance, with 79.4\% exact next-step accuracy, 67.6\% macro precision, 71.5\% macro F1-score, and an 81.3\% hit rate over a 2\,s prediction horizon. 
-The lane-change-weighted model reaches 64.2\% exact accuracy and a 67.5\% horizon hit rate. 
+ 
+On the test set, the model gives a promising performance, with 79.4\% exact next-step accuracy, 67.6\% macro precision, 71.5\% macro F1-score, and an 81.3\% hit rate over a 2\,s prediction horizon. 
 The average CPU latency for online belief update and next-maneuver prediction is 0.190\,ms per vehicle, far below the 400\,ms input interval.  
 The results show that DBNs can support fast and interpretable short-horizon maneuver prediction. 
 \end{abstract}
@@ -157,9 +155,9 @@ In driver-behavior research, Bayesian-network-based models have been used for ma
 Li et al. proposed a DBN-based lane-change maneuver prediction framework for highway driving using historical vehicle states, road structure, and traffic interaction features. 
 Their model achieved an F1-score of 80\% for lane-change recognition and an advance prediction time of 3.75 s \cite{electronics8010040}. 
 Talluri et al. used a 
-DBN to combine lateral evidence with safety assessment for cut-in and lane-change reasoning. 
+DBN to combine lateral evidence with safety assessment for cut-in and lane-change reasoning \cite{talluri2025enhancingsafetystandardsautomated}. 
 Mlynarczyk et al. focused on an affective driver-behavior module, where Bayesian networks estimate mental states such as mental load and fatigue from physiological 
-and demographic variables. 
+and demographic variables \cite{2025bayesiannetworkapproachbuilding}. 
 In contrast, the present work learns a compact DBN directly from naturalistic highD trajectory windows, using a factored latent structure with style and action variables. 
 The learned joint latent states are mapped to semantic maneuver labels only after training, allowing short-horizon maneuver prediction while keeping the 
 latent behavior representation interpretable.
@@ -176,7 +174,7 @@ Recent data-driven models have reported high performance for lane-change-specifi
 For example, Xue et al. reported lane-change decision accuracy increasing from 97.02\% to 98.20\% when traffic context was included, while Geng et al. 
 reported 98.82\% overall accuracy for lane-changing behavior prediction on highD \cite{XUE2022103738,geng2023ensemble}. 
 These results are strong, but they mainly address the specific task of lane-change prediction. 
-They do not directly solve the broader problem of learning latent human-driving regimes and predicting several maneuver types in one compact probabilistic model.
+They do not directly solve the broader problem of learning latent human-driving regimes and predicting high level maneuver types in one compact probabilistic model.
 
 Deep learning  has become a major direction in trajectory and maneuver prediction. Recurrent Neural Networks 
 (RNNs) and Long Short-Term Memory (LSTM) networks were widely used to model temporal dependencies in driving sequences, while Graph Neural Networks (GNNs) were later introduced 
@@ -191,7 +189,7 @@ under the same observed context
 Although these methods are powerful, especially for continuous trajectory forecasting and lane-change-specific classification, most of them often operate as highly data-driven black-box models. 
 For applications where uncertainty representation, temporal structure, and behavioral interpretability are important, this can be a limitation. 
 However, the goal of this paper is different. 
-The focus is not full trajectory generation, but probabilistic short-horizon prediction of discrete human-driver maneuvers with a model whose latent states can be inspected after training.
+The focus is not full trajectory generation or lane-change detection, but short-horizon prediction of discrete human-driver maneuvers with an interpretable model.
 
 \subsection{Positioning of This Work}
 
@@ -203,7 +201,7 @@ Probabilistic temporal models provide a useful option when the aim is to model u
 
 This paper uses a DBN because the target problem is short-horizon maneuver prediction from naturalistic highway trajectories, where semantic maneuver labels 
 are not directly provided by the dataset. 
-The proposed model learns latent behavior states from window-level motion and interaction features, then maps the learned joint states to semantic maneuver 
+The proposed model learns latent behavior states from window-level motion and interaction features, then maps the learned latent states to semantic maneuver 
 labels after training. 
 This allows the model to perform online probabilistic prediction while keeping the learned behavior representation compact and inspectable. 
 The work therefore focuses on structured human-driver maneuver prediction for HDVs, rather than full trajectory generation or downstream planning.
@@ -233,25 +231,173 @@ After training, the model is used for online filtering and one-step-ahead maneuv
 
 \subsection{Dataset and Preprocessing}
 The method is evaluated on the highD dataset \cite{krajewski2018highddatasetdronedataset}, which contains naturalistic highway trajectories recorded 
-from drone videos on German highways. The full highD release contains 60 recordings collected at several highway locations, but this work uses only the first 
-25 recordings with three lanes in each driving direction. This restriction keeps the road geometry and traffic setting more uniform across the selected subset, 
-which supports more consistent behavior modeling while still leaving a large and temporally rich set of trajectories for window-based analysis. 
+from drone videos on German highways. 
 For each vehicle, the dataset provides frame-level position, velocity, acceleration, lane information, neighboring-vehicle identifiers, and traffic-safety indicators 
 such as time headway (THW) and time to collision (TTC).
 
-Because the selected recordings contain traffic moving in opposite roadway directions, the raw kinematic signals do not follow a consistent sign convention across all vehicles. 
+Since the recordings contain traffic moving in opposite roadway directions, the raw kinematic signals do not follow a consistent sign convention across all vehicles. 
 A vehicle-centric normalization step is therefore applied so that the same maneuver is represented with the same sign convention regardless of the original travel direction. 
 This produces a consistent frame-level representation for later feature extraction and windowization. 
 
 \subsection{Data Analysis for Feature Design}
-Before defining the final observation vector, we performed an exploratory analysis of the selected highD subset to understand the behavior of the available signals and guide feature design. 
-The analysis focused on frame-level kinematics, trajectory-level variability, and lane-change sparsity.
+Before defining the final observation vector, an exploratory analysis of the selected highD subset was performed. 
+The goal of this step was to understand which signals carry useful information for maneuver prediction and how they should be represented in the observation vector. 
+The analysis focused on three aspects: frame-level kinematics, trajectory-level variability, and lane-change sparsity.
 
-The main findings are that longitudinal acceleration and velocity carry broader dynamic ranges and clear class-dependent scale differences, while lateral variables are concentrated near zero but still show informative non-zero tails during lane changes. 
-Trajectory-level variability also reveals that some vehicles remain nearly steady, whereas others exhibit much stronger longitudinal and lateral fluctuations over time. 
-In addition, lane-change events are sparse relative to lane keeping, which means that a single binary lane-change indicator is not enough on its own and should be complemented by contextual and temporally aggregated features.
+Fig.~\ref{fig:kinematic_distributions} shows the global distributions of the main kinematic variables. 
+The longitudinal velocity $v_x$ covers a broad range, which reflects different traffic speeds and vehicle classes. 
+The longitudinal acceleration $a_x$ is centered close to zero, since many vehicles drive with almost steady speed, but it also has visible positive and negative tails. 
+These tails are important because they describe acceleration and braking behavior, which are directly related to maneuver changes and car-following reactions.
 
-These observations motivate the final observation design used in this paper: the model combines longitudinal and lateral motion, lane geometry, interaction context, and risk-related signals, and it summarizes them over short overlapping windows instead of using individual frames directly.
+In contrast, the lateral variables $v_y$ and $a_y$ are strongly concentrated around zero. 
+This is expected because most vehicles stay inside their lane for most frames. 
+However, both variables still show non-zero tails. 
+These tails are useful because they contain information about lateral adjustments and lane-change motion. 
+Therefore, even though lateral motion is sparse compared with longitudinal motion, it should not be removed from the observation vector.
+
+Trajectory-level variability was also analyzed to capture how much each vehicle changes its motion over time. 
+For each vehicle trajectory, the standard deviation of $v_x$, $a_x$, $v_y$, and $a_y$ was computed. 
+This gives one variability value per trajectory for each signal. 
+As shown in Fig.~\ref{fig:trajectory_variability}, the longitudinal variables show larger variability than the lateral variables. 
+This means that speed adaptation and acceleration changes occur more often and with larger magnitude than lateral movement. 
+At the same time, some trajectories show stronger lateral variability, which usually corresponds to lane changes or larger lateral corrections.
+
+The lane-change analysis is also shown in Fig.~\ref{fig:lane_change_sparsity}. 
+Lane keeping dominates the data, while left and right lane changes form only a small fraction of the frames. 
+The same imbalance appears at trajectory level, where most vehicles perform no lane change and only a small number of vehicles perform one or more lane changes. 
+This imbalance is important for feature design. 
+A single lane-change indicator alone is too sparse to provide a strong learning signal. 
+For this reason, the final observation vector also includes lateral velocity, lateral acceleration, lane-boundary distances, neighboring-vehicle context, and temporally aggregated lane-change evidence. 
+These additional features help the model detect the build-up and context of a maneuver, not only the exact frame where the lane ID changes.
+
+Overall, the analysis led to three design choices. 
+First, both longitudinal and lateral kinematic signals are included because they describe complementary parts of driver behavior. 
+Second, the model uses temporal window summaries instead of only single-frame values, since variability and short-term trends contain useful maneuver information. 
+Third, sparse lane-change evidence is combined with motion, lane geometry, interaction, and risk-related features so that the model can learn the driving context around rare maneuvers.
+
+\begin{figure*}[t]
+\centering
+
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.94\linewidth,
+    alt={Histogram of longitudinal acceleration ax with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {ax__global.png}
+    
+    \vspace{0.05em}
+    \small (a) Longitudinal acceleration
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.91\linewidth,
+    alt={Histogram of lateral acceleration ay with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {ay__global.png}
+    
+    \vspace{0.05em}
+    \small (b) Lateral acceleration
+\end{minipage}
+
+\vspace{0.05em}
+
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.93\linewidth,
+    alt={Histogram of longitudinal velocity vx with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {vx__global.png}
+    
+    \vspace{0.05em}
+    \small (c) Longitudinal velocity
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.91\linewidth,
+    alt={Histogram of lateral velocity vy with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {vy__global.png}
+    
+    \vspace{0.05em}
+    \small (d) Lateral velocity
+\end{minipage}
+
+\caption{Distributions of the main frame-level kinematic variables.}
+\label{fig:kinematic_distributions}
+\end{figure*}
+
+\begin{figure*}[h]
+\centering
+
+\begin{minipage}{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.92\linewidth,
+    alt={Bar plot of frame counts for lane-change indicator values: left lane change, no lane change, and right lane change.}]
+    {lane_change_frame_distribution.png}
+    
+    \vspace{0.05em}
+    \small (a) Raw lane-change indicator at frame level
+\end{minipage}
+\hfill
+\begin{minipage}{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.94\linewidth,
+    alt={Bar plot showing the number of lane changes observed per vehicle trajectory. Most vehicles perform no lane change, while fewer perform one or more lane changes.}]
+    {lane_changes_per_trajectory.png}
+    
+    \vspace{0.05em}
+    \small (b) Number of lane changes per trajectory
+\end{minipage}
+\caption{Lane-change sparsity analysis.}
+\label{fig:lane_change_sparsity}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.91\linewidth,
+    alt={Histogram of within-trajectory standard deviation of longitudinal acceleration std(ax), with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {std__ax__global.png}
+    
+    \vspace{0.05em}
+    \small (a) Longitudinal acceleration variability
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.94\linewidth,
+    alt={Histogram of within-trajectory standard deviation of lateral acceleration std(ay), with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {std__ay__global.png}
+    
+    \vspace{0.05em}
+    \small (b) Lateral acceleration variability
+\end{minipage}
+
+\vspace{0.05em}
+
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.94\linewidth,
+    alt={Histogram of within-trajectory standard deviation of longitudinal velocity std(vx), with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {std__vx__global.png}
+    
+    \vspace{0.05em}
+    \small (c) Longitudinal velocity variability
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.94\linewidth,
+    alt={Histogram of within-trajectory standard deviation of lateral velocity std(vy), with vertical lines for mean, median, 10th percentile, and 90th percentile.}]
+    {std__vy__global.png}
+    
+    \vspace{0.05em}
+    \small (d) Lateral velocity variability
+\end{minipage}
+
+\caption{Trajectory-level variability distributions of the main kinematic variables.}
+\label{fig:trajectory_variability}
+\end{figure*}
 
 \subsection{Window-Based Observation Design}
 The observation vector combines ego-motion, lane-related, interaction, and risk-related information. 
@@ -265,16 +411,15 @@ Since the highD dataset is recorded at 25\,Hz, each window covers 2.0\,s of hist
 Each window is summarized into one observation vector using simple temporal aggregation functions, which provide a compact representation of recent motion 
 and interaction history while keeping the observation space manageable. 
 The resulting windowization process is illustrated in Fig.~\ref{fig:window_based_representation}.
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\linewidth,
+\includegraphics[width=0.9\linewidth,
 alt={Illustration of the window-based observation design. Raw frame-level trajectory features are grouped into overlapping temporal windows of length 50 
 frames with stride 10 frames, and each window is summarized into one observation vector for the DBN.}]
 {windowize.png}
 \caption{Illustration of the sliding-window representation}
 \label{fig:window_based_representation}
-\end{figure}
-
+\end{figure*}
 
 \subsection{DBN Formulation}
 The proposed DBN uses two discrete latent variables at each time step: a style state $S_t$ and an action state $A_t$. 
@@ -284,7 +429,7 @@ The graphical structure in Fig.~\ref{fig:proposed_dbn_structure} shows the obser
 In the implementation, this observation node is split into an action-related block and a style-related block.
 \begin{figure}[h]
 \centering
-\includegraphics[width=0.55\linewidth,
+\includegraphics[width=0.65\linewidth,
 alt={Factorized latent structure of the proposed DBN. The style state evolves over time, the action state depends on the previous action and current style state, 
 and each observation depends on the latent state pair.}]
 {DBN.drawio.png}
@@ -355,8 +500,7 @@ The sets $\mathcal{C}_{g}$ and $\mathcal{B}_{g}$ denote the continuous and binar
 The parameters $\mu_{z_g,d}$ and $\sigma^2_{z_g,d}$ define the Gaussian emission for continuous feature $d$, while $\rho_{z_g,b}$ defines the 
 Bernoulli probability for binary feature $b$. This diagonal-covariance choice is a tractable emission-model approximation; it does not imply that the raw motion features are independent in the data.
 
-In the experiments reported in this paper, the DBN uses two style states and four action states, denoted as S2-A4. 
-This gives eight possible joint latent states. 
+In the experiments reported in this paper, the DBN uses two style states and four action states, denoted as S2-A4 (where S = style states and A = action states, giving $2 \times 4 = 8$ possible joint latent states). 
 Each joint state is later mapped to a semantic maneuver label for interpretation and predictive evaluation.
 
 \subsection{Training and Online Prediction}
@@ -393,22 +537,11 @@ The predicted maneuver is then obtained from the most likely joint state and its
 
 \section{Experimental Setup}
 
-\subsection{Data Split and Compared Configurations}
+\subsection{Data Split}
 The selected highD subset is partitioned at the vehicle level into disjoint training, validation, and test sets to prevent leakage across overlapping 
 windows from the same trajectory. 
 The split contains 35{,}318 training vehicles (70\%), 5{,}045 validation vehicles (10\%), and 10{,}092 test vehicles (20\%). 
 The training set is used for parameter estimation, the validation set is used for early stopping, and the test set is reserved for final evaluation.
-
-Two S2-A4 DBN configurations are evaluated. 
-Both models use the same latent structure with two style states and four action states, the same window representation, and the same train/validation/test split. 
-The first model does not apply lane-change reweighting and is used as the main model. 
-The second model, denoted as LC-B, applies lane-change-based weighting during EM training and is included as an imbalance-handling comparison.
-
-Lane changes are relatively rare in naturalistic highway driving compared with lane keeping, cruising, braking, and acceleration. 
-Therefore, maximum-likelihood training can be dominated by more frequent non-lane-change windows. 
-To study this effect, the LC-B variant gives windows with lane-change evidence a higher weight in the statistics used for parameter updates. 
-This gives rare lateral maneuver evidence more influence during training, while keeping the online inference and test evaluation unchanged. 
-Thus, LC-B is treated as a training-weighting variant, not as a separate DBN structure.
 
 \subsection{Evaluation Protocol}
 Evaluation is performed in two parts. 
@@ -421,7 +554,6 @@ First, for each joint state $(s, a)$, posterior-weighted feature statistics are 
 This involves computing the posterior probability that each training window belongs to that joint state, then computing weighted means and standard deviations of the features, giving a profile of the typical behavior associated with that state. 
 Second, each joint state is assigned a semantic maneuver label by applying domain-based rules to its feature profile. 
 These rules use feature thresholds and decision logic based on the patterns of longitudinal motion, lateral motion, front-vehicle presence, and interaction context to classify windows into one of eight maneuver classes. 
-The semantic maps are created separately for the two compared models, because each model can learn a different latent-state structure.
 
 Since the highD dataset does not provide maneuver labels directly, reference labels for online evaluation are generated from the preprocessed window features using a separate rule-based labeling procedure. 
 These rules use cues such as longitudinal acceleration, lateral motion, lane-change evidence, and following behavior to assign each scored window to a maneuver class. 
@@ -443,8 +575,12 @@ However, NLL is not used as the main evidence for safe maneuver prediction.
 Because naturalistic highway data are dominated by common behaviors such as cruising and lane keeping, a model can obtain a good NLL while still making poor predictions for rare but important events such as lane changes. 
 For this reason, NLL is reported only as a model-fit metric and is interpreted together with predictive metrics, class-wise results, and horizon-based evaluation.
 
-The Bayesian Information Criterion (BIC) is also reported as a model-selection score that penalizes model complexity. 
-Like NLL, BIC is used only to compare held-out model fit within the evaluated model family. 
+The Bayesian Information Criterion (BIC) is computed as:
+\begin{equation}
+\mathrm{BIC} = k \log N - 2 \log \hat{L},
+\end{equation}
+where $k$ is the number of free model parameters, $N$ is the total number of training time steps, and $\hat{L}$ is the fitted likelihood. 
+BIC provides a complexity-penalized model-selection score; lower values indicate better trade-off between fit and complexity. 
 Posterior occupancy diagnostics are used separately to inspect how effectively the learned latent states are used.
 
 Online predictive performance is assessed using exact next-step accuracy, macro-averaged precision, recall, and F1-score. 
@@ -457,116 +593,133 @@ This is used to check whether the method can run faster than the 0.4\,s interval
 
 \section{Results and Discussion}
 This section presents the results of the proposed DBN-based maneuver prediction framework. 
-Both models use the same preprocessing pipeline, vehicle-level split, window-based observation format, and online prediction protocol.
-The main goal of this comparison is to study whether the lane-change based weighting improves the final online prediction behavior.
+
+\subsection{Architecture Validation Study}
+To justify the selected model structure, an architecture validation study was carried out before the final evaluation. 
+The main study compared 24 configurations with the same preprocessing pipeline, vehicle-level split, window representation, 
+and EM training procedure. 
+These configurations varied four design factors: 
+(1)~emission-model formulation, comparing Product-of-Experts (PoE) \cite{Hinton2002} with hierarchical emissions, 
+(2)~initial latent-state distribution, comparing fixed uniform and learned initial distributions, 
+(3)~lane-change weighting, comparing unweighted and lane-change-weighted variants, and 
+(4)~the inclusion of Bernoulli likelihood terms for binary observation features.
+
+Across all 12 matched PoE--hierarchical comparisons, the hierarchical emission model achieved lower NLL/step than the 
+corresponding PoE model. 
+The same trend was observed for the BIC score, even though the hierarchical model uses more parameters. 
+This indicates that the added flexibility of the hierarchical emission model is useful for the window-based highD observations, 
+while the PoE formulation is too restrictive for the selected feature representation.
+
+Lane-change events are rare compared with non-lane-change motion in the selected highD subset. 
+Therefore, maximum-likelihood training can be dominated by the more frequent non-lane-change windows. 
+To study this effect, lane-change weighting gives windows with lane-change evidence a higher weight in the statistics used for parameter updates. 
+This gives rare lateral maneuver evidence more influence during training, while keeping the online inference and test evaluation unchanged.
+
+Posterior diagnostics also supported the hierarchical model. 
+In the unweighted hierarchical setting, the model used the joint latent-state space more evenly, with an effective joint-state 
+occupancy of about 6.8 out of 8 possible states and a maximum joint-state occupancy of about 0.22. 
+In comparison, several PoE and lane-change-weighted variants concentrated more probability mass on fewer joint states. 
+This suggests that the hierarchical model gives a more balanced latent representation.
+
+The remaining design factors had smaller or less consistent effects. 
+Learning the initial distribution gave only minor changes, especially within the hierarchical family. 
+Bernoulli likelihood terms improved the selected unweighted hierarchical variant, but they did not give a uniform gain across all 
+configurations. 
+Lane-change weighting did not improve the final model choice: the stronger weighting variant reduced the effective use of the 
+latent-state space and gave worse model-fit scores.
+
+A separate latent-cardinality ablation was then used to compare the selected S2A4 (2 style, 4 action) structure with 1S4A, 1S5A, 2S3A, and 2S5A variants. 
+The one-style models performed worse, showing that the style variable is useful for separating broader interaction context from 
+short-term maneuver dynamics. 
+The 2S3A model was too coarse, while 2S5A improved likelihood but produced a more fine-grained and less compact semantic decomposition. 
+Therefore, S2A4 was selected as the best trade-off among the tested structures.
+
+Based on these validation results, the final model used in this paper is the unweighted hierarchical S2A4 DBN with a fixed uniform 
+initial distribution, and Bernoulli likelihood terms enabled.
 
 \subsection{Semantic Labels}
-For both models, the two style states are interpreted after training as low-interaction and high-interaction driving regimes.
+For the model, the two style states are interpreted after training as low-interaction and high-interaction driving regimes.
 The low-interaction style represents driving with weaker front-vehicle influence, while the high-interaction style represents 
 more constrained driving with stronger coupling to nearby traffic. 
-The action-state meanings are model-specific because the latent states are learned in an unsupervised manner. 
-Therefore, the semantic maps are kept separate for the two evaluated models, as shown in Table~\ref{tab:semantic_action_maps}.
+The action-state meanings are as shown in Table~\ref{tab:semantic_action_maps}.
 
 \begin{table}[h]
 \centering
-\caption{Action semantics for the two models.}
+\caption{Action semantics.}
 \label{tab:semantic_action_maps}
-\begin{tabular}{lll}
+\begin{tabular}{ll}
 \toprule
-Action state & Main model & lc-B model \\
+Action state & Semantic meaning \\
 \midrule
-$a_0$ & Cruising & Cruising \\
-$a_1$ & Braking & Braking \\
-$a_2$ & \shortstack[l]{Acceleration with\\left lateral tendency} & Acceleration \\
-$a_3$ & \shortstack[l]{Acceleration with\\right lateral tendency} & Lane change \\
+$a_0$ & Cruising \\
+$a_1$ & Braking \\
+$a_2$ & \shortstack[l]{Acceleration with\\left lateral tendency} \\
+$a_3$ & \shortstack[l]{Acceleration with\\right lateral tendency} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Model Fit and Latent-State Usage}
-Table~\ref{tab:model_fit_latent_usage} compares the held-out model fit and latent-state usage of the two models.
-The main model gives the better held-out fit. 
-Its NLL per step and BIC value are lower than those of the lc-B model. 
+Table~\ref{tab:model_fit_latent_usage} shows the held-out model fit and latent-state usage.
 Here, $k_{\mathrm{eff}}^{joint}$ denotes the effective number of occupied joint latent states, and 
 $occ_{\max}^{joint}$ denotes the maximum posterior occupancy of any joint state.
 
 \begin{table}[h]
 \centering
-\caption{Held-out fit and latent-state usage of the two models.}
+\caption{Held-out fit and latent-state usage.}
 \label{tab:model_fit_latent_usage}
-\begin{tabular}{lcccc}
+\begin{tabular}{cccc}
 \toprule
-Model & NLL/step & BIC [M] &  $k_{\mathrm{eff}}^{joint}$ & $occ_{\max}^{joint}$ \\
+NLL/step & BIC [M] &  $k_{\mathrm{eff}}^{joint}$ & $occ_{\max}^{joint}$ \\
 \midrule
-main & 23.88 & 16.43 & 6.66 & 0.26 \\
-lc-B    & 30.94 & 21.29 & 3.94 & 0.36 \\
+23.88 & 50.82 & 6.82 & 0.22 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=\linewidth]{val_ll.png}
-\caption{Validation curves during training for the two models.}
-\label{fig:validation_ll_compare}
-\end{figure}
-
-Figure~\ref{fig:validation_ll_compare} shows the validation log-likelihood per observation during training.
-The main model consistently achieves higher validation likelihood than the lc-B model across the training steps and also converges to a better final value.
-This supports the held-out test results in Table~\ref{tab:model_fit_latent_usage}, where the main model also shows better likelihood and lower BIC.
-Together, these results indicate that the main model captures the observation structure more effectively than the lc-B variant.
-
-The occupancy values are used only as diagnostics. 
-They should not be interpreted as a direct performance measure, because the maneuver classes are not equally frequent. 
-For example, lane-change-related behavior is naturally rare, so a lane-change state is expected to have lower occupancy than cruising or braking states. 
-The main point is therefore not that lc-B has lower occupancy by itself, but that this more concentrated state usage appears together with worse likelihood, 
-worse BIC, and weaker online prediction results.
+The model achieves an NLL of 23.88 and a BIC of 50.82\,M on the held-out test set. 
+The latent state usage is well-balanced, with $k_{\mathrm{eff}}^{joint}=6.82$ effective states out of 8 possible joint states, 
+and maximum occupancy $occ_{\max}^{joint}=0.22$, indicating that no single state dominates.
+This balanced occupancy pattern suggests that the learned representation effectively captures multiple distinct behavioral modes without over-relying on a few states.
 
 
 \subsection{Online Prediction Performance}
 Table~\ref{tab:online_prediction_results} summarizes the online prediction results.
-The main model gives the strongest prediction performance, which shows that the model is reliable for 
-short-horizon joint style-action prediction.
 \begin{table}[h]
 \centering
 \caption{Online prediction performance.}
 \label{tab:online_prediction_results}
-\begin{tabular}{lccccc}
+\begin{tabular}{lcccc}
 \toprule
-Model & Accuracy & Precision & Recall & F1 & Hit rate \\
+Accuracy & Precision & Recall & F1 & Hit rate \\
 \midrule
-main & 79.4\% & 67.6\% & 82.0\% & 71.5\% & 81.3\% \\
-lc-B  & 64.2\% & 46.4\% & 40.2\% & 34.8\% & 67.5\% \\
+79.4\% & 67.6\% & 82.0\% & 71.5\% & 81.3\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The lc-B model performs clearly worse.
-Its exact joint prediction accuracy drops to $64.2\%$, and its macro F1-score drops to $34.8\%$.
-The Hit rate also decreases to $67.5\%$.
-This means that the lc-B model does not only make more one-step errors, but also fails more often within the 
-full 2\,s forecast horizon.
- 
-The lower macro scores show that the lc-B degradation is not only caused by one dominant class.
-Instead, the prediction quality becomes weaker across several semantic classes.
-This is consistent with the model-fit results and with the more concentrated latent-state usage in Table~\ref{tab:model_fit_latent_usage}.
-However, the lower effective joint-state usage should be interpreted carefully, because rare behaviors such as lane changes are not expected 
-to occupy the same amount of data as common behaviors.
+The model gives strong prediction performance across all metrics. 
+Exact next-step accuracy reaches 79.4\%, with a macro-averaged F1-score of 71.5\%, demonstrating reliable joint style-action prediction. 
+The macro recall of 82.0\% shows that the model recovers most classes well on average. 
+The lower macro precision of 67.6\% indicates that some classes, especially semantically close behaviors, are still confused with each other. 
+For a driving application, predictions can remain useful even if the correct behavior appears slightly later. 
+The 2\,s horizon hit rate of 81.3\% indicates that the model recovers the correct behavior within the next five windows for most test cases. 
+The mean time-to-hit is 0.42\,s, showing that when correct, the predicted behavior typically manifests almost immediately.
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.8\linewidth]{confusion_matrix.png}
-\caption{Confusion matrix for the main model.}
+\caption{Confusion matrix.}
 \label{fig:main_confusion_matrix}
 \end{figure*}
 
-Figure~\ref{fig:main_confusion_matrix} shows the confusion matrix for the main model.
+Figure~\ref{fig:main_confusion_matrix} shows the confusion matrix for the model.
 The diagonal structure is clear, which means that the model predicts most joint states correctly.
 The strongest classes are high-interaction braking, high-interaction cruising, and the two high-interaction acceleration-with-lateral-tendency states.
 
 \begin{table}[h]
 \centering
-\caption{Class-wise precision and recall for the main model.}
+\caption{Class-wise precision and recall.}
 \label{tab:main_classwise_metrics}
 \begin{tabular}{lcc}
 \toprule
@@ -584,49 +737,12 @@ HI/accel. with right lateral tendency & 88.3\% & 68.5\% \\
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:main_classwise_metrics} gives the class-wise precision and recall for the main model.
-The two cruising classes have high recall, which means that most cruising samples are recovered correctly.
-However, their precision values are lower, which means that some braking and lateral-tendency samples are also predicted as cruising.
-This is reasonable because weak braking or early lateral motion can look similar to cruising within a short observation window.
+Table~\ref{tab:main_classwise_metrics} gives the class-wise precision and recall for the model.
+The two cruising classes have high recall (95.7\% and 95.3\%), meaning that most cruising samples are recovered correctly.
+Their precision values are lower (40.1-42.9\%), which is reasonable because weak braking or early lateral motion can appear similar to cruising within a short observation window.
 
 The high-interaction braking class gives the strongest precision, while both braking classes show strong recall.
 The two acceleration-with-lateral-tendency classes are also predicted well, although the high-interaction right-lateral-tendency class has lower recall.
-
-The lc-B confusion matrix is shown in Appendix~\ref{app:lcb_confusion_matrix}.
-Compared with the main model, the diagonal pattern is weaker.
-The lc-B model predicts many samples as high-interaction cruising, high-interaction braking, or high-interaction acceleration.
-Low-interaction classes are often shifted into the corresponding high-interaction classes.
-
-The strongest lc-B classes are high-interaction braking and high-interaction acceleration.
-These classes have high recall and contain many samples.
-However, low-interaction cruising, low-interaction braking, and low-interaction acceleration have weak recall.
-The lane-change classes are also difficult.
-In particular, many high-interaction lane-change samples are predicted as high-interaction acceleration or high-interaction braking.
-This means that the lc-B model does not produce a clean lane-change separation, even though the semantic map gives special attention to lane-change evidence.
-
-This result suggests that the lc-B weighting does not improve the learned representation in the present setting.
-Lane-change events are naturally much rarer than cruising, braking, or acceleration, so a lower occupancy of lane-change-related states is not by itself unexpected.
-However, even with additional lane-change emphasis, the lc-B model does not achieve cleaner class separation or better online prediction performance.
-Instead, its predictive scores decrease and its latent-state usage becomes more concentrated. 
-This indicates that the added weighting does not translate into a more useful model for short-horizon maneuver prediction in this dataset.
-
-The exact one-step metric is strict because the predicted class must match the next window exactly.
-For a driving application, a prediction can still be useful if the correct behavior appears slightly later.
-Therefore, both models are also evaluated with a 2\,s horizon, which corresponds to the next five future windows.
-
-The main model reaches $91{,}624$ hits out of $112{,}643$ scored cases, giving a Hit rate of $81.3\%$.
-Most of these hits occur at the first future step.
-The mean time-to-hit is $0.42$\,s, which shows that when the main model is correct, the correct behavior usually appears almost immediately.
-
-The lc-B model reaches $88{,}405$ hits out of $130{,}891$ scored cases, giving a Hit rate of $67.5\%$.
-Its mean time-to-hit is $0.45$\,s.
-Thus, lc-B does not mainly fail because correct predictions occur too late.
-Instead, it produces fewer correct predictions overall.
-
-The horizon results support the same conclusion as the one-step metrics.
-The main model is more reliable, while lc-B reduces the number of successful forecasts.
-For both models, most successful predictions occur within the first horizon step.
-This means that the DBN is mainly useful for immediate short-horizon maneuver prediction.
 
 \subsection{Computational Efficiency}
 The online prediction step is computationally light.
@@ -658,34 +774,31 @@ These results show that the proposed DBN can run in real time on standard CPU ha
 Even the end-to-end latency remains much smaller than the available 400\,ms update interval.
 
 \subsection{Discussion}
-The results show that the main model gives the best overall behavior prediction performance.
-It has better held-out fit, better latent-state usage, higher one-step accuracy, higher macro F1-score, and higher Hit rate than the lc-B model.
+The proposed hierarchical DBN provides a well-balanced representation of human driving behavior. 
+The architecture validation study demonstrated that the hierarchical emission model with two style states and four action states offers 
+superior BIC-penalized fit compared to alternative architectures.
 
-The comparison also shows that stronger lane-change weighting is not automatically useful.
-Although lane changes are important, lc-B makes the learned representation less balanced.
-The model uses fewer effective joint states and places most probability mass in one style state.
-This weakens the separation between low-interaction and high-interaction regimes.
-It also makes the online prediction less stable across classes.
+The model's balanced latent-state usage indicates that the learned representation captures multiple distinct behavioral modes 
+without over-concentration on a single state.
+This balanced decomposition suggests that the S2A4 structure effectively separates driving regimes and maneuvers, 
+supporting the interpretability of the learned latent space.
 
-The main model still has limitations.
-Some errors remain between behaviors that are close to each other, such as cruising and weak braking.
-Overall, the main S2A4 DBN provides the best trade-off between prediction accuracy, latent-state balance, and real-time feasibility.
-It is therefore used as the final model for the proposed short-horizon human-driver maneuver prediction framework.
+The model does have limitations. Some errors remain between semantically close behaviors, such as cruising and weak braking,
+ which are difficult to distinguish within a short observation window.
+Future work should improve the observation design, test the method on more diverse datasets, 
+and explore alternative latent-state structures or hybrid approaches.
 
 \section{Conclusion}
 This paper presented a DBN-based framework for probabilistic short-horizon maneuver prediction of human-driven vehicles in highway traffic. 
 The model uses window-based trajectory observations and predicts joint style-action states in a causal online setting. 
 The style state represents the broader interaction regime, while the action state represents the current maneuver tendency.
 
-The results show that the main model without lane-change weighting gives the best overall performance. 
-It achieved a joint one-step accuracy of $79.4\%$, a macro F1-score of $71.5\%$, and a Hit rate value of $81.3\%$. 
-The lc-B model performed worse, with $64.2\%$ accuracy, $34.8\%$ macro F1-score, and $67.5\%$ Hit rate. 
-This indicates that stronger lane-change weighting did not improve the final prediction behavior in this setting. 
-The main model also satisfies the real-time requirement, with an end-to-end CPU runtime of about $0.61$\,ms for one vehicle and $1.97$\,ms for five vehicles in batched mode, 
-both far below the $400$\,ms prediction interval.
+The proposed hierarchical S2A4 DBN achieves a joint one-step accuracy of 79.4\%, macro F1-score of 71.5\%, and Hit rate of 81.3\% over a 2\,s forecast horizon. 
+The model satisfies real-time requirements, with end-to-end CPU latency of 0.61\,ms for single-vehicle prediction and 1.97\,ms for five-vehicle batched prediction, both far below the 400\,ms input interval.
+The architecture validation study over 24 tested configurations showed that the hierarchical S2A4 structure provides the best 
+observed trade-off between model fit, latent-state usage, predictive performance, and model complexity.
 
-The main limitation is that some semantically close behaviors, such as cruising and weak braking or the two lateral-tendency 
-acceleration states, remain difficult to separate. 
+The main limitation is that some semantically close behaviors, such as cruising and weak braking, remain difficult to separate. 
 Future work should therefore improve the observation design, test the method on more diverse datasets, and study alternative 
 latent-state structures. 
 The probabilistic predictions can also be integrated into a larger automated-driving or AV decision-making pipeline to support 
@@ -696,18 +809,6 @@ risk assessment and safe interaction with human drivers.
 
 \bibliographystyle{asmeconf}  %% .bst file following ASME conference format. Do not change.
 \bibliography{asmeconf-sample}%% <=== change this to the name of your bib file
-
-
-%%%  APPENDICES  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\appendix
-\section{Confusion Matrix for lc-B}
-\label{app:lcb_confusion_matrix}
-\begin{figure}[h]
-\centering
-\includegraphics[width=\linewidth]{lcb_confusion_matrix.png}
-\caption{Confusion matrix for the lc-B model.}
-\label{fig:lcb_confusion_matrix}
-\end{figure}
 
 
 \clearpage
