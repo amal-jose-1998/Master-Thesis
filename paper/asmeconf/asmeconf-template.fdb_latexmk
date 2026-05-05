@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex asmeconf-template"] 1777981413.34517 "asmeconf-template.aux" "asmeconf-template.bbl" "asmeconf-template" 1777981850.8759 0
+["bibtex asmeconf-template"] 1777982584.45799 "asmeconf-template.aux" "asmeconf-template.bbl" "asmeconf-template" 1777982594.31941 0
   "./asmeconf-sample.bib" 1777978941 14411 5d8ce8f1aa07a8ac950234de660ebd06 ""
   "./asmeconf.bst" 1776867927 38475 77f4bf816e05f26fa6b3df2d9387ff56 ""
-  "asmeconf-template.aux" 1777981849 20075 ea011036dc1a8f5e565c51cdd294a243 "pdflatex"
+  "asmeconf-template.aux" 1777982592 20075 b9b4bff612320860d92ea7d1706b5cf0 "pdflatex"
   (generated)
   "asmeconf-template.bbl"
   "asmeconf-template.blg"
   (rewritten before read)
-["pdflatex"] 1777981843.72032 "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" "asmeconf-template.pdf" "asmeconf-template" 1777981850.87661 0
+["pdflatex"] 1777982584.81935 "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" "asmeconf-template.pdf" "asmeconf-template" 1777982594.32045 0
   "C:/Users/amalj/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map" 1776869240 229949 3d63eec7f34bc632cfe7e5da3d1a353e ""
   "C:/Users/amalj/AppData/Local/MiKTeX/miktex/data/le/pdftex/pdflatex.fmt" 1776787506 13333487 c57391f54a504d1a736e97df647fde71 ""
   "C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ec-tlf.enc" 1736607166 2914 fdbc4a54b9bc76f4551b5303f2737d33 ""
@@ -276,13 +276,13 @@
   "T2Azi4.fd" 0 -1 0 ""
   "T5ntxtlf.fd" 0 -1 0 ""
   "T5zi4.fd" 0 -1 0 ""
-  "asmeconf-template.aux" 1777981849 20075 ea011036dc1a8f5e565c51cdd294a243 "pdflatex"
-  "asmeconf-template.bbl" 1777981413 12639 6e8eb92b2a77b60a695b8db94c20155e "bibtex asmeconf-template"
-  "asmeconf-template.tex" 1777981841 51426 955437286989b02d8477c6502d797e4d ""
+  "asmeconf-template.aux" 1777982592 20075 b9b4bff612320860d92ea7d1706b5cf0 "pdflatex"
+  "asmeconf-template.bbl" 1777982584 12639 6e8eb92b2a77b60a695b8db94c20155e "bibtex asmeconf-template"
+  "asmeconf-template.tex" 1777982573 51355 3333b45526558f6c107bd08eae87c17f ""
   "asmeconf.cls" 1776867927 123558 1bf4ce87c057169644a0d948f2c6a21b ""
   "ax__global.png" 1774574589 79392 784ade3d87f68fd01e2b3a4499109c55 ""
   "ay__global.png" 1774574590 66069 db16315ba908405d2ed8289176a8473c ""
-  "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" 1777981841 51426 955437286989b02d8477c6502d797e4d ""
+  "c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex" 1777982573 51355 3333b45526558f6c107bd08eae87c17f ""
   "confusion_matrix.png" 1777568181 586826 92a79186e828a406685dec1a816361ef ""
   "lane_change_frame_distribution.png" 1774403650 82011 de41c68cea5464a5ad9d3c0e2bcc1a7e ""
   "lane_changes_per_trajectory.png" 1774403687 76173 7548a49d325f8dfed6b5f1fcec42a81e ""

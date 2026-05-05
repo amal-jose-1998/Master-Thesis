@@ -81,7 +81,7 @@ The model is trained on the highD naturalistic highway dataset using window-base
 The DBN uses a hierarchical latent structure, where action states are conditioned on broader driving regimes, allowing maneuver type and interaction context to be modeled together.
  
 On the test set, the model gives a promising performance, with 79.4\% exact next-step accuracy, 67.6\% macro precision, 71.5\% macro F1-score, and an 81.3\% hit rate over a 2\,s prediction horizon. 
-The average CPU latency for online belief update and next-maneuver prediction is 0.190\,ms per vehicle, far below the 400\,ms input interval.  
+The average CPU latency for online belief update and next-maneuver prediction is 0.61\,ms per vehicle, far below the 400\,ms input interval.  
 The results show that DBNs can support fast and interpretable short-horizon maneuver prediction. 
 \end{abstract}
 
@@ -240,7 +240,7 @@ A vehicle-centric normalization step is therefore applied so that the same maneu
 This produces a consistent frame-level representation for later feature extraction and windowization. 
 
 \subsection{Data Analysis for Feature Design}
-Before defining the final observation vector, an exploratory analysis of the selected highD subset was performed. 
+Before defining the final observation vector, an exploratory analysis of the dataset was performed. 
 The goal of this step was to understand which signals carry useful information for maneuver prediction and how they should be represented in the observation vector. 
 The analysis focused on three aspects: frame-level kinematics, trajectory-level variability, and lane-change sparsity.
 
@@ -410,6 +410,7 @@ Each trajectory is converted into a sequence of overlapping windows with length 
 Since the highD dataset is recorded at 25\,Hz, each window covers 2.0\,s of history and consecutive windows start every 0.4\,s. 
 Each window is summarized into one observation vector using simple temporal aggregation functions, which provide a compact representation of recent motion 
 and interaction history while keeping the observation space manageable. 
+The aggregation includes last values, window minima, temporal slopes, sign fractions, and binary event indicators, depending on the feature type.
 The resulting windowization process is illustrated in Fig.~\ref{fig:window_based_representation}.
 \begin{figure*}[t]
 \centering
@@ -538,7 +539,7 @@ The predicted maneuver is then obtained from the most likely joint state and its
 \section{Experimental Setup}
 
 \subsection{Data Split}
-The selected highD subset is partitioned at the vehicle level into disjoint training, validation, and test sets to prevent leakage across overlapping 
+The dataset is partitioned at the vehicle level into disjoint training, validation, and test sets to prevent leakage across overlapping 
 windows from the same trajectory. 
 The split contains 35{,}318 training vehicles (70\%), 5{,}045 validation vehicles (10\%), and 10{,}092 test vehicles (20\%). 
 The training set is used for parameter estimation, the validation set is used for early stopping, and the test set is reserved for final evaluation.
@@ -604,7 +605,7 @@ These configurations varied four design factors:
 (3)~lane-change weighting, comparing unweighted and lane-change-weighted variants, and 
 (4)~the inclusion of Bernoulli likelihood terms for binary observation features.
 
-Across all 12 matched PoE--hierarchical comparisons, the hierarchical emission model achieved lower NLL/step than the 
+Across all 12 matched PoE--hierarchical comparisons, the hierarchical emission model achieved lower NLL than the 
 corresponding PoE model. 
 The same trend was observed for the BIC score, even though the hierarchical model uses more parameters. 
 This indicates that the added flexibility of the hierarchical emission model is useful for the window-based highD observations, 
@@ -641,7 +642,7 @@ initial distribution, and Bernoulli likelihood terms enabled.
 For the model, the two style states are interpreted after training as low-interaction and high-interaction driving regimes.
 The low-interaction style represents driving with weaker front-vehicle influence, while the high-interaction style represents 
 more constrained driving with stronger coupling to nearby traffic. 
-The action-state meanings are as shown in Table~\ref{tab:semantic_action_maps}.
+The action-state meanings used for evaluation are shown in Table~\ref{tab:semantic_action_maps}.
 
 \begin{table}[h]
 \centering
@@ -775,8 +776,7 @@ Even the end-to-end latency remains much smaller than the available 400\,ms upda
 
 \subsection{Discussion}
 The proposed hierarchical DBN provides a well-balanced representation of human driving behavior. 
-The architecture validation study demonstrated that the hierarchical emission model with two style states and four action states offers 
-superior BIC-penalized fit compared to alternative architectures.
+The architecture validation study showed that the hierarchical S2A4 model gives the best trade-off among the tested configurations.
 
 The model's balanced latent-state usage indicates that the learned representation captures multiple distinct behavioral modes 
 without over-concentration on a single state.
@@ -795,8 +795,7 @@ The style state represents the broader interaction regime, while the action stat
 
 The proposed hierarchical S2A4 DBN achieves a joint one-step accuracy of 79.4\%, macro F1-score of 71.5\%, and Hit rate of 81.3\% over a 2\,s forecast horizon. 
 The model satisfies real-time requirements, with end-to-end CPU latency of 0.61\,ms for single-vehicle prediction and 1.97\,ms for five-vehicle batched prediction, both far below the 400\,ms input interval.
-The architecture validation study over 24 tested configurations showed that the hierarchical S2A4 structure provides the best 
-observed trade-off between model fit, latent-state usage, predictive performance, and model complexity.
+The architecture validation study further supports this model choice among the tested configurations.
 
 The main limitation is that some semantically close behaviors, such as cruising and weak braking, remain difficult to separate. 
 Future work should therefore improve the observation design, test the method on more diverse datasets, and study alternative 
