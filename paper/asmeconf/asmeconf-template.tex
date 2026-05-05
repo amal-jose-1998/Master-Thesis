@@ -783,10 +783,9 @@ without over-concentration on a single state.
 This balanced decomposition suggests that the S2A4 structure effectively separates driving regimes and maneuvers, 
 supporting the interpretability of the learned latent space.
 
-The model does have limitations. Some errors remain between semantically close behaviors, such as cruising and weak braking,
- which are difficult to distinguish within a short observation window.
-Future work should improve the observation design, test the method on more diverse datasets, 
-and explore alternative latent-state structures or hybrid approaches.
+The model does have limitations. 
+Some errors remain between semantically close behaviors, such as cruising and weak braking, which are difficult to distinguish within a short observation window. 
+This suggests that the current observation design is better at capturing broader maneuver tendencies than very fine-grained behavior differences.
 
 \section{Conclusion}
 This paper presented a DBN-based framework for probabilistic short-horizon maneuver prediction of human-driven vehicles in highway traffic. 
@@ -797,9 +796,8 @@ The proposed hierarchical S2A4 DBN achieves a joint one-step accuracy of 79.4\%,
 The model satisfies real-time requirements, with end-to-end CPU latency of 0.61\,ms for single-vehicle prediction and 1.97\,ms for five-vehicle batched prediction, both far below the 400\,ms input interval.
 The architecture validation study further supports this model choice among the tested configurations.
 
-The main limitation is that some semantically close behaviors, such as cruising and weak braking, remain difficult to separate. 
-Future work should therefore improve the observation design, test the method on more diverse datasets, and study alternative 
-latent-state structures. 
+Future work should test the framework on more diverse traffic datasets, improve the observation design for fine-grained maneuver 
+separation, and study alternative latent-state structures.  
 The probabilistic predictions can also be integrated into a larger automated-driving or AV decision-making pipeline to support 
 risk assessment and safe interaction with human drivers.
 

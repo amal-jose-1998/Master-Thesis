@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.21)  5 MAY 2026 14:03
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.21)  5 MAY 2026 14:10
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -2154,7 +2154,10 @@ LaTeX Warning: `h' float specifier changed to `ht'.
 [9]
 Underfull \vbox (badness 1783) has occurred while \output is active []
 
- (asmeconf-template.bbl [10 <./confusion_matrix.png>]
+ (asmeconf-template.bbl
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
+ [10 <./confusion_matrix.png>]
 Underfull \hbox (badness 1168) in paragraph at lines 134--140
 \T1/ntxtlf/m/n/10 cisco, Armero, Car-men, Gómez-Rubio, Vir-gilio and
  []
@@ -2203,13 +2206,13 @@ L3 programming layer <2020/03/25>
 Here is how much of TeX's memory you used:
  32407 strings out of 467871
  631555 string characters out of 5418376
- 1227084 words of memory out of 5000000
+ 1227083 words of memory out of 5000000
  60579 multiletter control sequences out of 15000+600000
  722234 words of font info for 145 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  90i,17n,93p,1278b,2532s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI5.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI7.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qtmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txbsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txexs.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txmiaX.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtxsf/zsfmia-reg.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmri.pfb>
-Output written on asmeconf-template.pdf (12 pages, 1425427 bytes).
+Output written on asmeconf-template.pdf (12 pages, 1425349 bytes).
 PDF statistics:
  535 PDF objects out of 1000 (max. 8388607)
  145 named destinations out of 1000 (max. 500000)
