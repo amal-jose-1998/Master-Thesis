@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.21)  5 MAY 2026 14:10
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.21)  5 MAY 2026 21:45
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -2053,32 +2053,32 @@ LaTeX Font Info:    Font shape `T1/qhv/b/n' will be
 File: ax__global.png Graphic file (type png)
 <use ax__global.png>
 Package pdftex.def Info: ax__global.png  used on input line 285.
-(pdftex.def)             Requested size: 239.46788pt x 178.78264pt.
+(pdftex.def)             Requested size: 229.2756pt x 171.17435pt.
 <ay__global.png, id=103, 410.13225pt x 316.18124pt>
 File: ay__global.png Graphic file (type png)
 <use ay__global.png>
-Package pdftex.def Info: ay__global.png  used on input line 295.
-(pdftex.def)             Requested size: 231.82562pt x 178.71992pt.
+Package pdftex.def Info: ay__global.png  used on input line 294.
+(pdftex.def)             Requested size: 221.63335pt x 170.86076pt.
 <vx__global.png, id=104, 419.8887pt x 316.18124pt>
 File: vx__global.png Graphic file (type png)
 <use vx__global.png>
-Package pdftex.def Info: vx__global.png  used on input line 307.
-(pdftex.def)             Requested size: 236.91786pt x 178.40633pt.
+Package pdftex.def Info: vx__global.png  used on input line 304.
+(pdftex.def)             Requested size: 226.72948pt x 170.7305pt.
 <vy__global.png, id=105, 403.9893pt x 316.18124pt>
 File: vy__global.png Graphic file (type png)
 <use vy__global.png>
-Package pdftex.def Info: vy__global.png  used on input line 317.
-(pdftex.def)             Requested size: 231.82562pt x 181.43613pt.
+Package pdftex.def Info: vy__global.png  used on input line 313.
+(pdftex.def)             Requested size: 221.63335pt x 173.46118pt.
 <lane_change_frame_distribution.png, id=106, 1140.26pt x 877.2775pt>
 File: lane_change_frame_distribution.png Graphic file (type png)
 <use lane_change_frame_distribution.png>
-Package pdftex.def Info: lane_change_frame_distribution.png  used on input line 334.
-(pdftex.def)             Requested size: 234.37175pt x 180.31157pt.
+Package pdftex.def Info: lane_change_frame_distribution.png  used on input line 329.
+(pdftex.def)             Requested size: 224.18336pt x 172.46727pt.
 <lane_changes_per_trajectory.png, id=107, 1167.36125pt x 850.17625pt>
 File: lane_changes_per_trajectory.png Graphic file (type png)
 <use lane_changes_per_trajectory.png>
-Package pdftex.def Info: lane_changes_per_trajectory.png  used on input line 344.
-(pdftex.def)             Requested size: 239.46788pt x 174.39104pt.
+Package pdftex.def Info: lane_changes_per_trajectory.png  used on input line 338.
+(pdftex.def)             Requested size: 229.2756pt x 166.97069pt.
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
@@ -2086,23 +2086,23 @@ LaTeX Warning: `h' float specifier changed to `ht'.
 <std__ax__global.png, id=108, 403.9893pt x 316.18124pt>
 File: std__ax__global.png Graphic file (type png)
 <use std__ax__global.png>
-Package pdftex.def Info: std__ax__global.png  used on input line 360.
-(pdftex.def)             Requested size: 231.82562pt x 181.43613pt.
+Package pdftex.def Info: std__ax__global.png  used on input line 353.
+(pdftex.def)             Requested size: 221.63335pt x 173.46118pt.
 <std__ay__global.png, id=109, 421.69545pt x 316.18124pt>
 File: std__ay__global.png Graphic file (type png)
 <use std__ay__global.png>
-Package pdftex.def Info: std__ay__global.png  used on input line 370.
-(pdftex.def)             Requested size: 239.46788pt x 179.54974pt.
+Package pdftex.def Info: std__ay__global.png  used on input line 362.
+(pdftex.def)             Requested size: 229.2756pt x 171.90768pt.
 <std__vx__global.png, id=110, 413.3844pt x 316.18124pt>
 File: std__vx__global.png Graphic file (type png)
 <use std__vx__global.png>
-Package pdftex.def Info: std__vx__global.png  used on input line 382.
-(pdftex.def)             Requested size: 239.46788pt x 183.1585pt.
+Package pdftex.def Info: std__vx__global.png  used on input line 372.
+(pdftex.def)             Requested size: 229.2756pt x 175.36687pt.
 <std__vy__global.png, id=111, 410.13225pt x 316.18124pt>
 File: std__vy__global.png Graphic file (type png)
 <use std__vy__global.png>
-Package pdftex.def Info: std__vy__global.png  used on input line 392.
-(pdftex.def)             Requested size: 239.46788pt x 184.61067pt.
+Package pdftex.def Info: std__vy__global.png  used on input line 381.
+(pdftex.def)             Requested size: 229.2756pt x 176.75633pt.
 
 Underfull \vbox (badness 6094) has occurred while \output is active []
 
@@ -2110,54 +2110,45 @@ Underfull \vbox (badness 6094) has occurred while \output is active []
 <windowize.png, id=129, 792.9625pt x 498.86375pt>
 File: windowize.png Graphic file (type png)
 <use windowize.png>
-Package pdftex.def Info: windowize.png  used on input line 420.
+Package pdftex.def Info: windowize.png  used on input line 408.
 (pdftex.def)             Requested size: 487.8192pt x 306.90215pt.
-
-Underfull \vbox (badness 3690) has occurred while \output is active []
-
 <DBN.drawio.png, id=131, 329.23pt x 299.1175pt>
 File: DBN.drawio.png Graphic file (type png)
 <use DBN.drawio.png>
-Package pdftex.def Info: DBN.drawio.png  used on input line 436.
+Package pdftex.def Info: DBN.drawio.png  used on input line 424.
 (pdftex.def)             Requested size: 167.23108pt x 151.9363pt.
+
+Underfull \vbox (badness 10000) has occurred while \output is active []
+
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
 [4{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ot1-tlf.enc} <./ax__global.png> <./ay__global.png> <./vx__global.png> <./vy__global.png>]
-<prediction.png, id=148, 847.165pt x 357.335pt>
+<prediction.png, id=150, 847.165pt x 357.335pt>
 File: prediction.png Graphic file (type png)
 <use prediction.png>
-Package pdftex.def Info: prediction.png  used on input line 517.
+Package pdftex.def Info: prediction.png  used on input line 505.
 (pdftex.def)             Requested size: 542.02501pt x 228.63364pt.
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-[5 <./lane_change_frame_distribution.png> <./lane_changes_per_trajectory.png>] [6 <./std__ax__global.png> <./std__ay__global.png> <./std__vx__global.png> <./std__vy__global.png>]
+[5 <./lane_change_frame_distribution.png> <./lane_changes_per_trajectory.png>]
 Underfull \vbox (badness 10000) has occurred while \output is active []
 
- [7 <./windowize.png> <./DBN.drawio.png>] [8 <./prediction.png>]
-<confusion_matrix.png, id=203, 840.0183pt x 713.3049pt>
+ [6 <./std__ax__global.png> <./std__ay__global.png> <./std__vx__global.png> <./std__vy__global.png>] [7 <./windowize.png> <./DBN.drawio.png>] [8 <./prediction.png>]
+<confusion_matrix.png, id=204, 840.0183pt x 713.3049pt>
 File: confusion_matrix.png Graphic file (type png)
 <use confusion_matrix.png>
-Package pdftex.def Info: confusion_matrix.png  used on input line 712.
+Package pdftex.def Info: confusion_matrix.png  used on input line 700.
 (pdftex.def)             Requested size: 433.62166pt x 368.21053pt.
 
-Overfull \hbox (2.74901pt too wide) in paragraph at lines 763--772
+Overfull \hbox (2.74901pt too wide) in paragraph at lines 751--760
  [][] 
  []
 
-
-LaTeX Warning: `h' float specifier changed to `ht'.
-
-[9]
-Underfull \vbox (badness 1783) has occurred while \output is active []
-
- (asmeconf-template.bbl
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
- [10 <./confusion_matrix.png>]
+[9] (asmeconf-template.bbl [10 <./confusion_matrix.png>]
 Underfull \hbox (badness 1168) in paragraph at lines 134--140
 \T1/ntxtlf/m/n/10 cisco, Armero, Car-men, Gómez-Rubio, Vir-gilio and
  []
@@ -2197,7 +2188,9 @@ Underfull \hbox (badness 2913) in paragraph at lines 254--260
 []\T1/ntxtlf/m/n/10 Mangalam, Kart-tikeya, Gi-rase, Har-shayu, Agar-wal,
  []
 
-) [12] (asmeconf-template.aux)
+) [12
+
+] (asmeconf-template.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2020/03/25>
@@ -2206,13 +2199,13 @@ L3 programming layer <2020/03/25>
 Here is how much of TeX's memory you used:
  32407 strings out of 467871
  631555 string characters out of 5418376
- 1227083 words of memory out of 5000000
+ 1225505 words of memory out of 5000000
  60579 multiletter control sequences out of 15000+600000
  722234 words of font info for 145 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 90i,17n,93p,1278b,2532s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 90i,17n,93p,1278b,2536s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI5.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI7.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qtmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txbsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txexs.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txmiaX.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtxsf/zsfmia-reg.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmri.pfb>
-Output written on asmeconf-template.pdf (12 pages, 1425349 bytes).
+Output written on asmeconf-template.pdf (12 pages, 1425442 bytes).
 PDF statistics:
  535 PDF objects out of 1000 (max. 8388607)
  145 named destinations out of 1000 (max. 500000)
