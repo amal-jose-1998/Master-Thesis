@@ -1,50 +1,53 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex 2026.4.21)  5 MAY 2026 21:45
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.2) (preloaded format=pdflatex 2026.5.5)  5 MAY 2026 23:39
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
  %&-line parsing enabled.
-**"c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex"
-(c:/Users/amalj/OneDrive/Desktop/Master's Thesis/Implementation/paper/asmeconf/asmeconf-template.tex
+**c:/Users/Giorgos/Desktop/Master-Thesis/paper/asmeconf/asmeconf-template.tex
+(c:/Users/Giorgos/Desktop/Master-Thesis/paper/asmeconf/asmeconf-template.tex
 LaTeX2e <2025-11-01>
-L3 programming layer <2025-12-24>
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\documentmetadata-support.ltx (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement-testphase\pdfmanagement-testphase.sty
-Package: pdfmanagement-testphase 2026-01-23 v0.96y LaTeX PDF management bundle
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tagpdf\tagpdf-base.sty
-Package: tagpdf-base 2026-04-11 v1.0a part of tagpdf - provide base, no-op versions of the user commands 
+L3 programming layer <2026-03-20>
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\documentmetadata-support.ltx (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement\pdfmanagement-testphase.sty
+Package: pdfmanagement-testphase 2026-04-21 v0.97a LaTeX PDF management bundle
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tagpdf\tagpdf-base.sty
+Package: tagpdf-base 2026-04-24 v1.0b part of tagpdf - provide base, no-op versions of the user commands 
 \c@g__tag_MCID_abs_int=\count275
 \c@g__tag_struct_abs_int=\count276
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement-testphase\pdfmanagement.ltx
-File: pdfmanagement.ltx 2026-01-23 v0.96y PDF management code
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement\pdfmanagement.ltx
+File: pdfmanagement.ltx 2026-04-21 v0.97a PDF management code
 \g__pdfmanagement_EmbeddedFiles_int=\count277
 \l__pdfmeta_xmp_indent_int=\count278
 \g_pdffile_embed_pdfa_int=\count279
 \g_pdffile_embed_nonpdfa_int=\count280
-))) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdftex.def
-File: l3backend-pdftex.def 2025-10-09 L3 backend support: PDF output (pdfTeX)
-\l__color_backend_stack_int=\count281
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement-testphase\l3backend-testphase-pdftex.def
-File: l3backend-testphase-pdftex.def 2026-01-23 v0.96y LaTeX PDF management bundle backend support:PDFoutput(pdfTeX)
+\l_pdfoutline_open_int=\count281
+\g__pdfoutline_id_int=\count282
+\g__pdfoutline_current_level_int=\count283
+))) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-pdftex.def
+File: l3backend-pdftex.def 2026-02-18 L3 backend support: PDF output (pdfTeX)
+\l__color_backend_stack_int=\count284
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement\l3backend-testphase-pdftex.def
+File: l3backend-pdf-pdftex.def 2026-04-21 v0.97a LaTeX PDF management bundle backend support: PDF output (pdfTeX)
 \l__pdf_backend_tmpa_box=\box53
 \l__pdf_backend_tmpb_box=\box54
-\g__pdf_backend_resourceid_int=\count282
-\g__pdf_backend_name_int=\count283
-\g__pdf_backend_page_int=\count284
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-latest.sty
+\g__pdf_backend_resourceid_int=\count285
+\g__pdf_backend_name_int=\count286
+\g__pdf_backend_page_int=\count287
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-latest.sty
 Package: latex-lab-testphase-latest 2025-09-13 v0.1d latex-lab modules
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tagpdf\tagpdf.sty
-Package: tagpdf 2026-04-11 v1.0a  LaTeX kernel code for PDF tagging 
-\l__tag_tmpa_int=\count285
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tagpdf\tagpdf.sty
+Package: tagpdf 2026-04-24 v1.0b  LaTeX kernel code for PDF tagging 
+\l__tag_tmpa_int=\count288
 \l__tag_tmpa_box=\box55
 \l__tag_tmpb_box=\box56
-\l__tag_loglevel_int=\count286
-\g__tag_unique_cnt_int=\count287
-\l__tag_tag_stop_int=\count288
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tagpdf\tagpdf-mc-code-generic.sty
-Package: tagpdf-mc-code-generic 2026-04-11 v1.0a part of tagpdf - code related to marking chunks - generic mode
+\l__tag_loglevel_int=\count289
+\g__tag_unique_cnt_int=\count290
+\l__tag_tag_stop_int=\count291
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tagpdf\tagpdf-mc-code-generic.sty
+Package: tagpdf-mc-code-generic 2026-04-24 v1.0b part of tagpdf - code related to marking chunks - generic mode
 \g__tag_mc_marks=\marks4
 )
-\g__tag_tree_id_pad_int=\count289
-\c@g__tag_parenttree_obj_int=\count290
+\g__tag_tree_id_pad_int=\count292
+\c@g__tag_parenttree_obj_int=\count293
 
 Package tagpdf Info: reading namespace definitions tagpdf-ns-pdf.def
 
@@ -69,24 +72,24 @@ Package tagpdf Info: reading namespace definitions tagpdf-ns-pdf.def
 
 Package tagpdf Info: reading namespace definitions tagpdf-ns-pdf2.def
 
-\g__tag_struct_AFobj_int=\count291
-\g__tag_para_begin_int=\count292
-\g__tag_para_end_int=\count293
-\g__tag_para_main_begin_int=\count294
-\g__tag_para_main_end_int=\count295
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-names.sty
+\g__tag_struct_AFobj_int=\count294
+\g__tag_para_begin_int=\count295
+\g__tag_para_end_int=\count296
+\g__tag_para_main_begin_int=\count297
+\g__tag_para_main_end_int=\count298
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-names.sty
 Package: latex-lab-testphase-names 2025-08-14 v0.8f Code related to the names of tags
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-new-or-2.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-new-or-2.sty
 Package: latex-lab-testphase-new-or-2 2025-05-10 v0.86d Changes to the output routine
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-footnotes.ltx
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-footnotes.ltx
 File: latex-lab-footnotes.ltx 2025-07-04 v0.8o changes to the footnote interfaces
-\footnotemargin=\dimen148
-\g_fnote_id_int=\count296
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-block.sty
+\footnotemargin=\dimen150
+\g_fnote_id_int=\count299
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-block.sty
 Package: latex-lab-testphase-block 2025-07-26 v0.9k blockenv implementation
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-kernel-changes.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-kernel-changes.sty
 Package: latex-lab-kernel-changes 2025-07-09 v0.85i General kernel and class changes
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\glyphtounicode-cmex.tex)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-context.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\glyphtounicode-cmex.tex)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-context.sty
 Package: latex-lab-testphase-context 2025-10-09 v0.5b Providing context for instance, etc.
 )
 
@@ -109,12 +112,12 @@ LaTeX template Info: Declaring template type 'list' taking 1 argument(s) on
 LaTeX template Info: Declaring template type 'item' taking 1 argument(s) on
 (template)           line 100.
 
-\c@maxblocklevels=\count297
+\c@maxblocklevels=\count300
 \l__par_start_skip=\skip49
 \l__block_botsep_skip=\skip50
 \l__block_parbotsep_skip=\skip51
-\l__block_parindent_dim=\dimen149
-\l__block_counter_start_int=\count298
+\l__block_parindent_dim=\dimen151
+\l__block_counter_start_int=\count301
 \l__block_one_label_box=\box57
 \g__block_labels_box=\box58
 \l__block_tmpa_skip=\skip52
@@ -123,91 +126,91 @@ LaTeX template Info: Declaring template type 'item' taking 1 argument(s) on
 LaTeX Info: Redefining \centering on input line 1476.
 LaTeX Info: Redefining \raggedleft on input line 1477.
 LaTeX Info: Redefining \raggedright on input line 1478.
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-sec.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-sec.sty
 Package: latex-lab-testphase-sec 2025-10-20 v0.84k Code related to the tagging of sectioning commands
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-toc.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-toc.sty
 Package: latex-lab-testphase-toc 2025-07-02 v0.85h  Code related to the tagging of toc-like lists
-\g__tag_toc_level_int=\count299
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-minipage.sty
+\g__tag_toc_level_int=\count302
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-minipage.sty
 Package: latex-lab-testphase-minipage 2025-05-10 v0.81g Code related to the tagging of minipages and parboxes
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-new-or-1.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-new-or-1.sty
 Package: latex-lab-testphase-new-or-1 2025-05-10 v0.85d Temporary output patches for tagging and better link support -- no longer active
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-graphic.sty
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-graphic.sty
 Package: latex-lab-testphase-graphic 2025-09-25 v0.80i Code related to the tagging of graphics
-\g__tag_graphic_int=\count300
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-float.sty
+\g__tag_graphic_int=\count303
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-float.sty
 Package: latex-lab-testphase-float 2025-10-17 v0.81l Code related to the tagging of floats
-\g__tag_float_int=\count301
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-bib.sty
+\g__tag_float_int=\count304
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-bib.sty
 Package: latex-lab-testphase-bib 2025-05-09 v0.81c Code related to the tagging of bibliography and cite command
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-text.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-text.sty
 Package: latex-lab-testphase-text 2025-05-10 v0.85f Code related to the tagging of various small text commands
 LaTeX Info: Redefining \mbox on input line 84.
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-marginpar.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-marginpar.sty
 Package: latex-lab-testphase-marginpar 2025-07-23 v0.85h Changes related to the tagging of the margin notes
-\g__kernel_marginpar_int=\count302
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-title.sty
+\g__kernel_marginpar_int=\count305
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-title.sty
 Package: latex-lab-testphase-title 2025-03-08 v0.85d Changes related to the tagging of the title
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-table.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-table.sty
 Package: latex-lab-testphase-table 2025-08-01 v0.85s Code related to the tagging of tables
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tools\array.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tools\array.sty
 Package: array 2025/09/25 v2.6n Tabular extension package (FMi)
-\col@sep=\dimen150
+\col@sep=\dimen152
 \ar@mcellbox=\box59
-\extrarowheight=\dimen151
+\extrarowheight=\dimen153
 \NC@list=\toks17
 \extratabsurround=\skip55
 \backup@length=\skip56
 \ar@cellbox=\box60
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-math.sty
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-math.sty
 Package: latex-lab-testphase-math 2025-03-10 v0.8d code related to the math tagging
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-math.ltx
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-math.ltx
 File: latex-lab-math.ltx 2025-10-02 v0.6w Grab all the math(s) and tag it (experiments)
 \l__math_tmpa_skip=\skip57
-\g__math_mathml_total_int=\count303
-\g__math_mathml_int=\count304
-\g__math_math_total_int=\count305
-\g__math_mathml_AF_found_int=\count306
-\g__math_mathml_AF_attached_int=\count307
+\g__math_mathml_total_int=\count306
+\g__math_mathml_int=\count307
+\g__math_math_total_int=\count308
+\g__math_mathml_AF_found_int=\count309
+\g__math_mathml_AF_attached_int=\count310
 \l__math_tmpa_box=\box61
-\l__math_mathstyle_int=\count308
-\g__math_mathchoice_int=\count309
-\l__math_grab_env_int=\count310
-\g__math_postdisplaypenalty_int=\count311
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-mathpkg.ltx
+\l__math_mathstyle_int=\count311
+\g__math_mathchoice_int=\count312
+\l__math_grab_env_int=\count313
+\g__math_postdisplaypenalty_int=\count314
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-mathpkg.ltx
 File: latex-lab-mathpkg.ltx 2025-06-20 v0.1c mathpkg adaptions
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-mathintent.ltx
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-mathintent.ltx
 File: latex-lab-mathintent.ltx 2025-08-03 v0.1c MathML intent attributes
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-firstaid.sty
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-firstaid.sty
 Package: latex-lab-testphase-firstaid 2025-11-03 v2025-11-03 Temporary patches to external packages needed for the tagging project
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-tikz.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-testphase-tikz.sty
 Package: latex-lab-testphase-tikz 2025-09-27 v0.80d Code related to the tagging of tikz pictures
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement-testphase\pdfmanagement-firstaid.sty
-Package: pdfmanagement-firstaid 2026-01-23 v0.96y LaTeX PDF management bundle / firstaid-patches
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement\pdfmanagement-firstaid.sty
+Package: pdfmanagement-firstaid 2026-04-21 v0.97a LaTeX PDF management bundle / firstaid-patches
 
 Package pdfmanagement Info: loading pdfmanagement firstaid code for pgf
 
 ) (asmeconf.cls
 Document Class: asmeconf 2026/01/10 ASME Conference Paper LaTeX Template (JHL)
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/base\article.cls
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/base\article.cls
 Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/base\size10.clo
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/base\size10.clo
 File: size10.clo 2025/01/22 v1.4n Standard LaTeX file (size option)
 )
-\c@part=\count312
-\c@section=\count313
-\c@subsection=\count314
-\c@subsubsection=\count315
-\c@paragraph=\count316
-\c@subparagraph=\count317
-\c@figure=\count318
-\c@table=\count319
+\c@part=\count315
+\c@section=\count316
+\c@subsection=\count317
+\c@subsubsection=\count318
+\c@paragraph=\count319
+\c@subparagraph=\count320
+\c@figure=\count321
+\c@table=\count322
 \abovecaptionskip=\skip58
 \belowcaptionskip=\skip59
-\bibindent=\dimen152
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.sty
+\bibindent=\dimen154
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.sty
 Package: etoolbox 2025/10/02 v2.5m e-TeX tools for LaTeX (JAW)
-\etb@tempcnta=\count320
+\etb@tempcnta=\count323
 )
 
 If you see an error "Use of \??? doesn't match its definition...Misplaced '=' in key-value input", remove the deprecated option [mathalfa=ccc=ddd] from \documentclass.
@@ -218,50 +221,50 @@ Class asmeconf Warning: Selecting US English as babel's primary language, since 
 
 Class asmeconf Info: Allowing hyphenation of typewriter font.
 
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.sty
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.sty
 Package: geometry 2026/03/07 v6.0 Page Geometry
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty
 Package: keyval 2022/05/29 v1.15 key=value parser (DPC)
 \KV@toks@=\toks18
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex.sty
 Package: ifvtex 2019/10/25 v1.7 ifvtex legacy package. Use iftex instead.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty
 Package: iftex 2024/12/12 v1.0g TeX engine tests
 ))
-\Gm@cnth=\count321
-\Gm@cntv=\count322
-\c@Gm@tempcnt=\count323
-\Gm@bindingoffset=\dimen153
-\Gm@wd@mp=\dimen154
-\Gm@odd@mp=\dimen155
-\Gm@even@mp=\dimen156
-\Gm@layoutwidth=\dimen157
-\Gm@layoutheight=\dimen158
-\Gm@layouthoffset=\dimen159
-\Gm@layoutvoffset=\dimen160
+\Gm@cnth=\count324
+\Gm@cntv=\count325
+\c@Gm@tempcnt=\count326
+\Gm@bindingoffset=\dimen155
+\Gm@wd@mp=\dimen156
+\Gm@odd@mp=\dimen157
+\Gm@even@mp=\dimen158
+\Gm@layoutwidth=\dimen159
+\Gm@layoutheight=\dimen160
+\Gm@layouthoffset=\dimen161
+\Gm@layoutvoffset=\dimen162
 \Gm@dimlist=\toks19
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.cfg)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphicx.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.cfg)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphicx.sty
 Package: graphicx 2024/12/31 v1.2e Enhanced LaTeX Graphics (DPC,SPQR)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphics.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphics.sty
 Package: graphics 2024/08/06 v1.4g Standard LaTeX Graphics (DPC,SPQR)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.sty
 Package: trig 2023/12/02 v1.11 sin cos tan (DPC)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\graphics.cfg
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\graphics.cfg
 File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
 )
 Package graphics Info: Driver file: pdftex.def on input line 106.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\pdftex.def
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\pdftex.def
 File: pdftex.def 2025/09/29 v1.2d Graphics/color driver for pdftex
 ))
-\Gin@req@height=\dimen161
-\Gin@req@width=\dimen162
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
+\Gin@req@height=\dimen163
+\Gin@req@width=\dimen164
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
 Package: xcolor 2024/09/29 v3.02 LaTeX color extensions (UK)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.cfg
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.cfg
 File: color.cfg 2016/01/02 v1.6 sample color configuration
 )
 Package xcolor Info: Driver file: pdftex.def on input line 274.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.ltx)
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.ltx)
 Package xcolor Info: Model `cmy' substituted by `cmy0' on input line 1349.
 Package xcolor Info: Model `hsb' substituted by `rgb' on input line 1353.
 Package xcolor Info: Model `RGB' extended on input line 1365.
@@ -271,104 +274,104 @@ Package xcolor Info: Model `tHsb' substituted by `hsb' on input line 1369.
 Package xcolor Info: Model `HSB' substituted by `hsb' on input line 1370.
 Package xcolor Info: Model `Gray' substituted by `gray' on input line 1371.
 Package xcolor Info: Model `wave' substituted by `hsb' on input line 1372.
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement-testphase\xcolor-patches-tmp-ltx.sty
-Package: xcolor-patches-tmp-ltx 2026-01-23 v0.96y patch xcolor for l3color
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/graphics\dvipsnam.def
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement\xcolor-patches-tmp-ltx.sty
+Package: xcolor-patches-tmp-ltx 2026-04-21 v0.97a patch xcolor for l3color
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/graphics\dvipsnam.def
 File: dvipsnam.def 2016/06/17 v3.0m Driver-dependent file (DPC,SPQR)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\svgnam.def
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\svgnam.def
 File: svgnam.def 2024/09/29 v3.02 Predefined colors according to SVG 1.1 (UK)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\x11nam.def
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\x11nam.def
 File: x11nam.def 2024/09/29 v3.02 Predefined colors according to Unix/X11 (UK)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/natbib\natbib.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/natbib\natbib.sty
 Package: natbib 2010/09/13 8.31b (PWD, AO)
 \bibhang=\skip60
 \bibsep=\skip61
 LaTeX Info: Redefining \cite on input line 694.
-\c@NAT@ctr=\count324
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/booktabs\booktabs.sty
+\c@NAT@ctr=\count327
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/booktabs\booktabs.sty
 Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
-\heavyrulewidth=\dimen163
-\lightrulewidth=\dimen164
-\cmidrulewidth=\dimen165
-\belowrulesep=\dimen166
-\belowbottomsep=\dimen167
-\aboverulesep=\dimen168
-\abovetopsep=\dimen169
-\cmidrulesep=\dimen170
-\cmidrulekern=\dimen171
-\defaultaddspace=\dimen172
-\@cmidla=\count325
-\@cmidlb=\count326
-\@aboverulesep=\dimen173
-\@belowrulesep=\dimen174
-\@thisruleclass=\count327
-\@lastruleclass=\count328
-\@thisrulewidth=\dimen175
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tools\dcolumn.sty
+\heavyrulewidth=\dimen165
+\lightrulewidth=\dimen166
+\cmidrulewidth=\dimen167
+\belowrulesep=\dimen168
+\belowbottomsep=\dimen169
+\aboverulesep=\dimen170
+\abovetopsep=\dimen171
+\cmidrulesep=\dimen172
+\cmidrulekern=\dimen173
+\defaultaddspace=\dimen174
+\@cmidla=\count328
+\@cmidlb=\count329
+\@aboverulesep=\dimen175
+\@belowrulesep=\dimen176
+\@thisruleclass=\count330
+\@lastruleclass=\count331
+\@thisrulewidth=\dimen177
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tools\dcolumn.sty
 Package: dcolumn 2025/10/21 v1.06 decimal alignment package (DPC)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption.sty
 Package: caption 2023/08/05 v3.6o Customizing captions (AR)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption3.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption3.sty
 Package: caption3 2023/07/31 v2.4d caption3 kernel (AR)
-\caption@tempdima=\dimen176
-\captionmargin=\dimen177
-\caption@leftmargin=\dimen178
-\caption@rightmargin=\dimen179
-\caption@width=\dimen180
-\caption@indent=\dimen181
-\caption@parindent=\dimen182
-\caption@hangindent=\dimen183
+\caption@tempdima=\dimen178
+\captionmargin=\dimen179
+\caption@leftmargin=\dimen180
+\caption@rightmargin=\dimen181
+\caption@width=\dimen182
+\caption@indent=\dimen183
+\caption@parindent=\dimen184
+\caption@hangindent=\dimen185
 Package caption Info: Standard document class detected.
 )
-\c@caption@flags=\count329
-\c@continuedfloat=\count330
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/caption\subcaption.sty
+\c@caption@flags=\count332
+\c@continuedfloat=\count333
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/caption\subcaption.sty
 Package: subcaption 2023/07/28 v1.6b Sub-captions (AR)
 Package caption Info: New subtype `subfigure' on input line 238.
-\c@subfigure=\count331
+\c@subfigure=\count334
 Package caption Info: New subtype `subtable' on input line 238.
-\c@subtable=\count332
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/mathtools\mathtools.sty
+\c@subtable=\count335
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/mathtools\mathtools.sty
 Package: mathtools 2024/10/04 v1.31 mathematical typesetting tools
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tools\calc.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tools\calc.sty
 Package: calc 2025/03/01 v4.3b Infix arithmetic (KKT,FJ)
-\calc@Acount=\count333
-\calc@Bcount=\count334
-\calc@Adimen=\dimen184
-\calc@Bdimen=\dimen185
+\calc@Acount=\count336
+\calc@Bcount=\count337
+\calc@Adimen=\dimen186
+\calc@Bdimen=\dimen187
 \calc@Askip=\skip62
 \calc@Bskip=\skip63
 LaTeX Info: Redefining \setlength on input line 86.
 LaTeX Info: Redefining \addtolength on input line 87.
-\calc@Ccount=\count335
+\calc@Ccount=\count338
 \calc@Cskip=\skip64
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/mathtools\mhsetup.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/mathtools\mhsetup.sty
 Package: mhsetup 2021/03/18 v1.4 programming setup (MH)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsmath.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsmath.sty
 Package: amsmath 2025/07/09 v2.17z AMS math features
 \@mathmargin=\skip65
 
 For additional information on amsmath, use the `?' option.
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amstext.sty
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amstext.sty
 Package: amstext 2024/11/17 v2.01 AMS text
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsgen.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsgen.sty
 File: amsgen.sty 1999/11/30 v2.0 generic functions
 \@emptytoks=\toks20
-\ex@=\dimen186
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsbsy.sty
+\ex@=\dimen188
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsbsy.sty
 Package: amsbsy 1999/11/29 v1.2d Bold Symbols
-\pmbraise@=\dimen187
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsopn.sty
+\pmbraise@=\dimen189
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsopn.sty
 Package: amsopn 2022/04/08 v2.04 operator names
 )
-\inf@bad=\count336
+\inf@bad=\count339
 LaTeX Info: Redefining \frac on input line 233.
-\uproot@=\count337
-\leftroot@=\count338
+\uproot@=\count340
+\leftroot@=\count341
 LaTeX Info: Redefining \overline on input line 398.
 LaTeX Info: Redefining \colon on input line 409.
-\classnum@=\count339
-\DOTSCASE@=\count340
+\classnum@=\count342
+\DOTSCASE@=\count343
 LaTeX Info: Redefining \ldots on input line 495.
 LaTeX Info: Redefining \dots on input line 498.
 LaTeX Info: Redefining \cdots on input line 619.
@@ -378,60 +381,60 @@ LaTeX Info: Redefining \big on input line 721.
 LaTeX Info: Redefining \Big on input line 722.
 LaTeX Info: Redefining \bigg on input line 723.
 LaTeX Info: Redefining \Bigg on input line 724.
-\big@size=\dimen188
+\big@size=\dimen190
 LaTeX Font Info:    Redeclaring font encoding OML on input line 742.
 LaTeX Font Info:    Redeclaring font encoding OMS on input line 743.
-\macc@depth=\count341
+\macc@depth=\count344
 LaTeX Info: Redefining \bmod on input line 904.
 LaTeX Info: Redefining \pmod on input line 909.
 LaTeX Info: Redefining \smash on input line 939.
 LaTeX Info: Redefining \relbar on input line 969.
 LaTeX Info: Redefining \Relbar on input line 970.
-\c@MaxMatrixCols=\count342
+\c@MaxMatrixCols=\count345
 \dotsspace@=\muskip17
-\c@parentequation=\count343
-\dspbrk@lvl=\count344
+\c@parentequation=\count346
+\dspbrk@lvl=\count347
 \tag@help=\toks21
-\row@=\count345
-\column@=\count346
-\maxfields@=\count347
+\row@=\count348
+\column@=\count349
+\maxfields@=\count350
 \andhelp@=\toks22
-\eqnshift@=\dimen189
-\alignsep@=\dimen190
-\tagshift@=\dimen191
-\tagwidth@=\dimen192
-\totwidth@=\dimen193
-\lineht@=\dimen194
+\eqnshift@=\dimen191
+\alignsep@=\dimen192
+\tagshift@=\dimen193
+\tagwidth@=\dimen194
+\totwidth@=\dimen195
+\lineht@=\dimen196
 \@envbody=\toks23
 \multlinegap=\skip66
 \multlinetaggap=\skip67
 \mathdisplay@stack=\toks24
 LaTeX Info: Redefining \[ on input line 2950.
 LaTeX Info: Redefining \] on input line 2951.
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-amsmath.ltx
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-amsmath.ltx
 File: latex-lab-amsmath.ltx 2025-09-29 v0.1i amsmath adaptions
 LaTeX Info: Redefining \eqref on input line 57.
 )
-\g_MT_multlinerow_int=\count348
-\l_MT_multwidth_dim=\dimen195
+\g_MT_multlinerow_int=\count351
+\l_MT_multwidth_dim=\dimen197
 \origjot=\skip68
-\l_MT_shortvdotswithinadjustabove_dim=\dimen196
-\l_MT_shortvdotswithinadjustbelow_dim=\dimen197
-\l_MT_above_intertext_sep=\dimen198
-\l_MT_below_intertext_sep=\dimen199
-\l_MT_above_shortintertext_sep=\dimen256
-\l_MT_below_shortintertext_sep=\dimen257
+\l_MT_shortvdotswithinadjustabove_dim=\dimen198
+\l_MT_shortvdotswithinadjustbelow_dim=\dimen199
+\l_MT_above_intertext_sep=\dimen256
+\l_MT_below_intertext_sep=\dimen257
+\l_MT_above_shortintertext_sep=\dimen258
+\l_MT_below_shortintertext_sep=\dimen259
 \xmathstrut@box=\box64
-\xmathstrut@dim=\dimen258
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-mathtools.ltx
+\xmathstrut@dim=\dimen260
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/latex-lab\latex-lab-mathtools.ltx
 File: latex-lab-mathtools.ltx 2024-07-13 v0.1a mathtools adaptions
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.sty
 Package: fontenc 2025/07/18 v2.1d Standard LaTeX package
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/cyrillic\t2aenc.def
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/cyrillic\t2aenc.def
 File: t2aenc.def 2023/11/07 v1.0k Cyrillic encoding definition file
 Now handling font encoding T2A ...
 ... processing UTF-8 mapping file for font encoding T2A
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/base\t2aenc.dfu
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/base\t2aenc.dfu
 File: t2aenc.dfu 2022/06/07 v1.3c UTF-8 support
    defining Unicode char U+00A4 (decimal 164)
    defining Unicode char U+00A7 (decimal 167)
@@ -631,11 +634,11 @@ File: t2aenc.dfu 2022/06/07 v1.3c UTF-8 support
    defining Unicode char U+FB04 (decimal 64260)
    defining Unicode char U+FB05 (decimal 64261)
    defining Unicode char U+FB06 (decimal 64262)
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/vntex\t5enc.def
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/vntex\t5enc.def
 File: t5enc.def 2006/11/21 v1.4 Vietnamese T5 encoding
 Now handling font encoding T5 ...
 ... processing UTF-8 mapping file for font encoding T5
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/vntex\t5enc.dfu
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/vntex\t5enc.dfu
 File: t5enc.dfu 2006/08/19 v1.1 UTF8 support for Vietnamese
    defining Unicode char U+00AB (decimal 171)
    defining Unicode char U+00BB (decimal 187)
@@ -788,11 +791,11 @@ File: t5enc.dfu 2006/08/19 v1.1 UTF8 support for Vietnamese
    defining Unicode char U+2039 (decimal 8249)
    defining Unicode char U+203A (decimal 8250)
    defining Unicode char U+2423 (decimal 9251)
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\lgrenc.def
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\lgrenc.def
 File: lgrenc.def 2023-09-12 2.5 LGR Greek font encoding definitions
 Now handling font encoding LGR ...
 ... processing UTF-8 mapping file for font encoding LGR
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/greek-inputenc\lgrenc.dfu
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/greek-inputenc\lgrenc.dfu
 File: lgrenc.dfu 2023-03-21 1.9 UTF-8 support for Greek
    defining Unicode char U+00A8 (decimal 168)
    defining Unicode char U+00AB (decimal 171)
@@ -1143,56 +1146,56 @@ File: lgrenc.dfu 2023-03-21 1.9 UTF-8 support for Greek
    defining Unicode char U+10145 (decimal 65861)
    defining Unicode char U+10146 (decimal 65862)
    defining Unicode char U+10147 (decimal 65863)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\greek-fontenc.def
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\greek-fontenc.def
 File: greek-fontenc.def 2023-09-12 2.5 Common Greek font encoding definitions
 LaTeX Encoding Info:    Ignoring declaration for text command \accACUTE (encoding LGR) on input line 251.
 LaTeX Encoding Info:    Ignoring declaration for text command \accGRAVE (encoding LGR) on input line 259.
 LaTeX Encoding Info:    Ignoring declaration for text command \accTILDE (encoding LGR) on input line 267.
-))) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel\babel.sty
-Package: babel 2025/12/11 v25.17 The multilingual framework for LuaLaTeX, pdfLaTeX and XeLaTeX
-\babel@savecnt=\count349
-LaTeX Encoding Info:    Redeclaring text command \ij (encoding OT1) on input line 2068.
-LaTeX Encoding Info:    Redeclaring text command \IJ (encoding OT1) on input line 2070.
-LaTeX Encoding Info:    Redeclaring text command \ij (encoding T1) on input line 2072.
-LaTeX Encoding Info:    Redeclaring text command \IJ (encoding T1) on input line 2073.
-LaTeX Encoding Info:    Ignoring declaration for text command \ij (encoding ?) on input line 2074.
-LaTeX Encoding Info:    Ignoring declaration for text command \IJ (encoding ?) on input line 2076.
-LaTeX Encoding Info:    Ignoring declaration for text command \SS (encoding ?) on input line 2101.
-\U@D=\dimen259
+))) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel\babel.sty
+Package: babel 2026/04/15 v26.6 The multilingual framework for LuaLaTeX, pdfLaTeX and XeLaTeX
+\babel@savecnt=\count352
+LaTeX Encoding Info:    Redeclaring text command \ij (encoding OT1) on input line 2078.
+LaTeX Encoding Info:    Redeclaring text command \IJ (encoding OT1) on input line 2080.
+LaTeX Encoding Info:    Redeclaring text command \ij (encoding T1) on input line 2082.
+LaTeX Encoding Info:    Redeclaring text command \IJ (encoding T1) on input line 2083.
+LaTeX Encoding Info:    Ignoring declaration for text command \ij (encoding ?) on input line 2084.
+LaTeX Encoding Info:    Ignoring declaration for text command \IJ (encoding ?) on input line 2086.
+LaTeX Encoding Info:    Ignoring declaration for text command \SS (encoding ?) on input line 2111.
+\U@D=\dimen261
 \l@unhyphenated=\language79
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel\txtbabel.def)
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel\txtbabel.def)
 \bbl@readstream=\read2
-\bbl@dirlevel=\count350
+\bbl@dirlevel=\count353
 Package babel Info: Configuration files are deprecated, as
 (babel)             they can break document portability.
-(babel)             Reported on input line 4196.
+(babel)             Reported on input line 4206.
 
 *************************************
 * Local config file bblopts.cfg used
 *
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/arabi\bblopts.cfg
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/arabi\bblopts.cfg
 File: bblopts.cfg 2005/09/08 v0.1 add Arabic and Farsi to "declared" options of babel
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/el\babel-greek.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/ru\babel-russian.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/vi\babel-vietnamese.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/de\babel-german.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/el\babel-greek.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/vi\babel-vietnamese.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/ru\babel-russian.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/en\babel-usenglish.tex)
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/el\babel-greek.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/ru\babel-russian.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/vi\babel-vietnamese.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/de\babel-german.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/el\babel-greek.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/vi\babel-vietnamese.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/ru\babel-russian.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/en\babel-usenglish.tex)
 Package babel Info: Importing font and identification data for greek
-(babel)             from babel-el.ini. Reported on input line 4320.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-greek\greek.ldf
+(babel)             from babel-el.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-greek\greek.ldf
 Language: greek 2023/10/13 1.15 Greek support for the babel system
-\bbl@monogreek=\count351
-\bbl@polygreek=\count352
-\bbl@ancientgreek=\count353
+\bbl@monogreek=\count354
+\bbl@polygreek=\count355
+\bbl@ancientgreek=\count356
 LaTeX Encoding Info:    Ignoring declaration for text command \textmugreek (encoding LGR) on input line 638.
 )
 Package babel Info: Importing font and identification data for russian
-(babel)             from babel-ru.ini. Reported on input line 4320.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-russian\russianb.ldf
+(babel)             from babel-ru.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-russian\russianb.ldf
 File: russianb.ldf 2021/01/10 1.3m Russian support for the Babel system
 Language: russian 2020/09/09 1.3k Russian support for the Babel system
 Package babel Info: Making " an active character on input line 124.
 Package babel Info: Default for \cyrdash is provided on input line 163.
 )
 Package babel Info: Importing font and identification data for vietnamese
-(babel)             from babel-vi.ini. Reported on input line 4320.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-vietnamese\vietnamese.ldf
+(babel)             from babel-vi.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-vietnamese\vietnamese.ldf
 Language: vietnamese 
 
 
@@ -1207,38 +1210,32 @@ Package babel Info: Hyphen rules for 'vietnamese' set to \l@english
 Package babel Info: Hyphen rules for 'vietnam' set to \l@english
 (babel)             (\language0). Reported on input line 38.
 )
-
-Package babel Warning: The name 'german' with the 'ldf' mechanism is
-(babel)                currently assigned to the old 1901 variant of German.
-(babel)                For modern post-1996 German, use the name 'ngerman'.
-(babel)                Reported on input line 4320.
-
 Package babel Info: Importing font and identification data for german
-(babel)             from babel-de-1901.ini. Reported on input line 4320.
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-german\german.ldf
+(babel)             from babel-de.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-german\german.ldf
 Language: german 
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-german\babel-german.def))
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-german\babel-german.def))
 Package babel Info: Importing font and identification data for greek
-(babel)             from babel-el.ini. Reported on input line 4320.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-greek\greek.ldf
+(babel)             from babel-el.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-greek\greek.ldf
 Language: greek 2023/10/13 1.15 Greek support for the babel system
 )
 Package babel Info: Importing font and identification data for vietnamese
-(babel)             from babel-vi.ini. Reported on input line 4320.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-vietnamese\vietnamese.ldf
+(babel)             from babel-vi.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-vietnamese\vietnamese.ldf
 Language: vietnamese 
 )
 Package babel Info: Importing font and identification data for russian
-(babel)             from babel-ru.ini. Reported on input line 4320.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-russian\russianb.ldf
+(babel)             from babel-ru.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-russian\russianb.ldf
 File: russianb.ldf 2021/01/10 1.3m Russian support for the Babel system
 Language: russian 2020/09/09 1.3k Russian support for the Babel system
 )
 Package babel Info: Importing font and identification data for USenglish
-(babel)             from babel-en-US.ini. Reported on input line 4320.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-english\USenglish.ldf
+(babel)             from babel-en-US.ini. Reported on input line 4330.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-english\USenglish.ldf
 Language: USenglish 2017/06/06 v3.3r English support from the babel system
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/babel-english\english.ldf
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/babel-english\english.ldf
 Language: english 2017/06/06 v3.3r English support from the babel system
 Package babel Info: Hyphen rules for 'canadian' set to \l@english
 (babel)             (\language0). Reported on input line 102.
@@ -1246,75 +1243,75 @@ Package babel Info: Hyphen rules for 'australian' set to \l@ukenglish
 (babel)             (\language73). Reported on input line 105.
 Package babel Info: Hyphen rules for 'newzealand' set to \l@ukenglish
 (babel)             (\language73). Reported on input line 108.
-))) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\newtxtext.sty
+))) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\newtxtext.sty
 Package: newtxtext 2024/04/01 v1.744(Michael Sharpe) latex and unicode latex support for TeXGyreTermesX
- `newtxtext' v1.744, 2024/04/01 Text macros taking advantage of TeXGyre Termes and its extensions (msharpe) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/xpatch\xpatch.sty (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/l3kernel\expl3.sty
-Package: expl3 2025-12-24 L3 programming layer (loader) 
+ `newtxtext' v1.744, 2024/04/01 Text macros taking advantage of TeXGyre Termes and its extensions (msharpe) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/xpatch\xpatch.sty (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/l3kernel\expl3.sty
+Package: expl3 2026-03-20 L3 programming layer (loader) 
 )
 Package: xpatch 2020/03/25 v0.3a Extending etoolbox patching commands
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/l3packages/xparse\xparse.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/l3packages/xparse\xparse.sty
 Package: xparse 2025-10-09 L3 Experimental document command parser
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/xkeyval\xkeyval.sty
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/xkeyval\xkeyval.sty
 Package: xkeyval 2022/06/16 v2.9 package option processing (HA)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/xkeyval\xkeyval.tex (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/xkeyval\xkvutils.tex
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/xkeyval\xkeyval.tex (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/xkeyval\xkvutils.tex
 \XKV@toks=\toks25
 \XKV@tempa@toks=\toks26
 )
-\XKV@depth=\count354
+\XKV@depth=\count357
 File: xkeyval.tex 2014/12/03 v2.7a key=value parser (HA)
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/base\textcomp.sty
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/base\textcomp.sty
 Package: textcomp 2024/04/24 v2.1b Standard LaTeX package
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/xstring\xstring.sty (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/xstring\xstring.tex
-\xs_counta=\count355
-\xs_countb=\count356
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/xstring\xstring.sty (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/xstring\xstring.tex
+\xs_counta=\count358
+\xs_countb=\count359
 )
 Package: xstring 2023/08/22 v1.86 String manipulations (CT)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/base\ifthen.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/base\ifthen.sty
 Package: ifthen 2024/03/16 v1.1e Standard LaTeX ifthen package (DPC)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/carlisle\scalefnt.sty)
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/carlisle\scalefnt.sty)
 LaTeX Font Info:    Setting ntxLF sub-encoding to TS1/0 on input line 24.
 LaTeX Font Info:    Setting ntxTLF sub-encoding to TS1/0 on input line 24.
 LaTeX Font Info:    Setting ntxOsF sub-encoding to TS1/0 on input line 24.
 LaTeX Font Info:    Setting ntxTOsF sub-encoding to TS1/0 on input line 24.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/binhex\binhex.tex)
-\ntx@tmpcnta=\count357
-\ntx@cnt=\count358
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/fontaxes\fontaxes.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/binhex\binhex.tex)
+\ntx@tmpcnta=\count360
+\ntx@cnt=\count361
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/fontaxes\fontaxes.sty
 Package: fontaxes 2026-01-02 v2.0.2 Font selection axes (deprecated)
 Applying: [2024-11-01] Use figureversions if present on input line 74.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/figureversions\figureversions.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/figureversions\figureversions.sty
 Package: figureversions 2025-04-29 v1.0.1 Figure versions
 )
 Already applied: [0000-00-00] Fall back to v1 on input line 76.
 )
-\tx@sixem=\dimen260
-\tx@y=\dimen261
-\tx@x=\dimen262
-\tx@tmpdima=\dimen263
-\tx@tmpdimb=\dimen264
-\tx@tmpdimc=\dimen265
-\tx@tmpdimd=\dimen266
-\tx@tmpdime=\dimen267
-\tx@tmpdimf=\dimen268
-\tx@dimA=\dimen269
-\tx@dimAA=\dimen270
-\tx@dimB=\dimen271
-\tx@dimBB=\dimen272
-\tx@dimC=\dimen273
+\tx@sixem=\dimen262
+\tx@y=\dimen263
+\tx@x=\dimen264
+\tx@tmpdima=\dimen265
+\tx@tmpdimb=\dimen266
+\tx@tmpdimc=\dimen267
+\tx@tmpdimd=\dimen268
+\tx@tmpdime=\dimen269
+\tx@tmpdimf=\dimen270
+\tx@dimA=\dimen271
+\tx@dimAA=\dimen272
+\tx@dimB=\dimen273
+\tx@dimBB=\dimen274
+\tx@dimC=\dimen275
 LaTeX Info: Redefining \oldstylenums on input line 902.
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/inconsolata\inconsolata.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/inconsolata\inconsolata.sty
 Package: inconsolata 2019/05/17 v1.12
  `inconsolata-zi4' v1.12, 2019/05/17 Text macros for Inconsolata (msharpe)
-\zifour@ocount=\count359
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\newtxmath.sty
+\zifour@ocount=\count362
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\newtxmath.sty
 Package: newtxmath 2024/09/22 v1.754
- `newtxmath' v1.754, 2024/09/22 Math macros based originally on txfonts (msharpe) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/oberdiek\centernot.sty
+ `newtxmath' v1.754, 2024/09/22 Math macros based originally on txfonts (msharpe) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/oberdiek\centernot.sty
 Package: centernot 2016/05/16 v1.4 Centers the not symbol horizontally (HO)
 )
-\tx@cntz=\count360
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/binhex\binhex.tex)
-\tx@Isdigit=\count361
-\tx@IsAlNum=\count362
+\tx@cntz=\count363
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/binhex\binhex.tex)
+\tx@Isdigit=\count364
+\tx@IsAlNum=\count365
 \tx@tA=\toks27
 \tx@tB=\toks28
 \tx@su=\read3
@@ -1415,7 +1412,7 @@ LaTeX Font Info:    Redeclaring math accent \ddot on input line 992.
 LaTeX Font Info:    Redeclaring math accent \vec on input line 2057.
 LaTeX Info: Redefining \Bbbk on input line 2847.
 LaTeX Info: Redefining \not on input line 2995.
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tools\bm.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tools\bm.sty
 Package: bm 2025/10/21 v1.2g Bold Symbol Support (DPC/FMi)
 \symboldoperators=\mathgroup8
 \symboldletters=\mathgroup9
@@ -1423,7 +1420,7 @@ Package: bm 2025/10/21 v1.2g Bold Symbol Support (DPC/FMi)
 \symboldlargesymbols=\mathgroup11
 LaTeX Font Info:    Redeclaring math alphabet \mathbf on input line 149.
 )
-\c@mv@sansbold=\count363
+\c@mv@sansbold=\count366
 LaTeX Font Info:    Overwriting symbol font `letters' in version `sansbold'
 (Font)                  OML/ntxmi/m/it --> OML/ntxsfmi/b/it on input line 1234.
 LaTeX Font Info:    Overwriting symbol font `lettersA' in version `sansbold'
@@ -1438,7 +1435,7 @@ LaTeX Font Info:    Overwriting symbol font `operators' in version `sansbold'
 (Font)                  OT1/minntx/m/n --> OT1/qhv/b/n on input line 1239.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `sansbold'
 (Font)                  OT1/cmss/m/n --> T1/qhv/b/n on input line 1240.
-\c@mv@sans=\count364
+\c@mv@sans=\count367
 LaTeX Font Info:    Overwriting symbol font `letters' in version `sans'
 (Font)                  OML/ntxmi/m/it --> OML/ntxsfmi/m/it on input line 1244.
 LaTeX Font Info:    Overwriting symbol font `lettersA' in version `sans'
@@ -1453,7 +1450,7 @@ LaTeX Font Info:    Overwriting symbol font `operators' in version `sans'
 (Font)                  OT1/minntx/m/n --> OT1/qhv/minntx/n on input line 1249.
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `sans'
 (Font)                  OT1/cmss/m/n --> T1/qhv/m/n on input line 1250.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/fancyhdr\fancyhdr.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/fancyhdr\fancyhdr.sty
 Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
 \f@nch@headwidth=\skip69
 \f@nch@offset@elh=\skip70
@@ -1470,69 +1467,69 @@ Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
 \f@nch@widthC=\skip81
 \f@nch@widthR=\skip82
 \@temptokenb=\toks30
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfx\glyphtounicode-cmr.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfx\glyphtounicode-ntx.tex) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.sty
-Package: hyperref 2025-07-12 v7.01o Hypertext links for LaTeX
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfx\glyphtounicode-cmr.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfx\glyphtounicode-ntx.tex) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.sty
+Package: hyperref 2026-04-24 v7.01q Hypertext links for LaTeX
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.sty
 Package: kvsetkeys 2022-10-05 v1.19 Key value parser (HO)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys\kvdefinekeys.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys\kvdefinekeys.sty
 Package: kvdefinekeys 2019-12-19 v1.6 Define keys (HO)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pdfescape.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pdfescape.sty
 Package: pdfescape 2019/12/09 v1.15 Implements pdfTeX's escape features (HO)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxcmds.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxcmds.sty
 Package: ltxcmds 2023-12-04 v1.26 LaTeX kernel commands for general use (HO)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\pdftexcmds.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\pdftexcmds.sty
 Package: pdftexcmds 2020-06-27 v0.33 Utility functions of pdfTeX for LuaTeX (HO)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\infwarerr.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\infwarerr.sty
 Package: infwarerr 2019/12/03 v1.5 Providing info/warning/error messages (HO)
 )
 Package pdftexcmds Info: \pdf@primitive is available.
 Package pdftexcmds Info: \pdf@ifprimitive is available.
 Package pdftexcmds Info: \pdfdraftmode found.
-)) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolor.sty
+)) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolor.sty
 Package: hycolor 2020-01-27 v1.10 Color options for hyperref/bookmark (HO)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\nameref.sty
-Package: nameref 2025-06-21 v2.57 Cross-referencing by name of section
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refcount.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\nameref.sty
+Package: nameref 2026-01-29 v2.58 Cross-referencing by name of section
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refcount.sty
 Package: refcount 2019/12/15 v3.6 Data extraction from label references (HO)
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestring\gettitlestring.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestring\gettitlestring.sty
 Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.sty
 Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
 ))
-\c@section@level=\count365
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/stringenc\stringenc.sty
+\c@section@level=\count368
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/stringenc\stringenc.sty
 Package: stringenc 2019/11/29 v1.12 Convert strings between diff. encodings (HO)
 )
-\@linkdim=\dimen274
-\Hy@linkcounter=\count366
-\Hy@pagecounter=\count367
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def
-File: pd1enc.def 2025-07-12 v7.01o Hyperref: PDFDocEncoding definition (HO)
+\@linkdim=\dimen276
+\Hy@linkcounter=\count369
+\Hy@pagecounter=\count370
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def
+File: pd1enc.def 2026-04-24 v7.01q Hyperref: PDFDocEncoding definition (HO)
 Now handling font encoding PD1 ...
 ... no UTF-8 mapping file for font encoding PD1
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.sty
 Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
 )
-\Hy@SavedSpaceFactor=\count368
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def
-File: puenc.def 2025-07-12 v7.01o Hyperref: PDF Unicode definition (HO)
+\Hy@SavedSpaceFactor=\count371
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def
+File: puenc.def 2026-04-24 v7.01q Hyperref: PDF Unicode definition (HO)
 Now handling font encoding PU ...
 ... no UTF-8 mapping file for font encoding PU
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\puenc-greek.def
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\puenc-greek.def
 File: puenc-greek.def 2023-09-12 2.5 Greek LICRs for PDF strings
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\greek-fontenc.def
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/greek-fontenc\greek-fontenc.def
 File: greek-fontenc.def 2023-09-12 2.5 Common Greek font encoding definitions
 )
 LaTeX Encoding Info:    Redeclaring text command \textmu (encoding PU) on input line 179.
 )
 LaTeX Encoding Info:    Redeclaring text command \textohm (encoding PU) on input line 1176.
 )
-Package hyperref Info: Option `unicode' set `true' on input line 3160.
-Package hyperref Info: Option `colorlinks' set `true' on input line 4066.
-Package hyperref Info: Option `colorlinks' set `true' on input line 4066.
-Package hyperref Info: Option `psdextra' set `true' on input line 4066.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\psdextra.def
-File: psdextra.def 2025-07-12 v7.01o Hyperref: Additions to PDF string support
+Package hyperref Info: Option `unicode' set `true' on input line 3164.
+Package hyperref Info: Option `colorlinks' set `true' on input line 4070.
+Package hyperref Info: Option `colorlinks' set `true' on input line 4070.
+Package hyperref Info: Option `psdextra' set `true' on input line 4070.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\psdextra.def
+File: psdextra.def 2026-04-24 v7.01q Hyperref: Additions to PDF string support
 LaTeX Encoding Info:    Redeclaring text command \textGamma (encoding PU) on input line 39.
 LaTeX Encoding Info:    Redeclaring text command \textDelta (encoding PU) on input line 40.
 LaTeX Encoding Info:    Redeclaring text command \textTheta (encoding PU) on input line 41.
@@ -1570,67 +1567,67 @@ LaTeX Encoding Info:    Redeclaring text command \textchi (encoding PU) on input
 LaTeX Encoding Info:    Redeclaring text command \textpsi (encoding PU) on input line 73.
 LaTeX Encoding Info:    Redeclaring text command \textomega (encoding PU) on input line 74.
 )
-Package hyperref Info: Hyper figures OFF on input line 4195.
-Package hyperref Info: Link nesting OFF on input line 4200.
-Package hyperref Info: Hyper index ON on input line 4203.
-Package hyperref Info: Plain pages OFF on input line 4210.
-Package hyperref Info: Backreferencing OFF on input line 4215.
+Package hyperref Info: Hyper figures OFF on input line 4199.
+Package hyperref Info: Link nesting OFF on input line 4204.
+Package hyperref Info: Hyper index ON on input line 4207.
+Package hyperref Info: Plain pages OFF on input line 4214.
+Package hyperref Info: Backreferencing OFF on input line 4219.
 Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
-Package hyperref Info: Bookmarks ON on input line 4462.
-\c@Hy@tempcnt=\count369
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty
+Package hyperref Info: Bookmarks ON on input line 4466.
+\c@Hy@tempcnt=\count372
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty
 \Urlmuskip=\muskip18
 Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
 )
-LaTeX Info: Redefining \url on input line 4801.
-\XeTeXLinkMargin=\dimen275
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitset.sty
+LaTeX Info: Redefining \url on input line 4805.
+\XeTeXLinkMargin=\dimen277
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitset.sty
 Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\bigintcalc.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\bigintcalc.sty
 Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO)
 ))
-\Fld@menulength=\count370
-\Field@Width=\dimen276
-\Fld@charsize=\dimen277
-Package hyperref Info: Hyper figures OFF on input line 6078.
-Package hyperref Info: Link nesting OFF on input line 6083.
-Package hyperref Info: Hyper index ON on input line 6086.
-Package hyperref Info: backreferencing OFF on input line 6093.
-Package hyperref Info: Link coloring ON on input line 6096.
-Package hyperref Info: Link coloring with OCG OFF on input line 6103.
-Package hyperref Info: PDF/A mode ON on input line 6106.
-\Hy@abspage=\count371
-\c@Item=\count372
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puvnenc.def
-File: puvnenc.def 2025-07-12 v7.01o Hyperref: Additions to puenc.def for VnTeX
+\Fld@menulength=\count373
+\Field@Width=\dimen278
+\Fld@charsize=\dimen279
+Package hyperref Info: Hyper figures OFF on input line 6091.
+Package hyperref Info: Link nesting OFF on input line 6096.
+Package hyperref Info: Hyper index ON on input line 6099.
+Package hyperref Info: backreferencing OFF on input line 6106.
+Package hyperref Info: Link coloring ON on input line 6109.
+Package hyperref Info: Link coloring with OCG OFF on input line 6116.
+Package hyperref Info: PDF/A mode ON on input line 6119.
+\Hy@abspage=\count374
+\c@Item=\count375
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puvnenc.def
+File: puvnenc.def 2026-04-24 v7.01q Hyperref: Additions to puenc.def for VnTeX
 LaTeX Encoding Info:    Redeclaring text command \h (encoding PU) on input line 53.
 LaTeX Encoding Info:    Text composite with undeclared \h in encoding PU on input line 53.
 )
 Package hyperref Info: Driver (custom): hgeneric-testphase.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement-testphase\hgeneric-testphase.def
-File: hgeneric-testphase.def 2026-01-23 v0.96y generic Hyperref driver for the LaTeX PDF management bundle
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement-testphase\hyperref-colorschemes.def)
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement\hgeneric-testphase.def
+File: hgeneric-testphase.def 2026-04-21 v0.97a generic Hyperref driver for the LaTeX PDF management bundle
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/pdfmanagement\hyperref-colorschemes.def)
 LaTeX Info: Redefining \href on input line 262.
 LaTeX Info: Redefining \url on input line 348.
 \l__hyp_tmpa_box=\box65
-\l__hyp_tmpa_int=\count373
+\l__hyp_tmpa_int=\count376
 \l__hyp_dest_box=\box66
-\g__hyp_linknestlevel_int=\count374
-\HyAnn@Count=\count375
-\Fld@listcount=\count376
+\g__hyp_linknestlevel_int=\count377
+\HyAnn@Count=\count378
+\Fld@listcount=\count379
 \Hy@SectionHShift=\skip83
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/doi\doi.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/doi\doi.sty
 Package: doi 2018/09/09 handle doi numbers
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/sttools\flushend.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/sttools\flushend.sty
 Package: flushend 2025/06/18 v4.3 Balancing columns in twocolumn mode (ST)
 \flushend@@lastskip@a=\skip84
 \flushend@@lastskip@b=\skip85
-\flushend@@lastnode=\count377
-\var@@loop@iter=\count378
-\var@@temp@spread=\dimen278
-\var@@temp@a=\dimen279
-\var@@temp@loop=\dimen280
-\flushend@@page@rule=\dimen281
+\flushend@@lastnode=\count380
+\var@@loop@iter=\count381
+\var@@temp@spread=\dimen280
+\var@@temp@a=\dimen281
+\var@@temp@loop=\dimen282
+\flushend@@page@rule=\dimen283
 \flushend@@varbox@lastpage=\box67
 \flushend@@varbox@a=\box68
 \flushend@@varbox@c=\box69
@@ -1641,7 +1638,7 @@ Package: flushend 2025/06/18 v4.3 Balancing columns in twocolumn mode (ST)
 \hold@viper=\box74
 \atColsBreak=\toks31
 \atColsEnd=\toks32
-\oldbreak@skip=\dimen282
+\oldbreak@skip=\dimen284
 )
 
 Class asmeconf Info: Calling flushend package to balance column height on last page.
@@ -1651,7 +1648,7 @@ Class asmeconf Info: Calling flushend package to balance column height on last p
 \g__asmeconf_authorblock_coffin=\box75
 \g__asmeconf_affiliationblock_coffin=\box76
 \g__asmeconf_affiliationsblock_coffin=\box77
-\g_asmeconf_count_affil_int=\count379
+\g_asmeconf_count_affil_int=\count382
 \symlettersAB=\mathgroup12
 LaTeX Font Info:    Overwriting symbol font `lettersAB' in version `normal'
 (Font)                  U/ntxsfmia/m/it --> U/ntxsfmia/m/it on input line 2340.
@@ -1688,23 +1685,32 @@ LaTeX Font Info:    Overwriting symbol font `operators' in version `sans'
 LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `sans'
 (Font)                  OT1/cmss/m/n --> OT1/qhv/m/n on input line 2420.
 )
+Package babel-german Info: Using contemporary glottonyms
+(babel-german)             `german' denotes post-1996 spelling. on input line 50.
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/de\babel-german.tex
+Package babel Info: Importing basic data for german
+(babel)             from babel-de.ini. Reported on input line 15.
+)
+
+Package babel-german Warning: Hyphenation patterns `ngerman-x-latest', requested by german, not available. Falling back to legacy! on input line 50.
+
 LaTeX Font Info:    Trying to load font information for T1+ntxtlf on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\t1ntxtlf.fd
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\t1ntxtlf.fd
 File: t1ntxtlf.fd 2021/05/24 v1.1 font definition file for T1/ntx/tlf
 )
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
 (Font)              scaled to size 10.0pt on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/bookmark\bookmark.sty
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/bookmark\bookmark.sty
 Package: bookmark 2023-12-10 v1.31 PDF bookmarks (HO)
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/bookmark\bkm-pdftex.def
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/bookmark\bkm-pdftex.def
 File: bkm-pdftex.def 2023-12-10 v1.31 bookmark driver for pdfTeX and luaTeX (HO)
-\BKM@id=\count380
+\BKM@id=\count383
 )) (asmeconf-template.aux)
 \openout1 = `asmeconf-template.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/ntxmi/m/it on input line 50.
 LaTeX Font Info:    Trying to load font information for OML+ntxmi on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\omlntxmi.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\omlntxmi.fd
 File: omlntxmi.fd 2015/08/25 Fontinst v1.933 font definitions for OML/ntxmi.
 )
 LaTeX Font Info:    ... okay on input line 50.
@@ -1720,37 +1726,37 @@ LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 50.
 LaTeX Font Info:    ... okay on input line 50.
 LaTeX Font Info:    Checking defaults for U/ntxexa/m/n on input line 50.
 LaTeX Font Info:    Trying to load font information for U+ntxexa on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxexa.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxexa.fd
 File: untxexa.fd 2012/04/16 Fontinst v1.933 font definitions for U/ntxexa.
 )
 LaTeX Font Info:    ... okay on input line 50.
 LaTeX Font Info:    Checking defaults for T2A/cmr/m/n on input line 50.
 LaTeX Font Info:    Trying to load font information for T2A+cmr on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/cyrillic\t2acmr.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/cyrillic\t2acmr.fd
 File: t2acmr.fd 2001/08/11 v1.0a Computer Modern Cyrillic font definitions
 )
 LaTeX Font Info:    ... okay on input line 50.
 LaTeX Font Info:    Checking defaults for T5/cmr/m/n on input line 50.
 LaTeX Font Info:    Trying to load font information for T5+cmr on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/vntex\t5cmr.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/vntex\t5cmr.fd
 File: t5cmr.fd 1999/05/25 v2.5h Standard LaTeX font definitions
 )
 LaTeX Font Info:    ... okay on input line 50.
 LaTeX Font Info:    Checking defaults for LGR/cmr/m/n on input line 50.
 LaTeX Font Info:    Trying to load font information for LGR+cmr on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/cbfonts-fd\lgrcmr.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/cbfonts-fd\lgrcmr.fd
 File: lgrcmr.fd 2017/07/29 v1.2 Greek European Computer Regular
 )
 LaTeX Font Info:    ... okay on input line 50.
 LaTeX Font Info:    Checking defaults for LMS/ntxsy/m/n on input line 50.
 LaTeX Font Info:    Trying to load font information for LMS+ntxsy on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\lmsntxsy.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\lmsntxsy.fd
 File: lmsntxsy.fd 2016/07/02 Fontinst v1.933 font definitions for LMS/ntxsy.
 )
 LaTeX Font Info:    ... okay on input line 50.
 LaTeX Font Info:    Checking defaults for LMX/ntxexx/m/n on input line 50.
 LaTeX Font Info:    Trying to load font information for LMX+ntxexx on input line 50.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\lmxntxexx.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\lmxntxexx.fd
 File: lmxntxexx.fd 2016/07/03 Fontinst v1.933 font definitions for LMX/ntxexx.
 )
 LaTeX Font Info:    ... okay on input line 50.
@@ -1793,23 +1799,23 @@ LaTeX Font Info:    ... okay on input line 50.
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mkii
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count381
-\scratchdimen=\dimen283
+\scratchcounter=\count384
+\scratchdimen=\dimen285
 \scratchbox=\box78
-\nofMPsegments=\count382
-\nofMParguments=\count383
+\nofMPsegments=\count385
+\nofMParguments=\count386
 \everyMPshowfont=\toks33
-\MPscratchCnt=\count384
-\MPscratchDim=\dimen284
-\MPnumerator=\count385
-\makeMPintoPDFobject=\count386
+\MPscratchCnt=\count387
+\MPscratchDim=\dimen286
+\MPnumerator=\count388
+\makeMPintoPDFobject=\count389
 \everyMPtoPDFconversion=\toks34
-) (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-base.sty
+) (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopdf-base.sty
 Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
 Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 485.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sys.cfg
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sys.cfg
 File: epstopdf-sys.cfg 2021/03/18 v2.0 Configuration of epstopdf for MiKTeX
 ))
 Package caption Info: Begin \AtBeginDocument code.
@@ -1818,9 +1824,9 @@ Package caption Info: End \AtBeginDocument code.
 LaTeX Info: Command `\dddot' is already robust on input line 50.
 LaTeX Info: Command `\ddddot' is already robust on input line 50.
 LaTeX Info: Redefining \th on input line 50.
-\c@mv@tabular=\count387
-\c@mv@boldtabular=\count388
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/upquote\upquote.sty
+\c@mv@tabular=\count390
+\c@mv@boldtabular=\count391
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/upquote\upquote.sty
 Package: upquote 2012/04/19 v1.3 upright-quote and grave-accent glyphs in verbatim
 )
 LaTeX Font Info:    Trying to load font information for T5+ntxtlf on input line 50.
@@ -1845,13 +1851,13 @@ Package hyperref Info: Link coloring ON on input line 50.
 LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
 (Font)              scaled to size 10.0pt on input line 69.
 LaTeX Font Info:    Trying to load font information for T1+qhv on input line 69.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/tex-gyre\t1qhv.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/tex-gyre\t1qhv.fd
 File: t1qhv.fd 2009/09/25 v1.2 font definition file for T1/qhv
 )
 LaTeX Font Info:    Font shape `T1/qhv/b/n' will be
 (Font)              scaled to size 9.10004pt on input line 69.
 LaTeX Font Info:    Trying to load font information for OT1+minntx on input line 69.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\ot1minntx.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\ot1minntx.fd
 File: ot1minntx.fd 2023/09/09 v1.1 font definition file for OT1/minntx
 )
 LaTeX Font Info:    Font shape `OT1/minntx/m/n' will be
@@ -1879,7 +1885,7 @@ LaTeX Font Info:    Font shape `LMX/ntxexx/m/n' will be
 LaTeX Font Info:    Font shape `LMX/ntxexx/m/n' will be
 (Font)              scaled to size 5.5pt on input line 69.
 LaTeX Font Info:    Trying to load font information for U+ntxmia on input line 69.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxmia.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxmia.fd
 File: untxmia.fd 2024/04/09 Fontinst v1.933 font definitions for U/ntxmia.
 )
 LaTeX Font Info:    Font shape `U/ntxmia/m/it' will be
@@ -1889,7 +1895,7 @@ LaTeX Font Info:    Font shape `U/ntxmia/m/it' will be
 LaTeX Font Info:    Font shape `U/ntxmia/m/it' will be
 (Font)              scaled to size 5.5pt on input line 69.
 LaTeX Font Info:    Trying to load font information for U+ntxsym on input line 69.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxsym.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxsym.fd
 File: untxsym.fd 2023/08/16 Fontinst v1.933 font definitions for U/ntxsym.
 )
 LaTeX Font Info:    Font shape `U/ntxsym/m/n' will be
@@ -1899,7 +1905,7 @@ LaTeX Font Info:    Font shape `U/ntxsym/m/n' will be
 LaTeX Font Info:    Font shape `U/ntxsym/m/n' will be
 (Font)              scaled to size 5.5pt on input line 69.
 LaTeX Font Info:    Trying to load font information for U+ntxsyc on input line 69.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxsyc.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\untxsyc.fd
 File: untxsyc.fd 2012/04/12 Fontinst v1.933 font definitions for U/ntxsyc.
 )
 LaTeX Font Info:    Font shape `U/ntxsyc/m/n' will be
@@ -1939,7 +1945,7 @@ LaTeX Font Info:    Font shape `LMX/ntxexx/b/n' will be
 LaTeX Font Info:    Font shape `LMX/ntxexx/b/n' will be
 (Font)              scaled to size 5.5pt on input line 69.
 LaTeX Font Info:    Trying to load font information for U+ntxsfmia on input line 69.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtxsf\untxsfmia.fd
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtxsf\untxsfmia.fd
 File: untxsfmia.fd 2014/11/16 Fontinst v1.933 font definitions for U/ntxsfmia.
 )
 LaTeX Font Info:    Font shape `U/ntxsfmia/m/it' will be
@@ -1964,7 +1970,7 @@ Class asmeconf Warning: Missing number in an \affil tag!
 
 Class asmeconf Warning: Missing number in an \affil tag!
 
-\l__asmeconf_affilno_int=\count389
+\l__asmeconf_affilno_int=\count392
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
 (Font)              scaled to size 8.0pt on input line 69.
 LaTeX Font Info:    Font shape `OT1/minntx/m/n' will be
@@ -2022,113 +2028,115 @@ LaTeX Font Info:    Font shape `U/ntxsfmia/m/it' will be
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
 (Font)              scaled to size 6.0pt on input line 69.
 LaTeX Font Info:    Trying to load font information for TS1+ntxtlf on input line 69.
-(C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/latex/newtx\ts1ntxtlf.fd
+(C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/latex/newtx\ts1ntxtlf.fd
 File: ts1ntxtlf.fd 2015/01/18 v1.0 fd file for TS1/ntxtlf
 )
 LaTeX Font Info:    Font shape `TS1/ntxtlf/m/n' will be
 (Font)              scaled to size 6.0pt on input line 69.
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/it' will be
-(Font)              scaled to size 10.0pt on input line 86.
- (C:\Users\amalj\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/en\babel-english.tex)
+(Font)              scaled to size 10.0pt on input line 85.
+
+Underfull \vbox (badness 1005) has occurred while \output is active []
+
+ (C:\Users\Giorgos\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale/en\babel-english.tex)
 Package babel Info: Importing data for english
-(babel)             from babel-en.ini. Reported on input line 133.
+(babel)             from babel-en.ini. Reported on input line 127.
 LaTeX Font Info:    Font shape `TS1/ntxtlf/m/n' will be
-(Font)              scaled to size 10.0pt on input line 133.
- [1{C:/Users/amalj/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/tex-gyre/q-ec.enc}
+(Font)              scaled to size 10.0pt on input line 127.
+ [1{C:/Users/Giorgos/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/tex-gyre/q-ec.enc}
 
 
-{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ec-tlf.enc}{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/tex-gyre/q-ts1.enc}] [2]
-<Framework.drawio.png, id=96, 709.65125pt x 297.11pt>
+{C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ec-tlf.enc}{C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/tex-gyre/q-ts1.enc}]
+<Framework.drawio.png, id=68, 709.65125pt x 297.11pt>
 File: Framework.drawio.png Graphic file (type png)
 <use Framework.drawio.png>
-Package pdftex.def Info: Framework.drawio.png  used on input line 219.
+Package pdftex.def Info: Framework.drawio.png  used on input line 199.
 (pdftex.def)             Requested size: 257.28102pt x 107.71661pt.
 LaTeX Font Info:    Font shape `T1/ntxtlf/m/n' will be
-(Font)              scaled to size 9.0pt on input line 220.
+(Font)              scaled to size 9.0pt on input line 200.
 LaTeX Font Info:    Font shape `T1/ntxtlf/b/n' will be
-(Font)              scaled to size 9.0pt on input line 220.
+(Font)              scaled to size 9.0pt on input line 200.
 LaTeX Font Info:    Font shape `T1/qhv/b/n' will be
-(Font)              scaled to size 8.19003pt on input line 220.
-<ax__global.png, id=102, 423.5022pt x 316.18124pt>
+(Font)              scaled to size 8.19003pt on input line 200.
+
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+[2]
+<ax__global.png, id=104, 423.5022pt x 316.18124pt>
 File: ax__global.png Graphic file (type png)
 <use ax__global.png>
-Package pdftex.def Info: ax__global.png  used on input line 285.
+Package pdftex.def Info: ax__global.png  used on input line 257.
 (pdftex.def)             Requested size: 229.2756pt x 171.17435pt.
-<ay__global.png, id=103, 410.13225pt x 316.18124pt>
+<ay__global.png, id=105, 410.13225pt x 316.18124pt>
 File: ay__global.png Graphic file (type png)
 <use ay__global.png>
-Package pdftex.def Info: ay__global.png  used on input line 294.
+Package pdftex.def Info: ay__global.png  used on input line 266.
 (pdftex.def)             Requested size: 221.63335pt x 170.86076pt.
-<vx__global.png, id=104, 419.8887pt x 316.18124pt>
+<vx__global.png, id=106, 419.8887pt x 316.18124pt>
 File: vx__global.png Graphic file (type png)
 <use vx__global.png>
-Package pdftex.def Info: vx__global.png  used on input line 304.
+Package pdftex.def Info: vx__global.png  used on input line 276.
 (pdftex.def)             Requested size: 226.72948pt x 170.7305pt.
-<vy__global.png, id=105, 403.9893pt x 316.18124pt>
+<vy__global.png, id=107, 403.9893pt x 316.18124pt>
 File: vy__global.png Graphic file (type png)
 <use vy__global.png>
-Package pdftex.def Info: vy__global.png  used on input line 313.
+Package pdftex.def Info: vy__global.png  used on input line 285.
 (pdftex.def)             Requested size: 221.63335pt x 173.46118pt.
-<lane_change_frame_distribution.png, id=106, 1140.26pt x 877.2775pt>
+<lane_change_frame_distribution.png, id=108, 1140.26pt x 877.2775pt>
 File: lane_change_frame_distribution.png Graphic file (type png)
 <use lane_change_frame_distribution.png>
-Package pdftex.def Info: lane_change_frame_distribution.png  used on input line 329.
+Package pdftex.def Info: lane_change_frame_distribution.png  used on input line 301.
 (pdftex.def)             Requested size: 224.18336pt x 172.46727pt.
-<lane_changes_per_trajectory.png, id=107, 1167.36125pt x 850.17625pt>
+<lane_changes_per_trajectory.png, id=109, 1167.36125pt x 850.17625pt>
 File: lane_changes_per_trajectory.png Graphic file (type png)
 <use lane_changes_per_trajectory.png>
-Package pdftex.def Info: lane_changes_per_trajectory.png  used on input line 338.
+Package pdftex.def Info: lane_changes_per_trajectory.png  used on input line 310.
 (pdftex.def)             Requested size: 229.2756pt x 166.97069pt.
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-<std__ax__global.png, id=108, 403.9893pt x 316.18124pt>
+<std__ax__global.png, id=110, 403.9893pt x 316.18124pt>
 File: std__ax__global.png Graphic file (type png)
 <use std__ax__global.png>
-Package pdftex.def Info: std__ax__global.png  used on input line 353.
+Package pdftex.def Info: std__ax__global.png  used on input line 325.
 (pdftex.def)             Requested size: 221.63335pt x 173.46118pt.
-<std__ay__global.png, id=109, 421.69545pt x 316.18124pt>
+<std__ay__global.png, id=111, 421.69545pt x 316.18124pt>
 File: std__ay__global.png Graphic file (type png)
 <use std__ay__global.png>
-Package pdftex.def Info: std__ay__global.png  used on input line 362.
+Package pdftex.def Info: std__ay__global.png  used on input line 334.
 (pdftex.def)             Requested size: 229.2756pt x 171.90768pt.
-<std__vx__global.png, id=110, 413.3844pt x 316.18124pt>
+<std__vx__global.png, id=112, 413.3844pt x 316.18124pt>
 File: std__vx__global.png Graphic file (type png)
 <use std__vx__global.png>
-Package pdftex.def Info: std__vx__global.png  used on input line 372.
+Package pdftex.def Info: std__vx__global.png  used on input line 344.
 (pdftex.def)             Requested size: 229.2756pt x 175.36687pt.
-<std__vy__global.png, id=111, 410.13225pt x 316.18124pt>
+<std__vy__global.png, id=113, 410.13225pt x 316.18124pt>
 File: std__vy__global.png Graphic file (type png)
 <use std__vy__global.png>
-Package pdftex.def Info: std__vy__global.png  used on input line 381.
+Package pdftex.def Info: std__vy__global.png  used on input line 353.
 (pdftex.def)             Requested size: 229.2756pt x 176.75633pt.
-
-Underfull \vbox (badness 6094) has occurred while \output is active []
-
- [3 <./Framework.drawio.png>]
-<windowize.png, id=129, 792.9625pt x 498.86375pt>
+<windowize.png, id=115, 792.9625pt x 498.86375pt>
 File: windowize.png Graphic file (type png)
 <use windowize.png>
-Package pdftex.def Info: windowize.png  used on input line 408.
+Package pdftex.def Info: windowize.png  used on input line 380.
 (pdftex.def)             Requested size: 487.8192pt x 306.90215pt.
-<DBN.drawio.png, id=131, 329.23pt x 299.1175pt>
+[3{C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ot1-tlf.enc} <./Framework.drawio.png>]
+<DBN.drawio.png, id=133, 329.23pt x 299.1175pt>
 File: DBN.drawio.png Graphic file (type png)
 <use DBN.drawio.png>
-Package pdftex.def Info: DBN.drawio.png  used on input line 424.
+Package pdftex.def Info: DBN.drawio.png  used on input line 396.
 (pdftex.def)             Requested size: 167.23108pt x 151.9363pt.
-
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
 
 
 LaTeX Warning: `h' float specifier changed to `ht'.
 
-[4{C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/newtx/ntx-ot1-tlf.enc} <./ax__global.png> <./ay__global.png> <./vx__global.png> <./vy__global.png>]
-<prediction.png, id=150, 847.165pt x 357.335pt>
+[4 <./ax__global.png> <./ay__global.png> <./vx__global.png> <./vy__global.png>]
+<prediction.png, id=151, 847.165pt x 357.335pt>
 File: prediction.png Graphic file (type png)
 <use prediction.png>
-Package pdftex.def Info: prediction.png  used on input line 505.
+Package pdftex.def Info: prediction.png  used on input line 477.
 (pdftex.def)             Requested size: 542.02501pt x 228.63364pt.
 
 
@@ -2137,18 +2145,25 @@ LaTeX Warning: `h' float specifier changed to `ht'.
 [5 <./lane_change_frame_distribution.png> <./lane_changes_per_trajectory.png>]
 Underfull \vbox (badness 10000) has occurred while \output is active []
 
- [6 <./std__ax__global.png> <./std__ay__global.png> <./std__vx__global.png> <./std__vy__global.png>] [7 <./windowize.png> <./DBN.drawio.png>] [8 <./prediction.png>]
-<confusion_matrix.png, id=204, 840.0183pt x 713.3049pt>
+ [6 <./std__ax__global.png> <./std__ay__global.png> <./std__vx__global.png> <./std__vy__global.png>] [7 <./windowize.png> <./DBN.drawio.png>]
+
+LaTeX Warning: `h' float specifier changed to `ht'.
+
+[8 <./prediction.png>]
+<confusion_matrix.png, id=208, 840.0183pt x 713.3049pt>
 File: confusion_matrix.png Graphic file (type png)
 <use confusion_matrix.png>
-Package pdftex.def Info: confusion_matrix.png  used on input line 700.
+Package pdftex.def Info: confusion_matrix.png  used on input line 672.
 (pdftex.def)             Requested size: 433.62166pt x 368.21053pt.
 
-Overfull \hbox (2.74901pt too wide) in paragraph at lines 751--760
+Overfull \hbox (2.74901pt too wide) in paragraph at lines 723--732
  [][] 
  []
 
-[9] (asmeconf-template.bbl [10 <./confusion_matrix.png>]
+[9] (asmeconf-template.bbl
+Underfull \vbox (badness 1728) has occurred while \output is active []
+
+ [10 <./confusion_matrix.png>]
 Underfull \hbox (badness 1168) in paragraph at lines 134--140
 \T1/ntxtlf/m/n/10 cisco, Armero, Car-men, Gómez-Rubio, Vir-gilio and
  []
@@ -2158,7 +2173,7 @@ Underfull \hbox (badness 10000) in paragraph at lines 181--189
 \T1/ntxtlf/m/n/10 URL [][]$https : / / www . sciencedirect . com / science / article / pii /
  []
 
-[11]
+
 Underfull \hbox (badness 1917) in paragraph at lines 201--205
 \T1/ntxtlf/m/it/10 Deep Learn-ing\T1/ntxtlf/m/n/10 .  MIT Press (2016).  [][]$http : / / www .
  []
@@ -2168,7 +2183,7 @@ Underfull \hbox (badness 1189) in paragraph at lines 221--229
 []\T1/ntxtlf/m/n/10 Ngiam, Ji-quan, Caine, Ben-jamin, Va-sude-van, Vi-jay,
  []
 
-
+[11]
 Underfull \hbox (badness 3019) in paragraph at lines 244--252
 \T1/ntxtlf/m/n/10 Struc-tured Out-put Rep-re-sen-ta-tion us-ing Deep Con-
  []
@@ -2197,17 +2212,17 @@ L3 programming layer <2020/03/25>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 32407 strings out of 467871
- 631555 string characters out of 5418376
- 1225505 words of memory out of 5000000
- 60579 multiletter control sequences out of 15000+600000
- 722234 words of font info for 145 fonts, out of 8000000 for 9000
+ 32501 strings out of 467691
+ 634874 string characters out of 5414020
+ 1235266 words of memory out of 5000000
+ 60854 multiletter control sequences out of 15000+600000
+ 726820 words of font info for 147 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 90i,17n,93p,1278b,2536s stack positions out of 10000i,1000n,20000p,200000b,200000s
-<C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI5.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI7.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qtmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txbsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txexs.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txmiaX.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txsys.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtxsf/zsfmia-reg.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmr.pfb><C:/Users/amalj/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmri.pfb>
-Output written on asmeconf-template.pdf (12 pages, 1425442 bytes).
+ 90i,17n,93p,1252b,2547s stack positions out of 10000i,1000n,20000p,200000b,200000s
+<C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI5.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/NewTXMI7.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvb.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qhvr.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/tex-gyre/qtmr.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txbsys.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txexs.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txmiaX.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/txsys.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtxsf/zsfmia-reg.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmr.pfb><C:/Users/Giorgos/AppData/Local/Programs/MiKTeX/fonts/type1/public/newtx/ztmri.pfb>
+Output written on asmeconf-template.pdf (12 pages, 1403436 bytes).
 PDF statistics:
  535 PDF objects out of 1000 (max. 8388607)
  145 named destinations out of 1000 (max. 500000)
- 316 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 328 words of extra memory for PDF output out of 10000 (max. 10000000)
 
