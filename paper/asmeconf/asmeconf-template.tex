@@ -64,7 +64,8 @@
 	Andrey Morozov\affil{}
 	}
 
-\SetAffiliation{}{University of Stuttgart, Germany}
+\SetAffiliation{}{University of Stuttgart\\
+Stuttgart, Germany}
 
 \maketitle
 
@@ -166,18 +167,18 @@ More recently, data-driven models have achieved high performance on lane-change-
 For instance, Xue et al. demonstrated that incorporating traffic context increased lane-change decision accuracy from 97.02\% to 98.20\%, while Geng et al. achieved a 98.82\% 
 overall accuracy for lane-changing behavior prediction on the highD dataset \cite{XUE2022103738,geng2023ensemble}. 
 While these results are impressive, these methods primarily address the isolated task of lane-change prediction. 
-Consequently, they do not directly resolve the broader challenge of learning latent human-driving regimes and predicting diverse high-level maneuver types
-Concurrently, Deep learning  has become a major direction in trajectory and action prediction. Recurrent Neural Networks 
+Consequently, they do not directly resolve the broader challenge of learning latent human-driving regimes and predicting diverse high-level maneuver types. 
+Concurrently, Deep Learning (DL)  has become a major direction in trajectory and action prediction. Recurrent Neural Networks 
 (RNNs) and Long Short-Term Memory (LSTM) networks were widely used to model temporal dependencies in driving sequences, while Graph Neural Networks (GNNs) were later introduced 
 to better represent 
 interactions between multiple traffic participants \cite{Goodfellow-et-al-2016,salzmann2021trajectrondynamicallyfeasibletrajectoryforecasting}. 
 Moreover, Transformer-based models have shown strong performance by capturing long-range dependencies and multi-agent interactions through attention 
 mechanisms \cite{vaswaniattention,ngiam2022scenetransformerunifiedarchitecture,shi2023motiontransformerglobalintention,inproceedingshivt}. 
-Generative approaches such as Conditional Variational Autoencoder (CVAE) and diffusion models further support multimodal prediction by generating multiple plausible future trajectories 
+Generative approaches such as Conditional Variational Autoencoders (CVAEs) and diffusion models further support multimodal prediction by generating multiple plausible future trajectories 
 under the same observed context 
 \cite{NIPS2015_8d55a249,salzmann2021trajectrondynamicallyfeasibletrajectoryforecasting,mangalam2020journeydestinationendpointconditioned,ho2020denoisingdiffusionprobabilisticmodels,jiang2023motiondiffusercontrollablemultiagentmotion}.
 
-Although these deep learning methods are highly effective, particularly for continuous trajectory forecasting and lane-change-specific classification, they primarily operate as highly data-driven black boxes. 
+Although these DL methods are highly effective, particularly for continuous trajectory forecasting and lane-change-specific classification, they primarily operate as highly data-driven black boxes. 
 This lack of transparency is a significant limitation for safety-critical applications that require explicit uncertainty representation, clear temporal structuring, and behavioral interpretability.
 \subsection{Positioning of This Work}
 
@@ -225,7 +226,7 @@ the dataset was performed. The goal of this step was to understand
 which signals carry useful information for action prediction and how they should be represented in the observation vector. 
 The analysis focused on three aspects: frame-level kinematics, trajectory-level variability, and lane-change sparsity.
 
-Fig.~\ref{fig:kinematic_distributions} illustrates the global distributions of the main kinematic variables. 
+Figure~\ref{fig:kinematic_distributions} illustrates the global distributions of the main kinematic variables. 
 The longitudinal velocity, $v_\mathrm{x}$, covers a broad range, reflecting diverse traffic speeds and vehicle classes. 
 Longitudinal acceleration, $a_\mathrm{x}$, is centered close to zero, indicative of steady speed cruising, but it exhibits visible positive and negative tails. 
 These tails are important, as they capture the acceleration and braking behavior, which are directly related to maneuver changes and car-following dynamics.
@@ -240,8 +241,13 @@ To quantify temporal motion dynamics, trajectory-level variability was assessed 
 This means that speed adaptation and acceleration changes occur more often and with larger magnitude than lateral movement. 
 However, a distinct subset of trajectories exhibits pronounced lateral variability, which directly corresponds to lane changes or significant lateral corrections.
 
-Furthemore, the lane-change analysis presented in Fig.~\ref{fig:lane_change_sparsity}. 
-highlights a severe class imbalance: lane keeping heavily dominates the dataset, while left and right lane changes constitute only a marginal fraction of the observed frames. This imbalance persists at the trajectory level, heavily influencing feature design. Because a discrete lane-change indicator is inherently sparse, relying on it in isolation provides an insufficient learning signal. Consequently, the final observation vector supplements this indicator with lateral velocity, lateral acceleration, lane-boundary distances, neighboring-vehicle context, and temporally aggregated lane-change evidence. These supplementary features enable the model to detect the contextual build-up of a maneuver, rather than relying solely on the exact frame where a lane ID shifts.
+Furthermore, the lane-change analysis presented in Fig.~\ref{fig:lane_change_sparsity} highlights a severe class 
+imbalance: lane keeping heavily dominates the dataset, while left and right lane changes constitute only a 
+marginal fraction of the observed frames. This imbalance persists at the trajectory level, heavily influencing feature design. 
+Because a discrete lane-change indicator is inherently sparse, relying on it in isolation provides an insufficient learning signal. 
+Consequently, the final observation vector supplements this indicator with lateral velocity, lateral acceleration, lane-boundary 
+distances, neighboring-vehicle context, and temporally aggregated lane-change evidence. These supplementary features enable 
+the model to detect the contextual build-up of a maneuver, rather than relying solely on the exact frame where a lane ID shifts.
 Overall, the analysis led to three design choices. 
 First, both longitudinal and lateral kinematic signals are included to capture complementary dimensions of driver behavior. 
 Second, the model uses temporal window summaries instead of single-frame values, since variability and short-term trends contain useful maneuver information. 
