@@ -76,7 +76,7 @@ Modeling, Mixed Traffic Environments}
 
 %%%%%  ABSTRACT  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
-Autonomous vehicles (AVs) are expected to operate in mixed traffic alongside human-driven vehicles (HDVs), making the estimation of human actions critical for safe interaction.    
+For autonomous vehicles (AVs) to safely share the road with human-driven vehicles (HDVs), accurately predicting surrounding human driver actions is essential.     
 This paper presents a probabilistic framework for short-horizon human driver action prediction using Dynamic Bayesian Networks (DBNs). 
 The model is trained on the highD naturalistic highway dataset using window-based observations of vehicle motion and surrounding traffic interactions. 
 The DBN employs a hierarchical latent structure, where action states are conditioned on broader driving regimes, allowing the simultaneous modeling of maneuver type and interaction context.
@@ -89,8 +89,8 @@ The results show that DBNs can support fast and interpretable short-horizon acti
 %%%%%%%%%  BODY OF PAPER %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Introduction}
-Recent progress in artificial intelligence (AI), sensing, computing, and communication has accelerated the development of Autonomous Vehicles (AV). 
-However, a full replacement of human-driven vehicles (HDV) is not expected in the near future. Consequently, AVs will share the 
+Advances in artificial intelligence (AI), sensing, computing, and communication has accelerated the development of Autonomous Vehicles (AV). 
+Yet a complete replacement of human-driven vehicles (HDVs) is unlikely in the near future. Consequently, AVs will share the 
 roads with HDVs, raising safety concerns in mixed traffic scenarios. While human drivers routinely make spontaneous decisions by inferring context and anticipating the actions of others, AVs cannot directly observe the intentions of nearby human drivers. 
 Instead, future driver actions must be inferred from observable cues such as vehicle motion, lane changes, relative positions, and interactions with surrounding traffic \cite{Schwarting2018}. Human driver action prediction is therefore an important problem in safety in autonomous driving. Estimating likely future maneuvers supports downstream 
 tasks such as risk assessment, trajectory prediction, and motion planning \cite{Lefevre2014,Madjid_2026,Schwarting2018}, ultimately enabling AVs to make safer decisions. 
@@ -102,9 +102,9 @@ Probabilistic models provide a useful middle ground because they represent uncer
 
 This paper focuses on probabilistic modeling of high-level human driving actions in highway traffic, with the goal of predicting likely future maneuvers 
 of surrounding drivers while explicitly representing uncertainty. 
-In the proposed framework, future maneuvers are represented as discrete action states, and a DBN models the temporal relationship between trajectory-based 
-observations and hidden behavioral states. 
-Driver intent is represented through latent variables and inferred probabilistically from observed vehicle motion and traffic context \cite{murphy2002dynamic}. 
+In the proposed framework, future maneuvers are represented as discrete actions, and a DBN models the temporal relationship between 
+trajectory-based observations and hidden behavioral states. 
+Future actions are represented through latent variables and inferred probabilistically from observed vehicle motion and traffic context \cite{murphy2002dynamic}. 
 The model is trained and evaluated on the highD dataset \cite{krajewski2018highddatasetdronedataset} using features that describe vehicle motion, 
 surrounding traffic context, and interaction behavior.
 
@@ -188,7 +188,7 @@ By learning latent behavior states from motion and interaction features and subs
 the model maintains a compact, inspectable representation suitable for causal online prediction.
 
 \section{Methodology}
-This section describes the methodology used to construct and evaluate the proposed DBN-based maneuver prediction framework. 
+This section describes the methodology used to construct and evaluate the proposed DBN-based action prediction framework. 
 It first presents the overall workflow and the selected highD data subset. 
 It then explains the preprocessing steps, the sliding-window observation design, the DBN formulation, the training and online prediction procedure. 
 The full processing pipeline is summarized in Fig.~\ref{fig:proposed_framework}.
@@ -231,15 +231,16 @@ The longitudinal velocity, $v_\mathrm{x}$, covers a broad range, reflecting dive
 Longitudinal acceleration, $a_\mathrm{x}$, is centered close to zero, indicative of steady speed cruising, but it exhibits visible positive and negative tails. 
 These tails are important, as they capture the acceleration and braking behavior, which are directly related to maneuver changes and car-following dynamics.
 
-In contrast, the lateral variables $v_\mathrm{y}$ and $a_\mathrm{y}$ are tightly concentrated around zero. 
-This is expected as most vehicles stay inside their lane for most frames. 
-Nevertheless, the non-zero tails of these distributions capture essential lateral adjustments and lane-change executions. 
-Thus, despite its relative sparsity compared to longitudinal motion, lateral kinematics remain indispensable to the observation vector.
+In contrast, the lateral variables $v_\mathrm{y}$ and $a_\mathrm{y}$ are tightly concentrated around zero, 
+which is expected since most vehicles stay within their lane for most frames. 
+The non-zero tails of these distributions, however, capture lateral adjustments and lane-change executions. 
+So despite being sparser than longitudinal motion, lateral kinematics still play a necessary role in the observation vector.
 
 To quantify temporal motion dynamics, trajectory-level variability was assessed by computing the standard deviation 
  of $v_\mathrm{x}$, $a_\mathrm{x}$, $v_\mathrm{y}$, and $a_\mathrm{y}$ for each visible trajectory. As shown in Fig.~\ref{fig:trajectory_variability}, the longitudinal variables demonstrate larger variability than the lateral counterparts. 
 This means that speed adaptation and acceleration changes occur more often and with larger magnitude than lateral movement. 
-However, a distinct subset of trajectories exhibits pronounced lateral variability, which directly corresponds to lane changes or significant lateral corrections.
+However, a small subset of trajectories exhibits noticeably higher lateral variability, as reflected by the right tail of the lateral velocity and acceleration distributions. 
+Although such trajectories are relatively rare, they indicate the presence of stronger lateral vehicle motion than the majority of the dataset.
 
 Furthermore, the lane-change analysis presented in Fig.~\ref{fig:lane_change_sparsity} highlights a severe class 
 imbalance: lane keeping heavily dominates the dataset, while left and right lane changes constitute only a 
@@ -297,29 +298,6 @@ Third, sparse lane-change evidence is combined with motion, lane geometry, inter
 \label{fig:kinematic_distributions}
 \end{figure*}
 
-\begin{figure*}[h]
-\centering
-
-\begin{minipage}{0.47\textwidth}
-    \centering
-    \includegraphics[width=0.88\linewidth,
-    alt={Bar plot of frame counts for lane-change indicator values: left lane change, no lane change, and right lane change.}]
-    {lane_change_frame_distribution.png}
-    
-    \small (a) Raw lane-change indicator at frame level
-\end{minipage}
-\hfill
-\begin{minipage}{0.47\textwidth}
-    \centering
-    \includegraphics[width=0.9\linewidth,
-    alt={Bar plot showing the number of lane changes observed per vehicle trajectory. Most vehicles perform no lane change, while fewer perform one or more lane changes.}]
-    {lane_changes_per_trajectory.png}
-    
-    \small (b) Number of lane changes per trajectory
-\end{minipage}
-\caption{Lane-change sparsity analysis.}
-\label{fig:lane_change_sparsity}
-\end{figure*}
 
 \begin{figure*}[t]
 \centering
@@ -365,10 +343,34 @@ Third, sparse lane-change evidence is combined with motion, lane geometry, inter
 \label{fig:trajectory_variability}
 \end{figure*}
 
+\begin{figure*}[h]
+\centering
+
+\begin{minipage}{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.88\linewidth,
+    alt={Bar plot of frame counts for lane-change indicator values: left lane change, no lane change, and right lane change.}]
+    {lane_change_frame_distribution.png}
+    
+    \small (a) Raw lane-change indicator at frame level
+\end{minipage}
+\hfill
+\begin{minipage}{0.47\textwidth}
+    \centering
+    \includegraphics[width=0.9\linewidth,
+    alt={Bar plot showing the number of lane changes observed per vehicle trajectory. Most vehicles perform no lane change, while fewer perform one or more lane changes.}]
+    {lane_changes_per_trajectory.png}
+    
+    \small (b) Number of lane changes per trajectory
+\end{minipage}
+\caption{Lane-change sparsity analysis.}
+\label{fig:lane_change_sparsity}
+\end{figure*}
+
+
 \subsection{Window-Based Observation Design}
-The observation vector combines ego-motion, lane-related, interaction, and risk-related information. 
-It includes kinematic quantities such as longitudinal and lateral velocity and acceleration, lane-boundary distances, lane-change evidence, front-vehicle safety 
-indicators, and selected relative features describing nearby traffic participants. 
+The observation vector combines kinematic quantities (longitudinal and lateral velocity and acceleration), lane-related features (boundary distances and lane-change evidence), 
+and interaction and risk indicators (front-vehicle safety measures and selected relative features of nearby traffic participants).
 These variables are designed to represent both the state of the ego vehicle and the surrounding traffic context relevant for maneuver prediction.
 
 Rather than using individual frames directly, the model operates on short temporal windows. 
@@ -538,8 +540,8 @@ For horizon-based evaluation, the forecast horizon covers the next five window s
 Model fit on unseen test sequences is assessed using the average negative log-likelihood (NLL) per time step. 
 NLL measures how much probability the trained DBN assigns to the observed window sequences in the held-out test set. 
 It is therefore used as a likelihood-based sanity check for the probabilistic model: a lower NLL indicates better held-out likelihood and helps verify that the model has learned the main structure of the data without only fitting the training set. 
-However, NLL is not used as the main evidence for safe maneuver prediction. 
-Because naturalistic highway data are dominated by common behaviors such as cruising and lane keeping, a model can obtain a good NLL while still making poor predictions for rare but important events such as lane changes. 
+However, NLL is not used as the main evidence for safe action prediction. 
+Because the data is dominated by common behaviors such as cruising and lane keeping, a model can obtain a good NLL while still making poor predictions for rare but important events such as lane changes. 
 For this reason, NLL is reported only as a model-fit metric and is interpreted together with predictive metrics, class-wise results, and horizon-based evaluation.
 
 The Bayesian Information Criterion (BIC) is computed as:
@@ -608,7 +610,11 @@ initial distribution, and Bernoulli likelihood terms enabled.
 For the model, the two style states are interpreted after training as low-interaction and high-interaction driving regimes.
 The low-interaction style represents driving with weaker front-vehicle influence, while the high-interaction style represents 
 more constrained driving with stronger coupling to nearby traffic. 
-The action-state meanings used for evaluation are shown in Table~\ref{tab:semantic_action_maps}.
+The action-state meanings used for evaluation are shown in Table~\ref{tab:semantic_action_maps}. 
+The learned latent states are consistent with intuitive highway driving behavior. The style states separate broader driving regimes based on the level of 
+interaction with surrounding traffic, 
+while the action states distinguish short-term maneuver tendencies such as cruising, braking, and acceleration with left or right lateral motion. 
+This hierarchical decomposition allows the model to represent both the driving context and the immediate maneuver, giving the learned representation an interpretable structure.
 
 \begin{table}[h]
 \centering
@@ -625,6 +631,8 @@ $a_3$ & \shortstack[l]{Acceleration with\\right lateral tendency} \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+
 
 \subsection{Model Fit and Latent-State Usage}
 Table~\ref{tab:model_fit_latent_usage} shows the held-out model fit and latent-state usage.
@@ -752,6 +760,13 @@ supporting the interpretability of the learned latent space.
 The model does have limitations. 
 Some errors remain between semantically close behaviors, such as cruising and weak braking, which are difficult to distinguish within a short observation window. 
 This suggests that the current observation design is better at capturing broader maneuver tendencies than very fine-grained behavior differences.
+
+The present framework focuses on short-horizon action prediction using a 2\,s forecast horizon. 
+Extending this horizon may improve raw performance metrics, since the predicted action has more time to occur, 
+but this does not necessarily reflect better predictive capability for safety-critical driving. 
+Conversely, shorter horizons would reduce the anticipation time available for downstream planning, even if short-term accuracy improves. 
+Prediction performance should therefore be considered jointly with the anticipation time provided to downstream planning modules. 
+Investigating this trade-off across different horizons is an important direction for future work.
 
 \section{Conclusion}
 This paper presented a DBN-based framework for probabilistic short-horizon maneuver prediction of human-driven vehicles in highway traffic. 
